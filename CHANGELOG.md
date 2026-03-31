@@ -8,6 +8,21 @@ while in pre-1.0 mode (`v0.x.y`).
 
 ## [Unreleased]
 
+## [0.5.2] - 2026-03-31
+
+### Added
+
+- Complete end-user developer manual (`docs/MANUAL_DESARROLLADOR.md`):
+  - installation paths
+  - MVC/API/Admin workflow
+  - full CLI reference
+  - migration/seed operations
+  - deployment and troubleshooting guidance
+
+### Changed
+
+- README development guides now include the complete developer manual.
+
 ## [0.5.1] - 2026-03-31
 
 ### Added
@@ -70,7 +85,8 @@ while in pre-1.0 mode (`v0.x.y`).
 
 ---
 
-[Unreleased]: https://github.com/jcsvwinston/GoFrame/compare/v0.5.1...HEAD
+[Unreleased]: https://github.com/jcsvwinston/GoFrame/compare/v0.5.2...HEAD
+[0.5.2]: https://github.com/jcsvwinston/GoFrame/compare/v0.5.1...v0.5.2
 [0.5.1]: https://github.com/jcsvwinston/GoFrame/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/jcsvwinston/GoFrame/compare/v0.5.0-rc1...v0.5.0
 [0.5.0-rc1]: https://github.com/jcsvwinston/GoFrame/compare/v0.4.0...v0.5.0-rc1

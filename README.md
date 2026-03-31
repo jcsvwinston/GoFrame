@@ -193,6 +193,7 @@ Guia de decisiones y checklist de buenas practicas de CLI: [docs/CLI_BEST_PRACTI
 
 ## Guias De Desarrollo
 
+- Manual completo de desarrollo (end-to-end): [docs/MANUAL_DESARROLLADOR.md](/Users/jcsv/GolandProjects/GoFrame/GoFrame/docs/MANUAL_DESARROLLADOR.md)
 - Quickstart: [docs/QUICKSTART.md](/Users/jcsv/GolandProjects/GoFrame/GoFrame/docs/QUICKSTART.md)
 - Tutorial detallado (MVC + API): [docs/TUTORIAL_DETALLADO.md](/Users/jcsv/GolandProjects/GoFrame/GoFrame/docs/TUTORIAL_DETALLADO.md)
 - Estructura de proyecto (controllers/models/templates/etc): [docs/PROJECT_LAYOUT.md](/Users/jcsv/GolandProjects/GoFrame/GoFrame/docs/PROJECT_LAYOUT.md)
