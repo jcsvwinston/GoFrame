@@ -1,0 +1,74 @@
+name: Release Asset Smoke
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to validate (e.g. v0.5.0-rc1)"
+        required: true
+        type: string
+
+jobs:
+  linux:
+    name: Linux Asset Smoke
+    runs-on: ubuntu-latest
+    env:
+      TAG: ${{ inputs.tag }}
+    steps:
+      - name: Download and Run Linux Binary
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          mkdir -p dist-test
+          PKG="goframe_${TAG}_linux_amd64.tar.gz"
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern "$PKG" --dir dist-test
+          tar -xzf "dist-test/$PKG" -C dist-test
+          chmod +x dist-test/goframe
+          dist-test/goframe version | tee version.txt
+          grep -F "goframe $TAG" version.txt
+
+  macos:
+    name: macOS Asset Smoke
+    runs-on: macos-latest
+    env:
+      TAG: ${{ inputs.tag }}
+    steps:
+      - name: Download and Run macOS Binary
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          mkdir -p dist-test
+          ARCH="$(uname -m)"
+          if [ "$ARCH" = "arm64" ]; then
+            PKG="goframe_${TAG}_darwin_arm64.tar.gz"
+          else
+            PKG="goframe_${TAG}_darwin_amd64.tar.gz"
+          fi
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern "$PKG" --dir dist-test
+          tar -xzf "dist-test/$PKG" -C dist-test
+          chmod +x dist-test/goframe
+          dist-test/goframe version | tee version.txt
+          grep -F "goframe $TAG" version.txt
+
+  windows:
+    name: Windows Asset Smoke
+    runs-on: windows-latest
+    env:
+      TAG: ${{ inputs.tag }}
+    steps:
+      - name: Download and Run Windows Binary
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          New-Item -ItemType Directory -Path dist-test -Force | Out-Null
+          $pkg = "goframe_${env:TAG}_windows_amd64.zip"
+          gh release download "$env:TAG" --repo "$env:GITHUB_REPOSITORY" --pattern $pkg --dir dist-test
+          Expand-Archive -Path "dist-test/$pkg" -DestinationPath dist-test -Force
+          $output = & "./dist-test/goframe.exe" version
+          $output | Tee-Object -FilePath version.txt
+          if (-not ($output -match "goframe $env:TAG")) {
+            throw "unexpected version output: $output"
+          }
