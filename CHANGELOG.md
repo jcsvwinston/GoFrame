@@ -8,6 +8,18 @@ while in pre-1.0 mode (`v0.x.y`).
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-03-31
+
+### Added
+
+- Cross-OS release asset smoke workflow (`.github/workflows/release_asset_smoke.yml`).
+
+### Changed
+
+- Release asset smoke checks fixed to map tag (`vX.Y.Z`) to artifact naming (`X.Y.Z`).
+- Release workflow made idempotent when assets already exist for a tag.
+- CI/release/rehearsal workflows force JavaScript actions to run on Node 24.
+
 ## [0.5.0] - 2026-03-31
 
 ### Added
@@ -58,7 +70,8 @@ while in pre-1.0 mode (`v0.x.y`).
 
 ---
 
-[Unreleased]: https://github.com/jcsvwinston/GoFrame/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/jcsvwinston/GoFrame/compare/v0.5.1...HEAD
+[0.5.1]: https://github.com/jcsvwinston/GoFrame/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/jcsvwinston/GoFrame/compare/v0.5.0-rc1...v0.5.0
 [0.5.0-rc1]: https://github.com/jcsvwinston/GoFrame/compare/v0.4.0...v0.5.0-rc1
 [0.4.0]: https://github.com/jcsvwinston/GoFrame/releases/tag/v0.4.0
