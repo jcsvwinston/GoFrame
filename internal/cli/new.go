@@ -18,6 +18,7 @@ func runNew(args []string, _ io.Reader, stdout, stderr io.Writer) error {
 	modulePath := fs.String("module", "", "Go module path (default: example.com/<project_name>)")
 	port := fs.Int("port", 8080, "HTTP port in goframe.yaml")
 	force := fs.Bool("force", false, "Overwrite scaffold files if the project directory exists")
+	templateName := fs.String("template", "mvc", "Starter template (currently: mvc)")
 
 	projectFirst := ""
 	parseArgs := args
@@ -38,10 +39,13 @@ func runNew(args []string, _ io.Reader, stdout, stderr io.Writer) error {
 		rest = append([]string{projectFirst}, rest...)
 	}
 	if len(rest) != 1 {
-		return fmt.Errorf("usage: goframe new <project_name> [--module example.com/name] [--out .] [--port 8080]")
+		return fmt.Errorf("usage: goframe new <project_name> [--module example.com/name] [--out .] [--port 8080] [--template mvc]")
 	}
 	if *port <= 0 {
 		return fmt.Errorf("port must be greater than 0")
+	}
+	if strings.TrimSpace(strings.ToLower(*templateName)) != "mvc" {
+		return fmt.Errorf("unsupported template %q (supported: mvc)", *templateName)
 	}
 
 	projectName := strings.TrimSpace(rest[0])

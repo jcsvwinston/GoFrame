@@ -98,7 +98,7 @@ Si vas a consumir el framework como dependencia en un proyecto externo, mantente
 ## 5.1 Generar scaffold
 
 ```bash
-goframe new miapp --module example.com/miapp --out . --port 8080
+goframe new miapp --module example.com/miapp --out . --port 8080 --template mvc
 cd miapp
 go mod tidy
 ```
@@ -546,7 +546,7 @@ Revisar:
 ```bash
 goframe help
 goframe version
-goframe new <name> [--module ...] [--out ...] [--port ...] [--force]
+goframe new <name> [--module ...] [--out ...] [--port ...] [--template mvc] [--force]
 goframe serve [--config ...] [--host ...] [--port ...]
 goframe migrate [--config ...] [--migrations ...] [--force] [--yes] [accion]
 goframe seed [--config ...] [--seeds ...] [--file ...] [--dry-run] [--force] [--yes]

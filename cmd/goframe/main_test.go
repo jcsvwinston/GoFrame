@@ -259,6 +259,47 @@ func TestRun_NewProjectSupportsFlagsBeforeName(t *testing.T) {
 	}
 }
 
+func TestRun_NewProjectSupportsTemplateFlag(t *testing.T) {
+	dir := t.TempDir()
+
+	var out bytes.Buffer
+	var errOut bytes.Buffer
+	code := run([]string{
+		"new",
+		"TemplateApp",
+		"--out", dir,
+		"--module", "example.com/templateapp",
+		"--template", "mvc",
+	}, &out, &errOut)
+	if code != 0 {
+		t.Fatalf("new project with --template failed: code=%d stderr=%s", code, errOut.String())
+	}
+
+	projectDir := filepath.Join(dir, "TemplateApp")
+	if _, err := os.Stat(filepath.Join(projectDir, "cmd", "server", "main.go")); err != nil {
+		t.Fatalf("expected scaffolded main.go: %v", err)
+	}
+}
+
+func TestRun_NewProjectRejectsUnknownTemplate(t *testing.T) {
+	dir := t.TempDir()
+
+	var out bytes.Buffer
+	var errOut bytes.Buffer
+	code := run([]string{
+		"new",
+		"BadTemplateApp",
+		"--out", dir,
+		"--template", "api",
+	}, &out, &errOut)
+	if code == 0 {
+		t.Fatal("expected non-zero code for unsupported template")
+	}
+	if !strings.Contains(errOut.String(), "unsupported template") {
+		t.Fatalf("unexpected stderr: %s", errOut.String())
+	}
+}
+
 func TestRun_Seed(t *testing.T) {
 	dir := t.TempDir()
 	dbPath := filepath.Join(dir, "app.db")

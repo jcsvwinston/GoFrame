@@ -165,7 +165,7 @@ Comandos disponibles en el binario `goframe`:
 
 ```bash
 go run ./cmd/goframe help
-go run ./cmd/goframe new myapp --module github.com/acme/myapp
+go run ./cmd/goframe new myapp --module github.com/acme/myapp --template mvc
 go run ./cmd/goframe serve --config goframe.yaml
 go run ./cmd/goframe routes --config goframe.yaml
 go run ./cmd/goframe health --config goframe.yaml
