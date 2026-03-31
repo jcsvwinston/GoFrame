@@ -27,7 +27,7 @@ jobs:
           tar -xzf "dist-test/$PKG" -C dist-test
           chmod +x dist-test/goframe
           dist-test/goframe version | tee version.txt
-          grep -F "goframe $TAG" version.txt
+          grep -F "goframe $VERSION" version.txt
 
   macos:
     name: macOS Asset Smoke
@@ -52,7 +52,7 @@ jobs:
           tar -xzf "dist-test/$PKG" -C dist-test
           chmod +x dist-test/goframe
           dist-test/goframe version | tee version.txt
-          grep -F "goframe $TAG" version.txt
+          grep -F "goframe $VERSION" version.txt
 
   windows:
     name: Windows Asset Smoke
@@ -72,6 +72,6 @@ jobs:
           Expand-Archive -Path "dist-test/$pkg" -DestinationPath dist-test -Force
           $output = & "./dist-test/goframe.exe" version
           $output | Tee-Object -FilePath version.txt
-          if (-not ($output -match "goframe $env:TAG")) {
+          if (-not ($output -match "goframe $version")) {
             throw "unexpected version output: $output"
           }
