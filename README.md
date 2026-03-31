@@ -1,270 +1,219 @@
-# 🏗️ Chi Admin Framework
+# GoFrame (WIP)
 
-**Un panel de administración tipo Django para aplicaciones Go basadas en Chi + GORM.**
+Framework web para Go inspirado en Django, con nucleo `chi`, enfoque modular y DX orientada a productividad.
 
-## ¿Qué es esto?
+## Estado Del Proyecto
 
-Un módulo `pkg/admin` que proporciona una experiencia similar al `django.contrib.admin`:
+Repositorio en desarrollo activo. A fecha de 2026-03-31:
 
-- **Registro declarativo de modelos** → `panel.Register(&User{}, config)` 
-- **CRUD automático** → List, Create, Read, Update, Delete generados desde la reflexión del struct
-- **UI embebida** → SPA moderna servida directamente desde el binario Go (sin build frontend)
-- **Montable en Chi** → `r.Mount("/admin", panel.Handler())`
-- **Búsqueda, filtros, paginación** → Configurables por modelo
-- **Hooks** → BeforeCreate, AfterCreate, BeforeUpdate, AfterUpdate, BeforeDelete
-- **Permisos** → `PermissionFunc` para integrar con tu sistema de auth (JWT, Casbin, etc.)
-- **Read-only models** → Para audit logs y tablas de referencia
+- `go test ./...` pasa en `main`.
+- Hay base funcional de `router`, `auth`, `authz`, `errors`, `validate`, `model` y `admin`.
+- El producto completo (MVC + REST + admin rico + CLI tipo `manage.py`) aun no esta cerrado.
 
----
+## Fase 0 Cerrada (Contrato y Direccion)
 
-## Equivalencias con Django
+Decisiones tecnicas fijadas en [SPEC.md](/Users/jcsv/GolandProjects/GoFrame/GoFrame/SPEC.md):
 
-| Django                            | Chi Admin Framework                          |
-|-----------------------------------|----------------------------------------------|
-| `admin.site.register(User)`       | `panel.Register(&User{}, config)`            |
-| `class UserAdmin(ModelAdmin)`     | `admin.ModelConfig{...}`                     |
-| `list_display`                    | `ListFields: []string{...}`                  |
-| `search_fields`                   | `SearchFields: []string{...}`                |
-| `list_filter`                     | `Filters: []string{...}`                     |
-| `ordering`                        | `OrderBy: "created_at desc"`                 |
-| `readonly_fields` / `readonly`    | `ReadOnly: true`                             |
-| `exclude`                         | `ExcludeFields: []string{...}`               |
-| `list_per_page`                   | `PageSize: 25`                               |
-| `save_model()` hook               | `BeforeCreate / AfterCreate`                 |
-| `has_change_permission()`         | `PermissionFunc`                             |
-| `path('admin/', admin.site.urls)` | `r.Mount("/admin", panel.Handler())`         |
+1. SQL oficial del framework: `Bun`.
+2. Documental oficial: `mongo-driver`.
+3. Cache y pub/sub: `go-redis`.
+4. Admin UI objetivo: Tailwind CSS + componentes reutilizables.
+5. Arquitectura polyglot por interfaces (sin "ORM universal").
 
----
+Detalle operativo de Fase 0: [docs/PHASE0.md](/Users/jcsv/GolandProjects/GoFrame/GoFrame/docs/PHASE0.md)
 
-## Quick Start
+## Fase 2 Cerrada (SQL Bun-first)
 
-```bash
-mkdir mi-app && cd mi-app
-go mod init mi-app
+Estado operativo en [docs/PHASE2.md](/Users/jcsv/GolandProjects/GoFrame/GoFrame/docs/PHASE2.md):
 
-# Instalar dependencias
-go get github.com/go-chi/chi/v5
-go get gorm.io/gorm
-go get gorm.io/driver/postgres  # o sqlite, mysql
-```
+1. Bun como engine por defecto en `pkg/db`.
+2. `model` y `admin` validados sobre Bun.
+3. CLI y migraciones SQL listas para flujo diario (`migrate`, `seed`, `generate resource`, guardrails de produccion).
 
-### 1. Define tus modelos
+## Fase 3 Cerrada (Admin UI + DX)
 
-```go
-// internal/models/models.go
-package models
+Estado operativo en [docs/PHASE3.md](/Users/jcsv/GolandProjects/GoFrame/GoFrame/docs/PHASE3.md):
 
-import "gorm.io/gorm"
+1. Slice 1 completado en `pkg/admin/ui` (layout renovado, componentes base, command palette, estados de carga/vacio).
+2. Slice 2 completado (filtros por campo, ordenacion por cabeceras y export de seleccionados).
+3. Slice 3 completado (libreria base de componentes + tabs/paneles de detalle).
+4. Slice 4 completado (accesibilidad reforzada + errores recuperables/retries + feedback de operaciones largas).
+5. Backend API del admin mantenido sin ruptura.
 
-type User struct {
-    gorm.Model
-    Email    string `gorm:"uniqueIndex;not null" json:"Email"`
-    Name     string `gorm:"not null" json:"Name"`
-    Role     string `gorm:"default:'user'" json:"Role"`
-    Active   bool   `gorm:"default:true" json:"Active"`
-}
+## Fase 4 Cerrada (Ejemplos MVC/API + Release)
 
-type Product struct {
-    gorm.Model
-    Name        string  `gorm:"not null" json:"Name"`
-    Description string  `json:"Description"`
-    Price       float64 `gorm:"not null" json:"Price"`
-    Stock       int     `json:"Stock"`
-    SKU         string  `gorm:"uniqueIndex" json:"SKU"`
-}
-```
+Estado operativo en [docs/PHASE4.md](/Users/jcsv/GolandProjects/GoFrame/GoFrame/docs/PHASE4.md):
 
-### 2. Registra en el admin
+1. Slice 1 completado con ejemplo runnable en [examples/mvc_api](/Users/jcsv/GolandProjects/GoFrame/GoFrame/examples/mvc_api).
+2. Slice 2 completado con `goframe new` para bootstrap MVC + API + Admin.
+3. Slice 3 completado con smoke E2E + checklist de release/versionado.
+
+## Fase 5 Cerrada (Release Candidate)
+
+Estado operativo en [docs/PHASE5.md](/Users/jcsv/GolandProjects/GoFrame/GoFrame/docs/PHASE5.md):
+
+1. Slice 1 completado con baseline de CI/release, changelog y versionado.
+2. Slice 2 completado con publicacion multiplataforma via GoReleaser (linux/darwin/windows + amd64/arm64 + checksums).
+3. Slice 3 completado con rehearsal E2E de `v0.5.0-rc1` (script local + workflow manual).
+
+## Estado Actual vs Target
+
+| Area | Estado Actual (main) | Target (SPEC) |
+| --- | --- | --- |
+| SQL layer | Bun-first (`bun` default + `gorm` compat explicita) | Bun como capa oficial |
+| Admin UI | SPA embebida rica v1 (sin build) | Tailwind + UI rica |
+| Registro de modelos | `model.Registry.Register(...)` | Igual, como contrato estable |
+| Alta de panel admin | `admin.NewPanel(dbConn, registry, logger, cfg)` | Mantener API clara y estable |
+| CLI | Baseline completa (`new`, `serve`, `migrate`, `createuser`, `seed`, `shell`, `generate`, `routes`, `health`) | CLI completa tipo `manage.py` + hardening continuo |
+
+## Quick Start (Bootstrap Oficial Fase 1)
+
+Este ejemplo usa el flujo recomendado actual: `app.New(...)`, registro de modelos y `Run(...)`.
 
 ```go
-// cmd/server/main.go
 package main
 
 import (
-    "log"
-    "net/http"
+	"context"
+	"log"
+	"net/http"
 
-    "github.com/go-chi/chi/v5"
-    "github.com/go-chi/chi/v5/middleware"
-    "gorm.io/driver/sqlite"
-    "gorm.io/gorm"
-
-    "mi-app/internal/models"
-    "mi-app/pkg/admin"
+	"github.com/goframe/goframe/pkg/app"
+	"github.com/goframe/goframe/pkg/model"
 )
 
+type User struct {
+	model.BaseModel
+	Email  string `db:"column:email;required" validate:"required,email" admin:"list,search,filter"`
+	Name   string `db:"column:name;required" validate:"required" admin:"list,search"`
+	Role   string `db:"column:role" admin:"list,filter"`
+	Active bool   `db:"column:active" admin:"list,filter"`
+}
+
 func main() {
-    // Database
-    db, _ := gorm.Open(sqlite.Open("app.db"), &gorm.Config{})
-    db.AutoMigrate(&models.User{}, &models.Product{})
+	a, err := app.New(&app.Config{
+		Host:            "0.0.0.0",
+		Port:            8080,
+		DatabaseEngine:  "bun", // runtime recomendado
+		DatabaseURL:     "sqlite://app.db",
+		DatabaseMaxOpen: 10,
+		DatabaseMaxIdle: 5,
+		AdminPrefix:     "/admin",
+		AdminTitle:      "GoFrame Admin",
+		LogLevel:        "info",
+		LogFormat:       "text",
+	})
+	if err != nil {
+		log.Fatal(err)
+	}
 
-    // Admin panel — 3 líneas y tienes un Django admin
-    panel := admin.NewPanel(db, admin.PanelConfig{
-        Prefix:   "/admin",
-        SiteName: "Mi App",
-    })
+	// SQL schema para los modelos registrados (en proyectos reales, usar migraciones).
+	sqlDB, err := a.DB.SqlDB()
+	if err != nil {
+		log.Fatal(err)
+	}
+	if _, err := sqlDB.Exec(`
+		CREATE TABLE IF NOT EXISTS users (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			created_at DATETIME,
+			updated_at DATETIME,
+			deleted_at DATETIME,
+			email TEXT NOT NULL,
+			name TEXT NOT NULL,
+			role TEXT,
+			active BOOLEAN
+		)
+	`); err != nil {
+		log.Fatal(err)
+	}
 
-    panel.Register(&models.User{}, admin.ModelConfig{
-        Icon:         "👤",
-        ListFields:   []string{"ID", "Email", "Name", "Role", "Active"},
-        SearchFields: []string{"Email", "Name"},
-        Filters:      []string{"Role", "Active"},
-        OrderBy:      "created_at desc",
-    })
+	if err := a.RegisterModel(&User{}, model.ModelConfig{
+		Icon:         "user",
+		ListFields:   []string{"ID", "Email", "Name", "Role", "Active"},
+		SearchFields: []string{"Email", "Name"},
+		Filters:      []string{"Role", "Active"},
+		OrderBy:      "created_at desc",
+	}); err != nil {
+		log.Fatal(err)
+	}
 
-    panel.Register(&models.Product{}, admin.ModelConfig{
-        Icon:         "📦",
-        ListFields:   []string{"ID", "Name", "SKU", "Price", "Stock"},
-        SearchFields: []string{"Name", "SKU"},
-    })
+	a.Router.Get("/health", func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("ok"))
+	})
 
-    // Router
-    r := chi.NewRouter()
-    r.Use(middleware.Logger)
-    r.Use(middleware.Recoverer)
-
-    // Mount admin — equivalent to Django's urlpatterns
-    r.Mount("/admin", panel.Handler())
-
-    // Tu API normal
-    r.Get("/api/health", func(w http.ResponseWriter, r *http.Request) {
-        w.Write([]byte(`{"status":"ok"}`))
-    })
-
-    log.Println("Server: http://localhost:8080")
-    log.Println("Admin:  http://localhost:8080/admin")
-    http.ListenAndServe(":8080", r)
+	log.Println("server: http://localhost:8080")
+	log.Println("admin:  http://localhost:8080/admin")
+	log.Fatal(a.Run(context.Background()))
 }
 ```
 
-### 3. Ejecuta
+## Alcance Implementado Hoy
+
+- `pkg/router`: wrapper sobre chi + middleware base + helpers de render.
+- `pkg/auth`: JWT, sesiones y password hashing.
+- `pkg/authz`: Casbin wrapper y middleware.
+- `pkg/db`: Bun-first + compatibilidad GORM explicita + migrador SQL por archivos (`Create`, `Up`, `Down`, `Steps`, `Status`).
+- `pkg/model`: metadatos por reflexion, registry y CRUD generico.
+- `pkg/admin`: panel embebido con CRUD, schema, export CSV y bulk delete.
+- `cmd/goframe` + `internal/cli`: CLI modular con comandos `new`, `serve`, `migrate`, `createuser`, `seed`, `shell`, `generate`, `routes`, `health`.
+- `pkg/errors`, `pkg/validate`, `pkg/observe`, `pkg/signals`.
+
+## CLI (Baseline Completa)
+
+Comandos disponibles en el binario `goframe`:
 
 ```bash
-go run ./cmd/server
-# Abre http://localhost:8080/admin
+go run ./cmd/goframe help
+go run ./cmd/goframe new myapp --module github.com/acme/myapp
+go run ./cmd/goframe serve --config goframe.yaml
+go run ./cmd/goframe routes --config goframe.yaml
+go run ./cmd/goframe health --config goframe.yaml
+
+go run ./cmd/goframe migrate --config goframe.yaml --migrations migrations create create_users
+go run ./cmd/goframe migrate --config goframe.yaml --migrations migrations
+go run ./cmd/goframe migrate --config goframe.yaml --migrations migrations status
+go run ./cmd/goframe migrate --config goframe.yaml --migrations migrations down 1
+go run ./cmd/goframe migrate --config goframe.yaml --migrations migrations steps -1
+go run ./cmd/goframe migrate --config goframe.yaml --force reset
+go run ./cmd/goframe migrate --config goframe.yaml --force refresh
+
+go run ./cmd/goframe generate model User
+go run ./cmd/goframe generate handler User
+go run ./cmd/goframe generate migration add_users_table
+go run ./cmd/goframe generate resource Project
+
+go run ./cmd/goframe seed --config goframe.yaml --seeds seeds
+go run ./cmd/goframe seed --config goframe.yaml --seeds seeds --force
+go run ./cmd/goframe createuser --config goframe.yaml --no-input --username admin --email admin@example.com --password supersecret123
+go run ./cmd/goframe shell --config goframe.yaml -c \"SELECT 1\"
 ```
 
----
+Guia de decisiones y checklist de buenas practicas de CLI: [docs/CLI_BEST_PRACTICES.md](/Users/jcsv/GolandProjects/GoFrame/GoFrame/docs/CLI_BEST_PRACTICES.md)
 
-## Arquitectura
+## Guias De Desarrollo
 
-```
-pkg/admin/
-├── registry.go    # Registro de modelos, extracción de metadatos via reflect
-├── handlers.go    # CRUD handlers montables en chi.Router
-└── ui.go          # SPA embebida (vanilla JS, sin build tools)
+- Quickstart: [docs/QUICKSTART.md](/Users/jcsv/GolandProjects/GoFrame/GoFrame/docs/QUICKSTART.md)
+- Tutorial detallado (MVC + API): [docs/TUTORIAL_DETALLADO.md](/Users/jcsv/GolandProjects/GoFrame/GoFrame/docs/TUTORIAL_DETALLADO.md)
+- Estructura de proyecto (controllers/models/templates/etc): [docs/PROJECT_LAYOUT.md](/Users/jcsv/GolandProjects/GoFrame/GoFrame/docs/PROJECT_LAYOUT.md)
+- Ejemplo runnable MVC + API + Admin: [examples/mvc_api](/Users/jcsv/GolandProjects/GoFrame/GoFrame/examples/mvc_api)
+- Checklist release/versionado: [docs/RELEASE_CHECKLIST.md](/Users/jcsv/GolandProjects/GoFrame/GoFrame/docs/RELEASE_CHECKLIST.md)
+- Estrategia de versionado: [docs/VERSIONING.md](/Users/jcsv/GolandProjects/GoFrame/GoFrame/docs/VERSIONING.md)
+- Politica de version de Go: [docs/GO_VERSION_POLICY.md](/Users/jcsv/GolandProjects/GoFrame/GoFrame/docs/GO_VERSION_POLICY.md)
+- Changelog: [CHANGELOG.md](/Users/jcsv/GolandProjects/GoFrame/GoFrame/CHANGELOG.md)
 
-# El panel expone:
-GET  /admin/              → Dashboard HTML
-GET  /admin/api/models    → Lista de modelos registrados
-GET  /admin/api/models/{name}/schema  → Metadatos del modelo
-GET  /admin/api/models/{name}/        → Listar registros (paginado)
-POST /admin/api/models/{name}/        → Crear registro
-GET  /admin/api/models/{name}/{id}    → Obtener registro
-PUT  /admin/api/models/{name}/{id}    → Actualizar registro
-DELETE /admin/api/models/{name}/{id}  → Eliminar registro
-```
+## Nota De Transicion
 
----
+La capa SQL opera en modo Bun-first y mantiene `gorm` como via de compatibilidad temporal (opt-in), fuera del camino recomendado para nuevos proyectos.
 
-## Features avanzados
+## Roadmap De Alto Nivel
 
-### Hooks (pre/post operación)
-
-```go
-panel.Register(&models.Order{}, admin.ModelConfig{
-    BeforeCreate: func(db *gorm.DB, obj interface{}) error {
-        order := obj.(*models.Order)
-        if order.Total <= 0 {
-            return fmt.Errorf("el total debe ser mayor a 0")
-        }
-        return nil
-    },
-    AfterCreate: func(db *gorm.DB, obj interface{}) error {
-        order := obj.(*models.Order)
-        // Enviar email de confirmación, crear audit log, etc.
-        slog.Info("order_created", "id", order.ID, "total", order.Total)
-        return nil
-    },
-})
-```
-
-### Permisos con Casbin
-
-```go
-import "github.com/casbin/casbin/v2"
-
-enforcer, _ := casbin.NewEnforcer("model.conf", "policy.csv")
-
-panel := admin.NewPanel(db, admin.PanelConfig{
-    Prefix:   "/admin",
-    SiteName: "Mi App",
-    PermissionFunc: func(req admin.PermissionRequest) bool {
-        ok, _ := enforcer.Enforce(req.UserID, req.ModelName, req.Action)
-        return ok
-    },
-})
-```
-
-### Modelos de solo lectura
-
-```go
-panel.Register(&models.AuditLog{}, admin.ModelConfig{
-    Icon:     "📝",
-    ReadOnly: true,  // No se puede crear, editar ni eliminar
-    OrderBy:  "created_at desc",
-})
-```
-
-### Labels personalizados
-
-```go
-panel.Register(&models.User{}, admin.ModelConfig{
-    FieldLabels: map[string]string{
-        "CreatedAt": "Fecha de registro",
-        "Active":    "¿Activo?",
-        "Email":     "Correo electrónico",
-    },
-})
-```
-
----
-
-## Stack completo recomendado
-
-```
-┌─────────────────────────────────────────────┐
-│  Chi v5          — Router + middleware       │
-│  GORM v2         — ORM (o sqlc/ent)         │
-│  pkg/admin       — Admin panel automático   │
-│  golang-jwt v5   — Autenticación JWT        │
-│  casbin v2       — Autorización RBAC/ABAC   │
-│  ozzo-validation — Validación de datos      │
-│  golang-migrate  — Migraciones de DB        │
-│  go-redis v9     — Cache + pub/sub          │
-│  asynq           — Task queue (Celery)      │
-│  log/slog        — Logging estructurado     │
-│  OpenTelemetry   — Traces + métricas        │
-│  testify         — Testing                  │
-│  pgx v5          — Driver PostgreSQL        │
-└─────────────────────────────────────────────┘
-```
-
----
-
-## Próximos pasos (roadmap)
-
-- [ ] Inline editing (editar campos directamente en la tabla)
-- [ ] Bulk actions (seleccionar múltiples y aplicar acción)
-- [ ] Relaciones FK con selects dinámicos
-- [ ] Export CSV / Excel
-- [ ] Dashboard con gráficos (Chart.js embebido)
-- [ ] Dark mode toggle
-- [ ] Audit trail automático
-- [ ] File upload para campos de imagen
-- [ ] Integración con templ + HTMX como alternativa a la SPA
-
----
+1. Fase 0: contrato, decisiones y alineacion documental.
+2. Fase 1: nucleo `App` y lifecycle completo.
+3. Fase 2: capa SQL consolidada en Bun + migraciones + capa documental.
+4. Fase 3: admin Tailwind rico + hardening de UX/DX.
+5. Fase 4: ejemplos MVC/API y release.
+6. Fase 5: release candidate y automatizacion de publicacion (cerrada).
 
 ## Licencia
 

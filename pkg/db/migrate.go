@@ -1,19 +1,34 @@
 package db
 
 import (
+	"database/sql"
 	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
+	"sort"
+	"strings"
 	"time"
-
-	"gorm.io/gorm"
 )
+
+const migrationsTable = "goframe_schema_migrations"
+
+// MigrationStatus describes the migration state for one migration ID.
+type MigrationStatus struct {
+	ID        string     `json:"id"`
+	Applied   bool       `json:"applied"`
+	AppliedAt *time.Time `json:"applied_at,omitempty"`
+	HasUp     bool       `json:"has_up"`
+	HasDown   bool       `json:"has_down"`
+}
 
 // AutoMigrate runs GORM's AutoMigrate for the given models.
 // Intended for development only — it creates tables and adds missing columns
 // but does not drop columns or change column types.
 func (d *DB) AutoMigrate(models ...interface{}) error {
+	if d == nil || d.db == nil {
+		return fmt.Errorf("db.AutoMigrate: %w", ErrGORMRequired)
+	}
 	if err := d.db.AutoMigrate(models...); err != nil {
 		return fmt.Errorf("db.AutoMigrate: %w", err)
 	}
@@ -24,7 +39,7 @@ func (d *DB) AutoMigrate(models ...interface{}) error {
 // and .down.sql files. For production use where schema changes must be explicit
 // and reversible.
 type Migrator struct {
-	db             *gorm.DB
+	db             *DB
 	migrationsPath string
 	logger         *slog.Logger
 }
@@ -32,10 +47,122 @@ type Migrator struct {
 // NewMigrator creates a Migrator that reads migration files from the given directory.
 func NewMigrator(db *DB, migrationsPath string, logger *slog.Logger) *Migrator {
 	return &Migrator{
-		db:             db.db,
+		db:             db,
 		migrationsPath: migrationsPath,
 		logger:         logger,
 	}
+}
+
+// Up applies all pending migrations.
+func (m *Migrator) Up() error {
+	return m.Steps(1<<31 - 1)
+}
+
+// Down rolls back the latest applied migration.
+func (m *Migrator) Down() error {
+	return m.Steps(-1)
+}
+
+// Steps applies n migrations (n>0) or rolls back n migrations (n<0).
+func (m *Migrator) Steps(n int) error {
+	if n == 0 {
+		return nil
+	}
+	sqlDB, err := m.sqlDB()
+	if err != nil {
+		return err
+	}
+	if err := ensureMigrationsTable(sqlDB); err != nil {
+		return err
+	}
+
+	migs, err := m.loadMigrations()
+	if err != nil {
+		return err
+	}
+	applied, err := loadApplied(sqlDB)
+	if err != nil {
+		return err
+	}
+
+	if n > 0 {
+		appliedCount := 0
+		for _, mig := range migs {
+			if _, ok := applied[mig.ID]; ok {
+				continue
+			}
+			if err := applyMigration(sqlDB, mig); err != nil {
+				return err
+			}
+			appliedCount++
+			if m.logger != nil {
+				m.logger.Info("migration applied", "id", mig.ID)
+			}
+			if appliedCount >= n {
+				break
+			}
+		}
+		return nil
+	}
+
+	// Rollback path.
+	toRollback := -n
+	appliedMigs := make([]migrationFile, 0, len(migs))
+	for _, mig := range migs {
+		if _, ok := applied[mig.ID]; ok {
+			appliedMigs = append(appliedMigs, mig)
+		}
+	}
+	rolledBack := 0
+	for i := len(appliedMigs) - 1; i >= 0; i-- {
+		mig := appliedMigs[i]
+		if err := rollbackMigration(sqlDB, mig); err != nil {
+			return err
+		}
+		rolledBack++
+		if m.logger != nil {
+			m.logger.Info("migration rolled back", "id", mig.ID)
+		}
+		if rolledBack >= toRollback {
+			break
+		}
+	}
+	return nil
+}
+
+// Status returns migration state for all discovered migration files.
+func (m *Migrator) Status() ([]MigrationStatus, error) {
+	sqlDB, err := m.sqlDB()
+	if err != nil {
+		return nil, err
+	}
+	if err := ensureMigrationsTable(sqlDB); err != nil {
+		return nil, err
+	}
+	migs, err := m.loadMigrations()
+	if err != nil {
+		return nil, err
+	}
+	applied, err := loadApplied(sqlDB)
+	if err != nil {
+		return nil, err
+	}
+
+	status := make([]MigrationStatus, 0, len(migs))
+	for _, mig := range migs {
+		st := MigrationStatus{
+			ID:      mig.ID,
+			HasUp:   mig.UpPath != "",
+			HasDown: mig.DownPath != "",
+		}
+		if at, ok := applied[mig.ID]; ok {
+			st.Applied = true
+			ts := at
+			st.AppliedAt = &ts
+		}
+		status = append(status, st)
+	}
+	return status, nil
 }
 
 // Create generates a pair of empty migration files with a timestamp prefix.
@@ -55,6 +182,197 @@ func (m *Migrator) Create(name string) error {
 		}
 	}
 
-	m.logger.Info("migration files created", "up", upFile, "down", downFile)
+	if m.logger != nil {
+		m.logger.Info("migration files created", "up", upFile, "down", downFile)
+	}
 	return nil
+}
+
+type migrationFile struct {
+	ID       string
+	UpPath   string
+	DownPath string
+}
+
+func (m *Migrator) sqlDB() (*sql.DB, error) {
+	if m == nil || m.db == nil {
+		return nil, fmt.Errorf("db.Migrator: nil database")
+	}
+	sqlDB, err := m.db.SqlDB()
+	if err != nil {
+		return nil, fmt.Errorf("db.Migrator sql handle: %w", err)
+	}
+	return sqlDB, nil
+}
+
+func ensureMigrationsTable(db *sql.DB) error {
+	if db == nil {
+		return fmt.Errorf("db.Migrator ensure table: nil sql DB")
+	}
+	q := fmt.Sprintf(`
+		CREATE TABLE IF NOT EXISTS %s (
+			id VARCHAR(255) PRIMARY KEY,
+			applied_at TEXT NOT NULL
+		)
+	`, migrationsTable)
+	if _, err := db.Exec(q); err != nil {
+		return fmt.Errorf("db.Migrator ensure table: %w", err)
+	}
+	return nil
+}
+
+func (m *Migrator) loadMigrations() ([]migrationFile, error) {
+	if m == nil {
+		return nil, fmt.Errorf("db.Migrator: nil receiver")
+	}
+
+	if err := os.MkdirAll(m.migrationsPath, 0755); err != nil {
+		return nil, fmt.Errorf("db.Migrator load migrations mkdir: %w", err)
+	}
+
+	entries, err := os.ReadDir(m.migrationsPath)
+	if err != nil {
+		return nil, fmt.Errorf("db.Migrator load migrations: %w", err)
+	}
+
+	byID := map[string]*migrationFile{}
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		name := entry.Name()
+		id, kind, ok := migrationNameParts(name)
+		if !ok {
+			continue
+		}
+		mig := byID[id]
+		if mig == nil {
+			mig = &migrationFile{ID: id}
+			byID[id] = mig
+		}
+		fullPath := filepath.Join(m.migrationsPath, name)
+		if kind == "up" {
+			mig.UpPath = fullPath
+		}
+		if kind == "down" {
+			mig.DownPath = fullPath
+		}
+	}
+
+	result := make([]migrationFile, 0, len(byID))
+	for _, mig := range byID {
+		if mig.UpPath == "" {
+			return nil, fmt.Errorf("db.Migrator invalid migration %s: missing .up.sql file", mig.ID)
+		}
+		result = append(result, *mig)
+	}
+	sort.Slice(result, func(i, j int) bool { return result[i].ID < result[j].ID })
+	return result, nil
+}
+
+func migrationNameParts(name string) (id string, kind string, ok bool) {
+	switch {
+	case strings.HasSuffix(name, ".up.sql"):
+		return strings.TrimSuffix(name, ".up.sql"), "up", true
+	case strings.HasSuffix(name, ".down.sql"):
+		return strings.TrimSuffix(name, ".down.sql"), "down", true
+	default:
+		return "", "", false
+	}
+}
+
+func loadApplied(db *sql.DB) (map[string]time.Time, error) {
+	rows, err := db.Query(fmt.Sprintf("SELECT id, applied_at FROM %s ORDER BY id", migrationsTable))
+	if err != nil {
+		return nil, fmt.Errorf("db.Migrator load applied: %w", err)
+	}
+	defer rows.Close()
+
+	applied := map[string]time.Time{}
+	for rows.Next() {
+		var (
+			id        string
+			appliedAt string
+		)
+		if err := rows.Scan(&id, &appliedAt); err != nil {
+			return nil, fmt.Errorf("db.Migrator load applied scan: %w", err)
+		}
+		ts, err := time.Parse(time.RFC3339Nano, appliedAt)
+		if err != nil {
+			return nil, fmt.Errorf("db.Migrator load applied parse time for %s: %w", id, err)
+		}
+		applied[id] = ts
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("db.Migrator load applied rows: %w", err)
+	}
+	return applied, nil
+}
+
+func applyMigration(db *sql.DB, mig migrationFile) error {
+	script, err := os.ReadFile(mig.UpPath)
+	if err != nil {
+		return fmt.Errorf("db.Migrator read up migration %s: %w", mig.ID, err)
+	}
+
+	tx, err := db.Begin()
+	if err != nil {
+		return fmt.Errorf("db.Migrator begin apply %s: %w", mig.ID, err)
+	}
+	defer tx.Rollback()
+
+	if _, err := tx.Exec(string(script)); err != nil {
+		return fmt.Errorf("db.Migrator apply %s: %w", mig.ID, err)
+	}
+
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	insert := fmt.Sprintf(
+		"INSERT INTO %s (id, applied_at) VALUES (%s, %s)",
+		migrationsTable,
+		quoteSQLString(mig.ID),
+		quoteSQLString(now),
+	)
+	if _, err := tx.Exec(insert); err != nil {
+		return fmt.Errorf("db.Migrator mark applied %s: %w", mig.ID, err)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("db.Migrator commit apply %s: %w", mig.ID, err)
+	}
+	return nil
+}
+
+func rollbackMigration(db *sql.DB, mig migrationFile) error {
+	if mig.DownPath == "" {
+		return fmt.Errorf("db.Migrator rollback %s: missing .down.sql file", mig.ID)
+	}
+
+	script, err := os.ReadFile(mig.DownPath)
+	if err != nil {
+		return fmt.Errorf("db.Migrator read down migration %s: %w", mig.ID, err)
+	}
+
+	tx, err := db.Begin()
+	if err != nil {
+		return fmt.Errorf("db.Migrator begin rollback %s: %w", mig.ID, err)
+	}
+	defer tx.Rollback()
+
+	if _, err := tx.Exec(string(script)); err != nil {
+		return fmt.Errorf("db.Migrator rollback %s: %w", mig.ID, err)
+	}
+
+	del := fmt.Sprintf("DELETE FROM %s WHERE id = %s", migrationsTable, quoteSQLString(mig.ID))
+	if _, err := tx.Exec(del); err != nil {
+		return fmt.Errorf("db.Migrator unmark applied %s: %w", mig.ID, err)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("db.Migrator commit rollback %s: %w", mig.ID, err)
+	}
+	return nil
+}
+
+func quoteSQLString(s string) string {
+	return "'" + strings.ReplaceAll(s, "'", "''") + "'"
 }

@@ -4,12 +4,7 @@ import (
 	"fmt"
 	"sort"
 	"sync"
-
-	"gorm.io/gorm"
 )
-
-// HookFunc is the signature for model lifecycle hooks.
-type HookFunc func(db *gorm.DB, entity interface{}) error
 
 // ModelConfig holds user-provided configuration for a registered model.
 type ModelConfig struct {

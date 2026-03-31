@@ -5,7 +5,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/goframe/goframe/pkg/app"
 	"github.com/goframe/goframe/pkg/db"
 	"github.com/goframe/goframe/pkg/observe"
 )
@@ -32,6 +31,12 @@ type TestProduct struct {
 type TestCategory struct {
 	BaseModel
 	Name string `gorm:"not null" json:"name" admin:"list,search"`
+}
+
+type TestDBTagModel struct {
+	ID        uint      `db:"pk"`
+	Email     string    `db:"column:email_addr;required"`
+	CreatedAt time.Time `db:"readonly"`
 }
 
 // --- Fields tests ---
@@ -178,6 +183,31 @@ func TestExtractMeta_AdminTags(t *testing.T) {
 	}
 }
 
+func TestExtractMeta_DBTagSupport(t *testing.T) {
+	meta, err := ExtractMeta(&TestDBTagModel{})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	field := map[string]FieldMeta{}
+	for _, f := range meta.Fields {
+		field[f.Name] = f
+	}
+
+	if !field["ID"].IsPK {
+		t.Error("ID should be primary key from db tag")
+	}
+	if field["Email"].Column != "email_addr" {
+		t.Fatalf("expected email column email_addr, got %s", field["Email"].Column)
+	}
+	if !field["Email"].IsRequired {
+		t.Error("Email should be required from db tag")
+	}
+	if !field["CreatedAt"].IsReadOnly {
+		t.Error("CreatedAt should be readonly from db tag")
+	}
+}
+
 // --- Registry tests ---
 
 func TestRegistry_RegisterAndGet(t *testing.T) {
@@ -222,7 +252,8 @@ func TestRegistry_All(t *testing.T) {
 func setupTestDB(t *testing.T) *db.DB {
 	t.Helper()
 	logger := observe.NewLogger("error", "text")
-	cfg := &app.Config{
+	cfg := db.Config{
+		Engine:          db.EngineGORM,
 		DatabaseURL:     "sqlite://:memory:",
 		DatabaseMaxOpen: 1,
 		DatabaseMaxIdle: 1,
@@ -235,6 +266,45 @@ func setupTestDB(t *testing.T) *db.DB {
 
 	// Auto-migrate test models
 	d.GormDB().AutoMigrate(&TestUser{}, &TestProduct{}, &TestCategory{})
+	return d
+}
+
+func setupTestBunDB(t *testing.T) *db.DB {
+	t.Helper()
+	logger := observe.NewLogger("error", "text")
+	cfg := db.Config{
+		Engine:          db.EngineBun,
+		DatabaseURL:     "sqlite://:memory:",
+		DatabaseMaxOpen: 1,
+		DatabaseMaxIdle: 1,
+	}
+	d, err := db.New(cfg, logger)
+	if err != nil {
+		t.Fatalf("failed to create Bun DB: %v", err)
+	}
+	t.Cleanup(func() { _ = d.Close() })
+
+	sqlDB, err := d.SqlDB()
+	if err != nil {
+		t.Fatalf("failed to access sql DB: %v", err)
+	}
+
+	_, err = sqlDB.Exec(`
+		CREATE TABLE test_users (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			created_at DATETIME,
+			updated_at DATETIME,
+			deleted_at DATETIME,
+			email TEXT,
+			name TEXT,
+			role TEXT,
+			active BOOLEAN
+		)
+	`)
+	if err != nil {
+		t.Fatalf("failed to create test_users table: %v", err)
+	}
+
 	return d
 }
 
@@ -370,5 +440,203 @@ func TestBaseModel_Timestamps(t *testing.T) {
 	}
 	if user.UpdatedAt.Before(time.Now().Add(-5 * time.Second)) {
 		t.Error("UpdatedAt should be recent")
+	}
+}
+
+func TestCRUD_Hooks_ReceiveGORMContext(t *testing.T) {
+	d := setupTestDB(t)
+	meta, _ := ExtractMeta(&TestUser{})
+
+	beforeCalled := false
+	afterCalled := false
+	meta.Config = ModelConfig{
+		PageSize: 25,
+		BeforeCreate: func(hookCtx HookContext, entity interface{}) error {
+			beforeCalled = true
+			if hookCtx.Engine != HookEngineGORM {
+				t.Fatalf("expected engine %s, got %s", HookEngineGORM, hookCtx.Engine)
+			}
+			if hookCtx.GORM == nil {
+				t.Fatal("expected non-nil GORM handle in hook context")
+			}
+			if hookCtx.Bun != nil {
+				t.Fatal("expected nil Bun handle in GORM hook context")
+			}
+			if hookCtx.Context == nil {
+				t.Fatal("expected non-nil context in hook context")
+			}
+			return nil
+		},
+		AfterCreate: func(hookCtx HookContext, entity interface{}) error {
+			afterCalled = true
+			if hookCtx.Engine != HookEngineGORM {
+				t.Fatalf("expected engine %s, got %s", HookEngineGORM, hookCtx.Engine)
+			}
+			if hookCtx.GORM == nil {
+				t.Fatal("expected non-nil GORM handle in hook context")
+			}
+			return nil
+		},
+	}
+
+	crud := NewCRUD(d.GormDB(), meta, nil)
+	if err := crud.Create(context.Background(), &TestUser{
+		Email: "hook-gorm@test.com",
+		Name:  "Hook GORM",
+	}); err != nil {
+		t.Fatalf("Create failed: %v", err)
+	}
+
+	if !beforeCalled {
+		t.Fatal("expected BeforeCreate hook to be called")
+	}
+	if !afterCalled {
+		t.Fatal("expected AfterCreate hook to be called")
+	}
+}
+
+func TestCRUDBun_CreateAndFindByID(t *testing.T) {
+	d := setupTestBunDB(t)
+	meta, _ := ExtractMeta(&TestUser{})
+	meta.Config = ModelConfig{PageSize: 25}
+	crud := NewCRUDBun(d.BunDB(), meta, nil)
+
+	user := &TestUser{
+		Email:  "bun@example.com",
+		Name:   "Bun User",
+		Role:   "admin",
+		Active: true,
+	}
+	if err := crud.Create(context.Background(), user); err != nil {
+		t.Fatalf("Create failed: %v", err)
+	}
+	if user.ID == 0 {
+		t.Error("ID should be set after create")
+	}
+
+	found, err := crud.FindByID(context.Background(), user.ID)
+	if err != nil {
+		t.Fatalf("FindByID failed: %v", err)
+	}
+	foundUser := found.(*TestUser)
+	if foundUser.Email != "bun@example.com" {
+		t.Errorf("expected bun@example.com, got %s", foundUser.Email)
+	}
+}
+
+func TestCRUDBun_FindAll_Pagination(t *testing.T) {
+	d := setupTestBunDB(t)
+	meta, _ := ExtractMeta(&TestUser{})
+	meta.Config = ModelConfig{PageSize: 2, SearchFields: []string{"Email", "Name"}}
+	for i := range meta.Fields {
+		if meta.Fields[i].Name == "Email" || meta.Fields[i].Name == "Name" {
+			meta.Fields[i].IsSearch = true
+		}
+	}
+
+	crud := NewCRUDBun(d.BunDB(), meta, nil)
+
+	for i := 0; i < 5; i++ {
+		if err := crud.Create(context.Background(), &TestUser{
+			Email:  "bun" + string(rune('0'+i)) + "@test.com",
+			Name:   "Bun " + string(rune('0'+i)),
+			Active: true,
+		}); err != nil {
+			t.Fatalf("Create[%d] failed: %v", i, err)
+		}
+	}
+
+	result, err := crud.FindAll(context.Background(), QueryOpts{Page: 1, PageSize: 2})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Total != 5 {
+		t.Errorf("expected total 5, got %d", result.Total)
+	}
+	if result.TotalPages != 3 {
+		t.Errorf("expected 3 pages, got %d", result.TotalPages)
+	}
+}
+
+func TestCRUDBun_UpdateDelete(t *testing.T) {
+	d := setupTestBunDB(t)
+	meta, _ := ExtractMeta(&TestUser{})
+	meta.Config = ModelConfig{PageSize: 25}
+	crud := NewCRUDBun(d.BunDB(), meta, nil)
+
+	user := &TestUser{Email: "bun-update@test.com", Name: "Original", Active: true}
+	if err := crud.Create(context.Background(), user); err != nil {
+		t.Fatalf("Create failed: %v", err)
+	}
+
+	if err := crud.Update(context.Background(), user.ID, map[string]interface{}{"name": "Updated"}); err != nil {
+		t.Fatalf("Update failed: %v", err)
+	}
+
+	found, err := crud.FindByID(context.Background(), user.ID)
+	if err != nil {
+		t.Fatalf("FindByID failed: %v", err)
+	}
+	if found.(*TestUser).Name != "Updated" {
+		t.Errorf("expected Updated, got %s", found.(*TestUser).Name)
+	}
+
+	if err := crud.Delete(context.Background(), user.ID); err != nil {
+		t.Fatalf("Delete failed: %v", err)
+	}
+	if _, err := crud.FindByID(context.Background(), user.ID); err == nil {
+		t.Error("expected not found after delete")
+	}
+}
+
+func TestCRUDBun_Hooks_ReceiveBunContext(t *testing.T) {
+	d := setupTestBunDB(t)
+	meta, _ := ExtractMeta(&TestUser{})
+
+	beforeCalled := false
+	afterCalled := false
+	meta.Config = ModelConfig{
+		PageSize: 25,
+		BeforeCreate: func(hookCtx HookContext, entity interface{}) error {
+			beforeCalled = true
+			if hookCtx.Engine != HookEngineBun {
+				t.Fatalf("expected engine %s, got %s", HookEngineBun, hookCtx.Engine)
+			}
+			if hookCtx.Bun == nil {
+				t.Fatal("expected non-nil Bun handle in hook context")
+			}
+			if hookCtx.GORM != nil {
+				t.Fatal("expected nil GORM handle in Bun hook context")
+			}
+			if hookCtx.Context == nil {
+				t.Fatal("expected non-nil context in hook context")
+			}
+			return nil
+		},
+		AfterCreate: func(hookCtx HookContext, entity interface{}) error {
+			afterCalled = true
+			if hookCtx.Engine != HookEngineBun {
+				t.Fatalf("expected engine %s, got %s", HookEngineBun, hookCtx.Engine)
+			}
+			if hookCtx.Bun == nil {
+				t.Fatal("expected non-nil Bun handle in hook context")
+			}
+			return nil
+		},
+	}
+
+	crud := NewCRUDBun(d.BunDB(), meta, nil)
+	if err := crud.Create(context.Background(), &TestUser{
+		Email: "hook-bun@test.com",
+		Name:  "Hook Bun",
+	}); err != nil {
+		t.Fatalf("Create failed: %v", err)
+	}
+
+	if !beforeCalled {
+		t.Fatal("expected BeforeCreate hook to be called")
+	}
+	if !afterCalled {
+		t.Fatal("expected AfterCreate hook to be called")
 	}
 }

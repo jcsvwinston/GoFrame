@@ -32,7 +32,7 @@ type tabler interface {
 }
 
 // ExtractMeta uses reflection to extract metadata from a model struct.
-// It reads gorm, json, validate, and admin struct tags to populate FieldMeta.
+// It reads storage tags (gorm/db), json, validate, and admin tags to populate FieldMeta.
 // Embedded structs (like BaseModel) are flattened into the parent fields list.
 func ExtractMeta(model interface{}) (*ModelMeta, error) {
 	t := reflect.TypeOf(model)
@@ -159,10 +159,14 @@ func extractFieldMeta(sf reflect.StructField) FieldMeta {
 		GoType: typeName(sf.Type),
 	}
 
-	// Parse gorm tag
+	// Parse storage tags. Keep gorm compatibility and allow neutral db tags.
 	gormTag := sf.Tag.Get("gorm")
 	if gormTag != "" {
-		parseGormTag(gormTag, &f)
+		parseDBTag(gormTag, &f)
+	}
+	dbTag := sf.Tag.Get("db")
+	if dbTag != "" {
+		parseDBTag(dbTag, &f)
 	}
 
 	// Parse json tag for column name override in API responses
@@ -205,19 +209,20 @@ func extractFieldMeta(sf reflect.StructField) FieldMeta {
 	return f
 }
 
-// parseGormTag extracts relevant settings from the gorm struct tag.
-func parseGormTag(tag string, f *FieldMeta) {
+// parseDBTag extracts relevant settings from storage struct tags.
+// It supports both gorm-compatible and neutral db conventions.
+func parseDBTag(tag string, f *FieldMeta) {
 	parts := strings.Split(tag, ";")
 	for _, p := range parts {
 		p = strings.TrimSpace(p)
 		switch {
 		case strings.HasPrefix(p, "column:"):
 			f.Column = strings.TrimPrefix(p, "column:")
-		case p == "primaryKey" || p == "primarykey":
+		case p == "primaryKey" || p == "primarykey" || p == "primary_key" || p == "pk":
 			f.IsPK = true
-		case p == "not null" || strings.HasPrefix(p, "not null"):
+		case p == "not null" || strings.HasPrefix(p, "not null") || p == "required":
 			f.IsRequired = true
-		case p == "autoCreateTime" || p == "autoUpdateTime":
+		case p == "autoCreateTime" || p == "autoUpdateTime" || p == "readonly" || p == "read_only" || p == "ro":
 			f.IsReadOnly = true
 		}
 	}

@@ -1,0 +1,301 @@
+package app
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"log/slog"
+	"net/http"
+	"os"
+	"os/signal"
+	"sync"
+	"syscall"
+	"time"
+
+	"github.com/goframe/goframe/pkg/admin"
+	"github.com/goframe/goframe/pkg/db"
+	"github.com/goframe/goframe/pkg/model"
+	"github.com/goframe/goframe/pkg/observe"
+	"github.com/goframe/goframe/pkg/router"
+)
+
+// App is the main GoFrame application container. It wires the minimum runtime
+// dependencies (config, logger, router, DB, model registry, and admin panel).
+type App struct {
+	Config *Config
+	Logger *slog.Logger
+	Router *router.Router
+	DB     *db.DB
+	Models *model.Registry
+	Admin  *admin.Panel
+
+	mu           sync.Mutex
+	server       *http.Server
+	shutdownFns  []func(context.Context) error
+	adminMounted bool
+}
+
+// New creates an application container with default wiring.
+func New(cfg *Config) (*App, error) {
+	if cfg == nil {
+		return nil, wrapOp("New", ErrNilConfig)
+	}
+
+	effective := mergeDefaults(cfg)
+	logger := observe.NewLogger(effective.LogLevel, effective.LogFormat)
+
+	dbConn, err := db.New(db.Config{
+		Engine:              db.Engine(effective.DatabaseEngine),
+		DatabaseURL:         effective.DatabaseURL,
+		DatabaseMaxOpen:     effective.DatabaseMaxOpen,
+		DatabaseMaxIdle:     effective.DatabaseMaxIdle,
+		DatabaseMaxLifetime: effective.DatabaseMaxLifetime,
+	}, logger)
+	if err != nil {
+		return nil, wrapOp("New db", err)
+	}
+
+	r := router.New(logger, router.WithTimeout(toTimeoutSeconds(effective.ReadTimeout)))
+	reg := model.NewRegistry()
+	adminPanel := admin.NewPanel(dbConn, reg, logger, admin.PanelConfig{
+		Prefix: effective.AdminPrefix,
+		Title:  effective.AdminTitle,
+	})
+
+	a := &App{
+		Config: effective,
+		Logger: logger,
+		Router: r,
+		DB:     dbConn,
+		Models: reg,
+		Admin:  adminPanel,
+	}
+
+	// DB close should always happen on app shutdown.
+	a.OnShutdown(func(context.Context) error {
+		return a.DB.Close()
+	})
+
+	if err := a.MountAdmin(); err != nil {
+		_ = a.Shutdown(context.Background())
+		return nil, wrapOp("New mount admin", err)
+	}
+
+	return a, nil
+}
+
+// RegisterModel registers a model in the shared registry used by the admin panel.
+func (a *App) RegisterModel(m interface{}, cfg ...model.ModelConfig) error {
+	if a == nil {
+		return wrapOp("RegisterModel", ErrNilApp)
+	}
+	if a.Models == nil {
+		return wrapOp("RegisterModel", ErrModelsRegistryNotInitialized)
+	}
+	return a.Models.Register(m, cfg...)
+}
+
+// MountAdmin mounts the admin panel in the router exactly once.
+func (a *App) MountAdmin() error {
+	if a == nil {
+		return wrapOp("MountAdmin", ErrNilApp)
+	}
+	if a.Admin == nil {
+		return nil
+	}
+	if a.Router == nil || a.Config == nil {
+		return wrapOp("MountAdmin", ErrNotInitialized)
+	}
+
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
+	if a.adminMounted {
+		return nil
+	}
+
+	prefix := a.Config.AdminPrefix
+	if prefix == "" {
+		prefix = "/admin"
+	}
+
+	a.Router.Mount(prefix, a.Admin.Handler())
+	a.adminMounted = true
+	return nil
+}
+
+// OnShutdown registers a callback executed during shutdown in reverse order.
+func (a *App) OnShutdown(fn func(context.Context) error) {
+	if a == nil || fn == nil {
+		return
+	}
+	a.mu.Lock()
+	a.shutdownFns = append(a.shutdownFns, fn)
+	a.mu.Unlock()
+}
+
+// Run starts the HTTP server and blocks until context cancellation or SIGINT/SIGTERM.
+func (a *App) Run(ctx context.Context) error {
+	if a == nil {
+		return wrapOp("Run", ErrNilApp)
+	}
+	if a.Config == nil || a.Router == nil {
+		return wrapOp("Run", ErrNotInitialized)
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
+	srv := &http.Server{
+		Addr:         a.Config.Addr(),
+		Handler:      a.Router,
+		ReadTimeout:  a.Config.ReadTimeout,
+		WriteTimeout: a.Config.WriteTimeout,
+		IdleTimeout:  a.Config.IdleTimeout,
+	}
+
+	a.mu.Lock()
+	if a.server != nil {
+		a.mu.Unlock()
+		return wrapOp("Run", ErrServerAlreadyRunning)
+	}
+	a.server = srv
+	a.mu.Unlock()
+
+	errCh := make(chan error, 1)
+	go func() {
+		err := srv.ListenAndServe()
+		if err != nil && !errors.Is(err, http.ErrServerClosed) {
+			errCh <- err
+		}
+	}()
+
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM)
+	defer signal.Stop(sigCh)
+
+	select {
+	case <-ctx.Done():
+		shutdownCtx, cancel := withTimeoutFromConfig(a.Config)
+		defer cancel()
+		return a.Shutdown(shutdownCtx)
+	case <-sigCh:
+		shutdownCtx, cancel := withTimeoutFromConfig(a.Config)
+		defer cancel()
+		return a.Shutdown(shutdownCtx)
+	case err := <-errCh:
+		shutdownCtx, cancel := withTimeoutFromConfig(a.Config)
+		defer cancel()
+		_ = a.Shutdown(shutdownCtx)
+		return wrapOp("Run serve", err)
+	}
+}
+
+// Shutdown gracefully stops the HTTP server (if started) and runs shutdown hooks.
+func (a *App) Shutdown(ctx context.Context) error {
+	if a == nil {
+		return wrapOp("Shutdown", ErrNilApp)
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
+	a.mu.Lock()
+	srv := a.server
+	a.server = nil
+	hooks := make([]func(context.Context) error, len(a.shutdownFns))
+	copy(hooks, a.shutdownFns)
+	a.shutdownFns = nil
+	a.mu.Unlock()
+
+	var errs []error
+
+	if srv != nil {
+		if err := srv.Shutdown(ctx); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			errs = append(errs, wrapOp("Shutdown server", err))
+		}
+	}
+
+	for i := len(hooks) - 1; i >= 0; i-- {
+		if err := hooks[i](ctx); err != nil {
+			errs = append(errs, wrapOp(fmt.Sprintf("Shutdown hook[%d]", i), err))
+		}
+	}
+
+	if len(errs) > 0 {
+		return errors.Join(errs...)
+	}
+	return nil
+}
+
+func withTimeoutFromConfig(cfg *Config) (context.Context, context.CancelFunc) {
+	if cfg == nil {
+		return context.WithTimeout(context.Background(), 10*time.Second)
+	}
+	timeout := cfg.WriteTimeout
+	if timeout <= 0 {
+		timeout = 10 * time.Second
+	}
+	return context.WithTimeout(context.Background(), timeout)
+}
+
+func toTimeoutSeconds(d time.Duration) int {
+	if d <= 0 {
+		return 30
+	}
+	if d < time.Second {
+		return 1
+	}
+	return int(d.Seconds())
+}
+
+func mergeDefaults(cfg *Config) *Config {
+	if cfg == nil {
+		return nil
+	}
+
+	base := defaults()
+	merged := *cfg
+
+	if merged.Host == "" {
+		merged.Host = base.Host
+	}
+	if merged.ReadTimeout == 0 {
+		merged.ReadTimeout = base.ReadTimeout
+	}
+	if merged.WriteTimeout == 0 {
+		merged.WriteTimeout = base.WriteTimeout
+	}
+	if merged.IdleTimeout == 0 {
+		merged.IdleTimeout = base.IdleTimeout
+	}
+	if merged.DatabaseURL == "" {
+		merged.DatabaseURL = base.DatabaseURL
+	}
+	if merged.DatabaseEngine == "" {
+		merged.DatabaseEngine = base.DatabaseEngine
+	}
+	if merged.DatabaseMaxOpen == 0 {
+		merged.DatabaseMaxOpen = base.DatabaseMaxOpen
+	}
+	if merged.DatabaseMaxIdle == 0 {
+		merged.DatabaseMaxIdle = base.DatabaseMaxIdle
+	}
+	if merged.DatabaseMaxLifetime == 0 {
+		merged.DatabaseMaxLifetime = base.DatabaseMaxLifetime
+	}
+	if merged.AdminPrefix == "" {
+		merged.AdminPrefix = base.AdminPrefix
+	}
+	if merged.AdminTitle == "" {
+		merged.AdminTitle = base.AdminTitle
+	}
+	if merged.LogLevel == "" {
+		merged.LogLevel = base.LogLevel
+	}
+	if merged.LogFormat == "" {
+		merged.LogFormat = base.LogFormat
+	}
+
+	return &merged
+}

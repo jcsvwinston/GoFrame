@@ -26,20 +26,28 @@ Nombre del módulo: `github.com/goframe/goframe`
 | Paquete | Versión | Razón |
 |---------|---------|-------|
 | `go-chi/chi/v5` | v5.2+ | Router core, 100% net/http |
-| `jackc/pgx/v5` | v5.7+ | Driver PostgreSQL nativo |
-| `jmoiron/sqlx` | v1.4+ | Extensión database/sql |
-| `golang-migrate/migrate/v4` | v4.18+ | Migraciones SQL, API frozen |
+| `uptrace/bun` | v1.2+ | ORM SQL-first sobre `database/sql` |
+| `uptrace/bun/migrate` | v1.2+ | Migraciones SQL integradas con Bun |
 | `golang-jwt/jwt/v5` | v5.2+ | JWT signing/validation |
 | `casbin/casbin/v2` | v2.100+ | Autorización RBAC/ABAC |
 | `alexedwards/scs/v2` | v2.8+ | Sesiones server-side |
 | `go-playground/validator/v10` | v10.23+ | Validación struct tags |
 | `knadh/koanf/v2` | v2.1+ | Config multi-source |
+| `go.mongodb.org/mongo-driver` | v1.17+ | Driver oficial MongoDB |
 | `redis/go-redis/v9` | v9.7+ | Cliente Redis |
 | `stretchr/testify` | v1.9+ | Solo en tests |
 | `open-telemetry/opentelemetry-go` | v1.35+ | Traces y métricas |
 | `prometheus/client_golang` | v1.20+ | Métricas Prometheus |
 
-**NO se permite**: GORM (reflection heavy, N+1 silenciosos), viper (deps excesivas), logrus (maintenance mode), cobra (overhead para CLI simple).
+**NO se permite en el core**: ORMs que oculten SQL de forma opaca (incluido GORM como default), viper (deps excesivas), logrus (maintenance mode), cobra (overhead para CLI simple).
+
+### 1.3. Estrategia de persistencia (polyglot)
+
+1. **SQL relacional**: Implementación oficial con Bun (`pkg/db`).
+2. **Documental**: Implementación oficial con MongoDB driver (`pkg/document`).
+3. **Cache y pub/sub**: Redis con `go-redis/v9` (`pkg/cache`, `pkg/queue` opcional Redis).
+4. **Contratos estables**: Las capas de dominio dependen de interfaces (`Repository`, `Cache`, `Queue`), nunca del driver concreto.
+5. **Sin pseudo-ORM universal**: GoFrame no intenta abstraer SQL, Mongo y Redis en una sola API mágica; expone interfaces coherentes y adaptadores por tipo de datastore.
 
 ---
 
@@ -61,11 +69,15 @@ goframe/
 │   │   ├── middleware.go      # Middleware stack estándar
 │   │   └── render.go         # JSON/XML response helpers
 │   │
-│   ├── db/                   # Database abstraction layer
-│   │   ├── db.go             # type DB struct (wraps sqlx.DB)
-│   │   ├── migrate.go        # Wrapper sobre golang-migrate
+│   ├── db/                   # SQL abstraction layer (Bun)
+│   │   ├── db.go             # type DB struct (wraps bun.DB)
+│   │   ├── migrate.go        # Wrapper sobre bun/migrate
 │   │   ├── tx.go             # Transaction helpers con context
 │   │   └── health.go         # DB health check
+│   │
+│   ├── document/             # Document DB abstraction (MongoDB)
+│   │   ├── mongo.go          # Mongo client, DB, collection helpers
+│   │   └── repository.go     # Repository helpers para documentos
 │   │
 │   ├── model/                # Base model y reflexión de metadatos
 │   │   ├── registry.go       # type Registry, Register(), GetModel()
@@ -176,7 +188,8 @@ goframe/
 type App struct {
     Config   *Config
     Router   *router.Router
-    DB       *db.DB
+    DB       *db.DB               // SQL (Bun)
+    Document *document.Client     // MongoDB (opcional)
     Cache    cache.Cache
     Mailer   mail.Mailer
     Queue    queue.Queue
@@ -220,7 +233,9 @@ type Config struct {
     DatabaseMaxOpen int    `koanf:"database_max_open" default:"25"`
     DatabaseMaxIdle int    `koanf:"database_max_idle" default:"5"`
 
-    // Redis (opcional — si vacío, usa cache in-memory)
+    // Datastores no relacionales
+    MongoURL string `koanf:"mongo_url"` // opcional
+    MongoDB  string `koanf:"mongo_db"`  // default "app"
     RedisURL string `koanf:"redis_url"`
 
     // Auth
@@ -317,15 +332,19 @@ func DefaultStack(a *app.App) []func(http.Handler) http.Handler {
 ### 5.1. `pkg/db/db.go`
 
 ```go
-// DB wrappea sqlx.DB añadiendo tracing, health checks y transaction helpers.
+// DB wrappea bun.DB añadiendo health checks y transaction helpers.
 type DB struct {
-    *sqlx.DB
+    *bun.DB
+    sql    *sql.DB
     logger *slog.Logger
 }
 
-// New abre una conexión con pgx driver y configura pool.
+// New abre una conexión SQL y monta Bun encima.
+// Debe soportar: postgres, mysql, sqlite, sqlserver.
 func New(cfg *app.Config, logger *slog.Logger) (*DB, error) {
-    // Usar pgx/v5/stdlib como driver para database/sql
+    // Parsear cfg.DatabaseURL para elegir driver + dialect de Bun
+    // Crear *sql.DB con database/sql
+    // bun.NewDB(sqlDB, dialect)
     // Configurar MaxOpenConns, MaxIdleConns, ConnMaxLifetime
     // Ping para verificar conectividad
 }
@@ -333,25 +352,25 @@ func New(cfg *app.Config, logger *slog.Logger) (*DB, error) {
 // Tx ejecuta fn dentro de una transacción.
 // Si fn retorna error, hace rollback. Si no, commit.
 // Soporta nested transactions via savepoints.
-func (db *DB) Tx(ctx context.Context, fn func(tx *sqlx.Tx) error) error { ... }
+func (db *DB) Tx(ctx context.Context, fn func(ctx context.Context, tx bun.Tx) error) error { ... }
 
 // Health retorna nil si la DB responde, error si no.
 func (db *DB) Health(ctx context.Context) error {
-    return db.PingContext(ctx)
+    return db.sql.PingContext(ctx)
 }
 ```
 
 ### 5.2. `pkg/db/migrate.go`
 
 ```go
-// Migrator wrappea golang-migrate para gestionar schema migrations.
+// Migrator wrappea bun/migrate para gestionar schema migrations.
 type Migrator struct {
-    migrate *migrate.Migrate
-    logger  *slog.Logger
+    migrator *migrate.Migrator
+    logger   *slog.Logger
 }
 
-// NewMigrator crea un migrator que lee migrations de un directorio.
-func NewMigrator(dbURL, migrationsPath string) (*Migrator, error) { ... }
+// NewMigrator crea un migrator usando db *db.DB y migrations embebidas o en FS.
+func NewMigrator(db *DB, migrationsPath string) (*Migrator, error) { ... }
 
 // Up aplica todas las migrations pendientes.
 func (m *Migrator) Up() error { ... }
@@ -362,8 +381,8 @@ func (m *Migrator) Down() error { ... }
 // Steps aplica n migrations (positivo=up, negativo=down).
 func (m *Migrator) Steps(n int) error { ... }
 
-// Version retorna la versión actual y si está dirty.
-func (m *Migrator) Version() (uint, bool, error) { ... }
+// Status retorna el estado actual de las migrations.
+func (m *Migrator) Status() ([]MigrationStatus, error) { ... }
 
 // Create genera archivos de migración vacíos con timestamp.
 func (m *Migrator) Create(name string) error { ... }
@@ -377,6 +396,29 @@ migrations/
 ├── 000002_create_products.up.sql
 └── 000002_create_products.down.sql
 ```
+
+### 5.3. `pkg/document/mongo.go`
+
+```go
+// Client encapsula la conexión a MongoDB para repositorios documentales.
+type Client struct {
+    raw    *mongo.Client
+    db     *mongo.Database
+    logger *slog.Logger
+}
+
+// NewDocumentClient abre conexión Mongo si cfg.MongoURL está definido.
+// Si está vacío, retorna nil, nil (feature opcional por app).
+func NewDocumentClient(cfg *app.Config, logger *slog.Logger) (*Client, error) { ... }
+
+// Collection retorna un handle tipado a la colección solicitada.
+func (c *Client) Collection(name string) *mongo.Collection { ... }
+
+// Health verifica disponibilidad del server MongoDB.
+func (c *Client) Health(ctx context.Context) error { ... }
+```
+
+`pkg/document/repository.go` debe proveer helpers de filtros, paginación y ordenación seguros para evitar duplicación entre repositorios.
 
 ---
 
@@ -412,10 +454,10 @@ func (r *Registry) Register(model interface{}, cfg ...ModelConfig) { ... }
 
 La extracción de metadatos debe:
 
-1. Recorrer los campos del struct incluyendo embeds (como `gorm.Model` equivalente propio).
-2. Leer tags: `db:"column_name"` (sqlx), `json:"name"`, `validate:"required,email"`, `admin:"list,search,filter,readonly,exclude,label:Nombre"`.
+1. Recorrer los campos del struct incluyendo embeds (como `model.BaseModel` equivalente propio).
+2. Leer tags: `bun:"column:column_name,pk,notnull"`, `json:"name"`, `validate:"required,email"`, `admin:"list,search,filter,readonly,exclude,label:Nombre"`.
 3. Inferir tipo HTML del campo: string→text, int→number, bool→checkbox, time.Time→datetime-local, campos con "email" en nombre→email, campos con "password"→password, campos con "description/body/content"→textarea.
-4. Detectar PK: campo `ID` o tag `db:"id,pk"`.
+4. Detectar PK: campo `ID` o tag Bun con `pk`.
 5. Calcular nombre de tabla: snake_case plural del nombre del struct.
 
 ### 6.3. `pkg/model/fields.go`
@@ -448,13 +490,12 @@ type Choice struct {
 
 ```go
 // CRUD[T] proporciona operaciones CRUD genéricas type-safe.
-// Usa sqlx directamente, no ORM.
+// Usa Bun SQL-first con consultas explícitas.
 type CRUD[T any] struct {
-    db    *db.DB
-    table string
+    db *db.DB
 }
 
-func NewCRUD[T any](db *db.DB, table string) *CRUD[T] { ... }
+func NewCRUD[T any](db *db.DB) *CRUD[T] { ... }
 
 func (c *CRUD[T]) FindAll(ctx context.Context, opts QueryOpts) ([]T, int64, error) { ... }
 func (c *CRUD[T]) FindByID(ctx context.Context, id interface{}) (*T, error) { ... }
@@ -472,7 +513,7 @@ type QueryOpts struct {
 }
 ```
 
-**Detalle de implementación**: Las queries se construyen con `sqlx.Named` y argumentos parametrizados. NUNCA concatenación de strings. El search usa `ILIKE` en PostgreSQL. La paginación usa `LIMIT/OFFSET` con `COUNT(*) OVER()` para total sin segunda query.
+**Detalle de implementación**: Las queries se construyen con Bun Query Builder y SQL parametrizado. NUNCA concatenación de strings. El search usa `ILIKE` en PostgreSQL y `LOWER(col) LIKE LOWER(?)` en dialectos sin `ILIKE`. La paginación usa `LIMIT/OFFSET` y un `COUNT(*)` consistente.
 
 ---
 
@@ -560,10 +601,13 @@ GET  {prefix}/api/models/{name}/export  → Export CSV
 8. **Dark mode**: Detecta `prefers-color-scheme` automáticamente.
 9. **Responsive**: Funciona en móvil (sidebar colapsable).
 10. **SPA routing**: Navegación sin recargas via History API.
+11. **UI rica**: Data table avanzada, modales, dropdowns, tabs, command palette y estados vacíos/carga consistentes.
 
 **Restricciones de implementación**:
-- Vanilla JS ES2020+, sin frameworks, sin bundlers
-- CSS custom properties para theming
+- Tailwind CSS como sistema de diseño base y utilidades.
+- Componentes UI reutilizables (botones, tablas, formularios, modales, toasts, paginación, breadcrumbs).
+- JS en vanilla ES2020+ o micro-librerías ligeras (`alpinejs` opcional); evitar frameworks SPA pesados.
+- Build frontend permitido solo para assets del framework (no obligatorio para el usuario final de GoFrame).
 - `fetch()` para todas las llamadas API
 - `embed.FS` para servir los archivos
 
@@ -870,14 +914,17 @@ El CLI usa stdlib `flag` + dispatch manual (sin cobra). Invocación: `go run ./c
 | `serve` | `runserver` | Inicia el servidor HTTP |
 | `migrate` | `migrate` | Aplica migraciones pendientes |
 | `migrate down` | `migrate <app> zero` | Revierte última migración |
+| `migrate reset` | `migrate <app> zero` | Revierte todas las migraciones aplicadas |
+| `migrate refresh` | `migrate` + `migrate <app> zero` | Revierte todo y reaplica |
 | `migrate create <name>` | `makemigrations` | Genera archivos de migración vacíos |
 | `migrate status` | `showmigrations` | Muestra estado actual |
-| `createuser` | `createsuperuser` | Crea un usuario admin interactivo |
+| `createuser` | `createsuperuser` | Crea o actualiza un usuario admin (interactivo o `--no-input`) |
 | `seed` | `loaddata` | Ejecuta seeders registrados |
 | `shell` | `shell` | Abre inspector DB (queries interactivas) |
 | `generate model <name>` | `startapp` | Genera scaffold de modelo |
 | `generate handler <name>` | - | Genera scaffold de handler |
 | `generate migration <name>` | `makemigrations --empty` | Genera migración SQL vacía |
+| `generate resource <name>` | `startapp` | Genera scaffold CRUD base (modelo + handler + test + migración) |
 | `routes` | `show_urls` | Lista todas las rutas registradas |
 | `health` | - | Verifica DB, Redis, dependencias |
 
@@ -973,54 +1020,55 @@ Claude Code debe implementar en este orden, ya que cada fase construye sobre la 
 3. `pkg/observe/logger.go` — slog wrapper
 
 ### Fase 2: Base de datos
-4. `pkg/db/db.go` — Conexión DB con sqlx + pgx
-5. `pkg/db/migrate.go` — Wrapper sobre golang-migrate
+4. `pkg/db/db.go` — Conexión SQL multi-dialecto con Bun
+5. `pkg/db/migrate.go` — Wrapper sobre bun/migrate
 6. `pkg/db/tx.go` — Transaction helpers
+7. `pkg/document/` — Cliente MongoDB + repositorios documentales
 
 ### Fase 3: Modelo y CRUD
-7. `pkg/model/fields.go` — FieldMeta y utilidades
-8. `pkg/model/meta.go` — Extracción de metadatos reflect
-9. `pkg/model/registry.go` — Registry
-10. `pkg/model/crud.go` — CRUD genérico con sqlx
+8. `pkg/model/fields.go` — FieldMeta y utilidades
+9. `pkg/model/meta.go` — Extracción de metadatos reflect
+10. `pkg/model/registry.go` — Registry
+11. `pkg/model/crud.go` — CRUD genérico con Bun
 
 ### Fase 4: Router y HTTP
-11. `pkg/router/router.go` — Router wrapper
-12. `pkg/router/middleware.go` — Middleware stack
-13. `pkg/router/render.go` — Response helpers
-14. `pkg/validate/` — Validación
-15. `pkg/errors/handler.go` — Error middleware
+12. `pkg/router/router.go` — Router wrapper
+13. `pkg/router/middleware.go` — Middleware stack
+14. `pkg/router/render.go` — Response helpers
+15. `pkg/validate/` — Validación
+16. `pkg/errors/handler.go` — Error middleware
 
 ### Fase 5: Auth y seguridad
-16. `pkg/auth/password.go` — Hashing
-17. `pkg/auth/jwt.go` — JWT manager
-18. `pkg/auth/session.go` — Session manager
-19. `pkg/authz/` — Casbin wrapper
+17. `pkg/auth/password.go` — Hashing
+18. `pkg/auth/jwt.go` — JWT manager
+19. `pkg/auth/session.go` — Session manager
+20. `pkg/authz/` — Casbin wrapper
 
 ### Fase 6: Admin
-20. `pkg/admin/panel.go` — Panel core
-21. `pkg/admin/handlers.go` — API handlers
-22. `pkg/admin/ui/` — Frontend embebido
-23. `pkg/admin/actions.go` — Bulk actions
+21. `pkg/admin/panel.go` — Panel core
+22. `pkg/admin/handlers.go` — API handlers
+23. `pkg/admin/ui/` — Frontend embebido
+24. `pkg/admin/actions.go` — Bulk actions
 
 ### Fase 7: Infraestructura
-24. `pkg/cache/` — Cache interface + implementaciones
-25. `pkg/queue/` — Job queue
-26. `pkg/mail/` — Mailer
+25. `pkg/cache/` — Cache interface + implementaciones
+26. `pkg/queue/` — Job queue
+27. `pkg/mail/` — Mailer
 
 ### Fase 8: Observabilidad
-27. `pkg/observe/tracing.go` — OpenTelemetry
-28. `pkg/observe/metrics.go` — Prometheus
-29. `pkg/observe/middleware.go` — Request middleware
+28. `pkg/observe/tracing.go` — OpenTelemetry
+29. `pkg/observe/metrics.go` — Prometheus
+30. `pkg/observe/middleware.go` — Request middleware
 
 ### Fase 9: CLI
-30. `internal/cli/` — Todos los comandos
-31. `internal/codegen/` — Templates de generación
-32. `cmd/goframe/main.go` — Entry point
+31. `internal/cli/` — Todos los comandos
+32. `internal/codegen/` — Templates de generación
+33. `cmd/goframe/main.go` — Entry point
 
 ### Fase 10: Testing y ejemplos
-33. `pkg/testing/` — Suite, factory, helpers
-34. `examples/` — Proyectos de ejemplo
-35. Tests de integración del framework
+34. `pkg/testing/` — Suite, factory, helpers
+35. `examples/` — Proyectos de ejemplo
+36. Tests de integración del framework
 
 ---
 

@@ -4,16 +4,19 @@
 package admin
 
 import (
+	"bytes"
 	"embed"
+	"fmt"
 	"io/fs"
 	"log/slog"
 	"net/http"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/goframe/goframe/pkg/auth"
+	"github.com/goframe/goframe/pkg/db"
 	"github.com/goframe/goframe/pkg/model"
 	"github.com/goframe/goframe/pkg/signals"
-	"gorm.io/gorm"
 )
 
 //go:embed ui/*
@@ -35,16 +38,16 @@ type PanelConfig struct {
 
 // Panel is the admin panel instance that provides CRUD UI for registered models.
 type Panel struct {
-	db       *gorm.DB
+	db       *db.DB
 	registry *model.Registry
 	config   PanelConfig
 	logger   *slog.Logger
 	bus      *signals.Bus
-	cruds    map[string]*model.CRUD
+	cruds    map[string]model.CRUDOperator
 }
 
 // NewPanel creates a new admin panel.
-func NewPanel(db *gorm.DB, registry *model.Registry, logger *slog.Logger, cfg PanelConfig) *Panel {
+func NewPanel(database *db.DB, registry *model.Registry, logger *slog.Logger, cfg PanelConfig) *Panel {
 	if cfg.Prefix == "" {
 		cfg.Prefix = "/admin"
 	}
@@ -53,11 +56,11 @@ func NewPanel(db *gorm.DB, registry *model.Registry, logger *slog.Logger, cfg Pa
 	}
 
 	return &Panel{
-		db:       db,
+		db:       database,
 		registry: registry,
 		config:   cfg,
 		logger:   logger,
-		cruds:    make(map[string]*model.CRUD),
+		cruds:    make(map[string]model.CRUDOperator),
 	}
 }
 
@@ -67,13 +70,35 @@ func (p *Panel) SetSignalBus(bus *signals.Bus) {
 }
 
 // getCRUD returns or creates a CRUD instance for the given model.
-func (p *Panel) getCRUD(meta *model.ModelMeta) *model.CRUD {
+func (p *Panel) getCRUD(meta *model.ModelMeta) (model.CRUDOperator, error) {
 	if c, ok := p.cruds[meta.Name]; ok {
-		return c
+		return c, nil
 	}
-	c := model.NewCRUD(p.db, meta, p.bus)
+
+	if p.db == nil {
+		return nil, fmt.Errorf("admin.getCRUD model=%s: nil database", meta.Name)
+	}
+
+	var c model.CRUDOperator
+	switch p.db.Engine() {
+	case db.EngineBun:
+		bunDB := p.db.BunDB()
+		if bunDB == nil {
+			return nil, fmt.Errorf("admin.getCRUD model=%s: %w", meta.Name, db.ErrBunRequired)
+		}
+		c = model.NewCRUDBun(bunDB, meta, p.bus)
+	case db.EngineGORM:
+		gormDB := p.db.GormDB()
+		if gormDB == nil {
+			return nil, fmt.Errorf("admin.getCRUD model=%s: %w", meta.Name, db.ErrGORMRequired)
+		}
+		c = model.NewCRUD(gormDB, meta, p.bus)
+	default:
+		return nil, fmt.Errorf("admin.getCRUD model=%s: unsupported engine %s", meta.Name, p.db.Engine())
+	}
+
 	p.cruds[meta.Name] = c
-	return c
+	return c, nil
 }
 
 // Handler returns a chi.Router that can be mounted on the application router.
@@ -115,14 +140,13 @@ func (p *Panel) mountRoutes(r chi.Router) {
 
 func (p *Panel) handleSPA(fsys fs.FS) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		f, err := fsys.Open("index.html")
+		content, err := fs.ReadFile(fsys, "index.html")
 		if err != nil {
 			http.Error(w, "admin UI not found", 500)
 			return
 		}
-		defer f.Close()
-		stat, _ := f.Stat()
-		http.ServeContent(w, r, "index.html", stat.ModTime(), f.(interface{ Read([]byte) (int, error); Seek(int64, int) (int64, error) }).(http.File))
+
+		http.ServeContent(w, r, "index.html", time.Time{}, bytes.NewReader(content))
 	}
 }
 

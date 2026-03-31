@@ -7,16 +7,78 @@
 <link rel="stylesheet" href="static/style.css">
 </head>
 <body>
-<nav class="sidebar" id="sidebar">
-  <h1 id="site-title">Admin</h1>
-  <a href="#/" class="active" data-nav="dashboard">&#127968; Dashboard</a>
-  <div id="model-nav"></div>
-</nav>
-<div class="main">
-  <button class="menu-toggle" onclick="document.getElementById('sidebar').classList.toggle('open')">&#9776;</button>
-  <div id="app"></div>
+<div class="bg-shape bg-shape-a"></div>
+<div class="bg-shape bg-shape-b"></div>
+<div class="layout">
+  <aside class="sidebar" id="sidebar" aria-label="Models">
+    <div class="sidebar-head">
+      <div class="brand-mark">GF</div>
+      <div>
+        <p class="brand-caption">GoFrame</p>
+        <h1 id="site-title">Admin</h1>
+      </div>
+    </div>
+    <nav class="nav-links" id="primary-nav">
+      <a href="#/" class="nav-link active" data-nav="dashboard">
+        <span class="nav-icon">home</span>
+        <span>Dashboard</span>
+      </a>
+      <div id="model-nav"></div>
+    </nav>
+  </aside>
+
+  <div class="shell">
+    <header class="topbar">
+      <button type="button" class="icon-btn" id="menu-toggle" aria-label="Toggle menu">menu</button>
+      <button type="button" class="command-btn" id="cmdk-open">
+        <span>Search models or actions</span>
+        <kbd>Ctrl/Cmd + K</kbd>
+      </button>
+      <div class="topbar-actions">
+        <button type="button" class="btn btn-ghost" id="refresh-btn">Refresh</button>
+        <button type="button" class="btn btn-primary" id="new-record-btn">New record</button>
+      </div>
+    </header>
+
+    <nav class="breadcrumbs" id="breadcrumbs" aria-label="Breadcrumb"></nav>
+
+    <main class="view" id="app" aria-live="polite"></main>
+  </div>
 </div>
-<div class="toast-container" id="toasts"></div>
+
+<div class="toast-container" id="toasts" aria-live="polite" aria-atomic="true"></div>
+
+<div class="overlay hidden" id="command-palette" role="dialog" aria-modal="true" aria-labelledby="cmdk-title" aria-hidden="true">
+  <div class="palette-card">
+    <div class="palette-head">
+      <h2 id="cmdk-title">Command palette</h2>
+      <button type="button" class="icon-btn" id="cmdk-close" aria-label="Close">close</button>
+    </div>
+    <input
+      id="cmdk-input"
+      type="search"
+      placeholder="Type a model or action..."
+      role="combobox"
+      aria-expanded="false"
+      aria-controls="cmdk-list"
+      aria-autocomplete="list"
+    >
+    <div class="palette-list" id="cmdk-list" role="listbox"></div>
+  </div>
+</div>
+
+<div class="overlay hidden" id="confirm-modal" role="dialog" aria-modal="true" aria-labelledby="confirm-title" aria-hidden="true">
+  <div class="modal-card">
+    <h2 id="confirm-title">Confirm action</h2>
+    <p id="confirm-text">Are you sure?</p>
+    <div class="modal-actions">
+      <button type="button" class="btn btn-ghost" id="confirm-cancel">Cancel</button>
+      <button type="button" class="btn btn-danger" id="confirm-accept">Confirm</button>
+    </div>
+  </div>
+</div>
+
+<script src="static/components.js"></script>
 <script src="static/app.js"></script>
 </body>
 </html>

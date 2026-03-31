@@ -5,15 +5,16 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/goframe/goframe/pkg/app"
 	"github.com/goframe/goframe/pkg/observe"
+	"github.com/uptrace/bun"
 	"gorm.io/gorm"
 )
 
 func newTestDB(t *testing.T) *DB {
 	t.Helper()
 	logger := observe.NewLogger("error", "text")
-	cfg := &app.Config{
+	cfg := Config{
+		Engine:          EngineGORM,
 		DatabaseURL:     "sqlite://:memory:",
 		DatabaseMaxOpen: 1,
 		DatabaseMaxIdle: 1,
@@ -26,10 +27,63 @@ func newTestDB(t *testing.T) *DB {
 	return d
 }
 
-func TestNew_SQLiteMemory(t *testing.T) {
+func newTestBunDB(t *testing.T) *DB {
+	t.Helper()
+	logger := observe.NewLogger("error", "text")
+	cfg := Config{
+		Engine:          EngineBun,
+		DatabaseURL:     "sqlite://:memory:",
+		DatabaseMaxOpen: 1,
+		DatabaseMaxIdle: 1,
+	}
+	d, err := New(cfg, logger)
+	if err != nil {
+		t.Fatalf("failed to create test Bun DB: %v", err)
+	}
+	t.Cleanup(func() { _ = d.Close() })
+	return d
+}
+
+func TestNew_DefaultEngineIsBun(t *testing.T) {
+	logger := observe.NewLogger("error", "text")
+	d, err := New(Config{
+		DatabaseURL:     "sqlite://:memory:",
+		DatabaseMaxOpen: 1,
+		DatabaseMaxIdle: 1,
+	}, logger)
+	if err != nil {
+		t.Fatalf("failed to create test DB: %v", err)
+	}
+	t.Cleanup(func() { _ = d.Close() })
+
+	if d.BunDB() == nil {
+		t.Fatal("BunDB() should not be nil")
+	}
+	if d.Engine() != EngineBun {
+		t.Fatalf("expected engine %s, got %s", EngineBun, d.Engine())
+	}
+}
+
+func TestNew_Bun_SQLiteMemory(t *testing.T) {
+	d := newTestBunDB(t)
+	if d.BunDB() == nil {
+		t.Fatal("BunDB() should not be nil")
+	}
+	if d.GormDB() != nil {
+		t.Fatal("GormDB() should be nil for bun engine")
+	}
+	if d.Engine() != EngineBun {
+		t.Fatalf("expected engine %s, got %s", EngineBun, d.Engine())
+	}
+}
+
+func TestNew_GORM_SQLiteMemory(t *testing.T) {
 	d := newTestDB(t)
 	if d.GormDB() == nil {
 		t.Fatal("GormDB() should not be nil")
+	}
+	if d.Engine() != EngineGORM {
+		t.Fatalf("expected engine %s, got %s", EngineGORM, d.Engine())
 	}
 }
 
@@ -63,6 +117,29 @@ func TestTx_Rollback(t *testing.T) {
 	})
 	if err == nil {
 		t.Fatal("Tx should return error on rollback")
+	}
+}
+
+func TestTx_OnBunEngine_ReturnsErrGORMRequired(t *testing.T) {
+	d := newTestBunDB(t)
+	err := d.Tx(context.Background(), func(tx *gorm.DB) error { return nil })
+	if !errors.Is(err, ErrGORMRequired) {
+		t.Fatalf("expected ErrGORMRequired, got %v", err)
+	}
+}
+
+func TestTxBun_OnGORMEngine_ReturnsErrBunRequired(t *testing.T) {
+	d := newTestDB(t)
+	err := d.TxBun(context.Background(), func(tx bun.Tx) error { return nil })
+	if !errors.Is(err, ErrBunRequired) {
+		t.Fatalf("expected ErrBunRequired, got %v", err)
+	}
+}
+
+func TestTxBun_Success(t *testing.T) {
+	d := newTestBunDB(t)
+	if err := d.TxBun(context.Background(), func(tx bun.Tx) error { return nil }); err != nil {
+		t.Fatalf("expected TxBun success, got %v", err)
 	}
 }
 

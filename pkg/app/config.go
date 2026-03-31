@@ -27,6 +27,7 @@ type Config struct {
 	IdleTimeout  time.Duration `koanf:"idle_timeout"`
 
 	// Database
+	DatabaseEngine      string        `koanf:"database_engine"`
 	DatabaseURL         string        `koanf:"database_url"`
 	DatabaseMaxOpen     int           `koanf:"database_max_open"`
 	DatabaseMaxIdle     int           `koanf:"database_max_idle"`
@@ -83,6 +84,7 @@ func defaults() Config {
 		WriteTimeout: 60 * time.Second,
 		IdleTimeout:  120 * time.Second,
 
+		DatabaseEngine:      "bun",
 		DatabaseURL:         "sqlite://goframe.db",
 		DatabaseMaxOpen:     25,
 		DatabaseMaxIdle:     5,

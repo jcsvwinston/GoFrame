@@ -6,6 +6,7 @@ import (
 	"math"
 	"reflect"
 	"strings"
+	"time"
 
 	gferrors "github.com/goframe/goframe/pkg/errors"
 	"github.com/goframe/goframe/pkg/signals"
@@ -163,7 +164,7 @@ func (c *CRUD) Create(ctx context.Context, entity interface{}) error {
 	}
 
 	if c.meta.Config.BeforeCreate != nil {
-		if err := c.meta.Config.BeforeCreate(c.db, entity); err != nil {
+		if err := c.meta.Config.BeforeCreate(newGORMHookContext(ctx, c.db), entity); err != nil {
 			return fmt.Errorf("model.CRUD.Create BeforeCreate model=%s: %w", c.meta.Name, err)
 		}
 	}
@@ -173,7 +174,7 @@ func (c *CRUD) Create(ctx context.Context, entity interface{}) error {
 	}
 
 	if c.meta.Config.AfterCreate != nil {
-		if err := c.meta.Config.AfterCreate(c.db, entity); err != nil {
+		if err := c.meta.Config.AfterCreate(newGORMHookContext(ctx, c.db), entity); err != nil {
 			return fmt.Errorf("model.CRUD.Create AfterCreate model=%s: %w", c.meta.Name, err)
 		}
 	}
@@ -198,7 +199,7 @@ func (c *CRUD) Update(ctx context.Context, id interface{}, updates map[string]in
 	}
 
 	if c.meta.Config.BeforeUpdate != nil {
-		if err := c.meta.Config.BeforeUpdate(c.db, updates); err != nil {
+		if err := c.meta.Config.BeforeUpdate(newGORMHookContext(ctx, c.db), updates); err != nil {
 			return fmt.Errorf("model.CRUD.Update BeforeUpdate model=%s: %w", c.meta.Name, err)
 		}
 	}
@@ -212,7 +213,7 @@ func (c *CRUD) Update(ctx context.Context, id interface{}, updates map[string]in
 	}
 
 	if c.meta.Config.AfterUpdate != nil {
-		if err := c.meta.Config.AfterUpdate(c.db, updates); err != nil {
+		if err := c.meta.Config.AfterUpdate(newGORMHookContext(ctx, c.db), updates); err != nil {
 			return fmt.Errorf("model.CRUD.Update AfterUpdate model=%s: %w", c.meta.Name, err)
 		}
 	}
@@ -238,13 +239,22 @@ func (c *CRUD) Delete(ctx context.Context, id interface{}) error {
 	}
 
 	if c.meta.Config.BeforeDelete != nil {
-		if err := c.meta.Config.BeforeDelete(c.db, id); err != nil {
+		if err := c.meta.Config.BeforeDelete(newGORMHookContext(ctx, c.db), id); err != nil {
 			return fmt.Errorf("model.CRUD.Delete BeforeDelete model=%s: %w", c.meta.Name, err)
 		}
 	}
 
-	entity := reflect.New(c.meta.Type).Interface()
-	result := c.db.WithContext(ctx).Table(c.meta.Table).Delete(entity, id)
+	var result *gorm.DB
+	if c.hasDeletedAt() {
+		result = c.db.WithContext(ctx).
+			Table(c.meta.Table).
+			Where("id = ?", id).
+			Where("deleted_at IS NULL").
+			Update("deleted_at", time.Now())
+	} else {
+		entity := reflect.New(c.meta.Type).Interface()
+		result = c.db.WithContext(ctx).Table(c.meta.Table).Delete(entity, id)
+	}
 	if result.Error != nil {
 		return fmt.Errorf("model.CRUD.Delete model=%s id=%v: %w", c.meta.Name, id, result.Error)
 	}
@@ -276,6 +286,9 @@ func (c *CRUD) searchFields() []string {
 func (c *CRUD) isValidColumn(col string) bool {
 	for _, f := range c.meta.Fields {
 		if f.Column == col {
+			return true
+		}
+		if f.Column == "i_d" && col == "id" {
 			return true
 		}
 	}
