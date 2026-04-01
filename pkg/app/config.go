@@ -124,6 +124,11 @@ func defaults() Config {
 	}
 }
 
+// DefaultConfig returns a copy of the framework default configuration.
+func DefaultConfig() Config {
+	return defaults()
+}
+
 // LoadConfig loads configuration from multiple sources with increasing precedence:
 // 1. Struct defaults
 // 2. YAML file (optional — path argument or "goframe.yaml" in current directory)

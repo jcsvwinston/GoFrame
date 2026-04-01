@@ -22,6 +22,7 @@ var commandSpecs = []commandSpec{
 	{name: "sqlflush", summary: "Print SQL statements used by flush", run: runSQLFlush},
 	{name: "sqlsequencereset", summary: "Print SQL statements to reset table sequences", run: runSQLSequenceReset},
 	{name: "flush", summary: "Delete all data from database tables (keeps migration history)", run: runFlush},
+	{name: "diffsettings", summary: "Show configuration differences from defaults", run: runDiffSettings},
 	{name: "inspectdb", summary: "Inspect DB schema and generate Go model structs", run: runInspectDB},
 	{name: "dumpdata", summary: "Export DB rows as JSON fixtures", run: runDumpData},
 	{name: "loaddata", summary: "Import JSON fixtures into DB tables", run: runLoadData},
@@ -139,6 +140,8 @@ func printRootUsage(w io.Writer) {
 	fmt.Fprintln(w, "  goframe sqlmigrate --migrations migrations 20260401120000_add_users")
 	fmt.Fprintln(w, "  goframe sqlflush --config goframe.yaml")
 	fmt.Fprintln(w, "  goframe flush --config goframe.yaml --yes")
+	fmt.Fprintln(w, "  goframe diffsettings --config goframe.yaml")
+	fmt.Fprintln(w, "  goframe check --deploy --config goframe.yaml")
 	fmt.Fprintln(w, "  goframe sqlsequencereset --config goframe.yaml")
 	fmt.Fprintln(w, "  goframe inspectdb --config goframe.yaml --output internal/models/inspected.go")
 	fmt.Fprintln(w, "  goframe dumpdata --config goframe.yaml --output fixtures.json")

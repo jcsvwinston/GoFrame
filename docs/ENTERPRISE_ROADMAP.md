@@ -1,6 +1,6 @@
 # Hoja De Ruta Enterprise (Estado Actual)
 
-Fecha de referencia: 2026-04-01.
+Fecha de referencia: 2026-04-02.
 
 Esta hoja resume el plan de alineacion enterprise acordado para avanzar sin romper ritmo de entrega.
 
@@ -35,7 +35,7 @@ Cerrar un baseline enterprise incremental sobre el core actual:
   - `go test ./...` en verde
 - [x] Tramo de paridad CLI con Django:
   - aliases Django-style (`runserver`, `makemigrations`, `showmigrations`, `createsuperuser`, `dbshell`, `check`)
-  - comandos nuevos `startapp`, `test`, `sqlmigrate`, `sqlflush`, `sqlsequencereset`, `flush`, `inspectdb`, `dumpdata`, `loaddata`
+  - comandos nuevos `startapp`, `test`, `sqlmigrate`, `sqlflush`, `sqlsequencereset`, `flush`, `diffsettings`, `inspectdb`, `dumpdata`, `loaddata`
   - matriz de paridad documentada en `docs/CLI_DJANGO_PARITY.md`
 
 ## Estado De Alineacion (Resumen)

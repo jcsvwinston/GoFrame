@@ -583,6 +583,7 @@ goframe sqlmigrate [--migrations ...] [--down] <migration_id_or_name>
 goframe sqlflush [--config ...]
 goframe sqlsequencereset [--config ...] [tables...]
 goframe flush [--config ...] [--force] [--yes] [--dry-run]
+goframe diffsettings [--config ...] [--all] [--json]
 goframe inspectdb [--config ...] [--tables users,posts] [--exclude ...] [--package models] [--output internal/models/inspected.go]
 goframe dumpdata [--config ...] [--tables users,posts] [--exclude ...] [--output fixtures.json]
 goframe loaddata [--config ...] [--tables users] [--truncate] [--dry-run] [--force] [--yes] <fixture.json>
@@ -592,7 +593,7 @@ goframe shell [--config ...] [--command ...|-c ...] [--timeout 10s] [--sandbox]
 goframe generate [--out ...] [--migrations ...] [--force] <model|handler|migration|resource> <name>
 goframe test [--run ...] [--count 1] [--race] [--v] [--failfast] [--cover] [--timeout ...] [--dry-run] [packages...]
 goframe routes [--config ...] [--path ...] [--json] [--verbose]
-goframe health [--config ...] [--timeout 3s] [--json]
+goframe health [--config ...] [--timeout 3s] [--json] [--deploy]
 ```
 
 Aliases estilo Django:
@@ -604,7 +605,8 @@ goframe makemigrations <name>
 goframe showmigrations [--config ...] [--migrations ...]
 goframe createsuperuser [flags de createuser]
 goframe dbshell [flags de shell]
-goframe check [flags de health]
+goframe check [flags de health]             # alias de health
+goframe check --deploy [--config ...]       # hardening checks de despliegue
 ```
 
 En proyectos generados con `goframe new`, tambien dispones de:
