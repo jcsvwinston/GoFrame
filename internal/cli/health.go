@@ -7,7 +7,10 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"strings"
 	"time"
+
+	"github.com/jcsvwinston/GoFrame/pkg/app"
 )
 
 type healthComponent struct {
@@ -29,6 +32,7 @@ func runHealth(args []string, _ io.Reader, stdout, stderr io.Writer) error {
 	configPath := fs.String("config", "", "Path to goframe config file")
 	timeout := fs.Duration("timeout", 3*time.Second, "Health check timeout")
 	asJSON := fs.Bool("json", false, "Print output as JSON")
+	deploy := fs.Bool("deploy", false, "Run additional deployment hardening checks")
 
 	if err := fs.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
@@ -65,6 +69,10 @@ func runHealth(args []string, _ io.Reader, stdout, stderr io.Writer) error {
 		report.Components[0].Details = err.Error()
 	}
 
+	if *deploy {
+		applyDeployChecks(cfg, &report)
+	}
+
 	if *asJSON {
 		enc := json.NewEncoder(stdout)
 		enc.SetIndent("", "  ")
@@ -82,4 +90,67 @@ func runHealth(args []string, _ io.Reader, stdout, stderr io.Writer) error {
 		return fmt.Errorf("health check failed")
 	}
 	return nil
+}
+
+func applyDeployChecks(cfg *app.Config, report *healthReport) {
+	if cfg == nil || report == nil {
+		return
+	}
+
+	addHealthComponent(report, healthComponent{
+		Name:    "deploy.env",
+		Status:  statusByCondition(cfg.IsProd(), "ok", "warning"),
+		Details: "env should be production",
+	})
+
+	addHealthComponent(report, healthComponent{
+		Name:    "deploy.debug",
+		Status:  statusByCondition(!cfg.Debug, "ok", "error"),
+		Details: "debug should be false",
+	})
+
+	jwtSecret := strings.TrimSpace(cfg.JWTSecret)
+	addHealthComponent(report, healthComponent{
+		Name:    "deploy.jwt_secret",
+		Status:  statusByCondition(len(jwtSecret) >= 32, "ok", "error"),
+		Details: "jwt_secret should be set with at least 32 chars",
+	})
+
+	addHealthComponent(report, healthComponent{
+		Name:    "deploy.rate_limit",
+		Status:  statusByCondition(cfg.RateLimitRequests > 0, "ok", "warning"),
+		Details: "rate_limit_requests should be > 0 for internet-facing deployments",
+	})
+
+	addHealthComponent(report, healthComponent{
+		Name:    "deploy.log_format",
+		Status:  statusByCondition(strings.EqualFold(strings.TrimSpace(cfg.LogFormat), "json"), "ok", "warning"),
+		Details: "log_format should be json in production",
+	})
+
+	addHealthComponent(report, healthComponent{
+		Name:    "deploy.storage_driver",
+		Status:  statusByCondition(strings.TrimSpace(cfg.StorageDriver) != "", "ok", "warning"),
+		Details: "storage_driver should be configured",
+	})
+}
+
+func addHealthComponent(report *healthReport, component healthComponent) {
+	report.Components = append(report.Components, component)
+
+	switch component.Status {
+	case "error":
+		report.Status = "degraded"
+	case "warning":
+		if report.Status == "ok" {
+			report.Status = "warning"
+		}
+	}
+}
+
+func statusByCondition(ok bool, okStatus, failStatus string) string {
+	if ok {
+		return okStatus
+	}
+	return failStatus
 }

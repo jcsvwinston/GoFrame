@@ -1,6 +1,6 @@
 # GoFrame CLI vs Django 6.0
 
-Fecha de contraste: 2026-04-01.
+Fecha de contraste: 2026-04-02.
 
 Este documento compara la CLI actual de GoFrame con la lista oficial de comandos de Django 6.0 (`django-admin` / `manage.py`) y marca:
 
@@ -23,6 +23,7 @@ Comandos canonicos:
 - `sqlflush`
 - `sqlsequencereset`
 - `flush`
+- `diffsettings`
 - `inspectdb`
 - `dumpdata`
 - `loaddata`
@@ -54,7 +55,7 @@ Aliases estilo Django:
 | `new` / `startproject` | `startproject` | equivalente |
 | `startapp` | `startapp` | equivalente (scaffold de modulo/app) |
 | `createuser` / `createsuperuser` | `createsuperuser` | equivalente (admin user) |
-| `health` / `check` | `check` | aproximado (salud dependencias vs system checks Django) |
+| `health` / `check` | `check` | aproximado (salud dependencias + `--deploy` para hardening) |
 | `migrate up/down/steps/reset/refresh` | `migrate` | aproximado (semantica similar, opciones distintas) |
 | `migrate create <name>` / `makemigrations` | `makemigrations` | aproximado (GoFrame genera archivo SQL; Django deriva desde modelos) |
 | `migrate status` / `showmigrations` | `showmigrations` | aproximado |
@@ -62,6 +63,7 @@ Aliases estilo Django:
 | `sqlflush` | `sqlflush` | equivalente funcional |
 | `sqlsequencereset` | `sqlsequencereset` | equivalente funcional |
 | `flush` | `flush` | equivalente funcional (con guardrails en produccion) |
+| `diffsettings` | `diffsettings` | equivalente funcional (diff de config vs defaults) |
 | `inspectdb` | `inspectdb` | equivalente funcional (introspeccion DB a structs Go) |
 | `dumpdata` | `dumpdata` | equivalente funcional (export JSON por tablas) |
 | `loaddata` | `loaddata` | equivalente funcional (import JSON por tablas) |
@@ -81,7 +83,6 @@ Comandos core de `django-admin` sin equivalente directo hoy:
 
 - `compilemessages`
 - `createcachetable`
-- `diffsettings`
 - `makemessages`
 - `optimizemigration`
 - `sendtestemail`

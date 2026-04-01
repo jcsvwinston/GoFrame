@@ -1010,6 +1010,93 @@ func TestRun_HealthJSON(t *testing.T) {
 	}
 }
 
+func TestRun_DiffSettings(t *testing.T) {
+	dir := t.TempDir()
+	dbPath := filepath.Join(dir, "app.db")
+	cfgPath := filepath.Join(dir, "goframe.yaml")
+	writeFile(t, cfgPath, fmt.Sprintf(
+		"database_engine: bun\n"+
+			"database_url: sqlite://%s\n"+
+			"port: 9090\n"+
+			"log_format: text\n"+
+			"debug: true\n",
+		dbPath,
+	))
+
+	var out bytes.Buffer
+	var errOut bytes.Buffer
+	code := run([]string{"diffsettings", "--config", cfgPath}, &out, &errOut)
+	if code != 0 {
+		t.Fatalf("diffsettings failed: code=%d stderr=%s", code, errOut.String())
+	}
+
+	result := out.String()
+	if !strings.Contains(result, "port") || !strings.Contains(result, "9090") {
+		t.Fatalf("diffsettings output missing port diff: %s", result)
+	}
+	if !strings.Contains(result, "log_format") || !strings.Contains(result, "text") {
+		t.Fatalf("diffsettings output missing log_format diff: %s", result)
+	}
+
+	out.Reset()
+	errOut.Reset()
+	code = run([]string{"diffsettings", "--config", cfgPath, "--json"}, &out, &errOut)
+	if code != 0 {
+		t.Fatalf("diffsettings --json failed: code=%d stderr=%s", code, errOut.String())
+	}
+	if !strings.Contains(out.String(), `"changed"`) {
+		t.Fatalf("diffsettings --json output missing changed section: %s", out.String())
+	}
+}
+
+func TestRun_CheckDeploy(t *testing.T) {
+	dir := t.TempDir()
+	dbPath := filepath.Join(dir, "app.db")
+	cfgPath := filepath.Join(dir, "goframe.yaml")
+	writeFile(t, cfgPath, fmt.Sprintf(
+		"database_engine: bun\n"+
+			"database_url: sqlite://%s\n"+
+			"env: production\n"+
+			"debug: true\n"+
+			"log_format: text\n"+
+			"rate_limit_requests: 0\n",
+		dbPath,
+	))
+
+	var out bytes.Buffer
+	var errOut bytes.Buffer
+	code := run([]string{"check", "--config", cfgPath, "--deploy", "--json"}, &out, &errOut)
+	if code == 0 {
+		t.Fatalf("expected check --deploy with weak settings to fail; output=%s", out.String())
+	}
+	if !strings.Contains(out.String(), "deploy.jwt_secret") && !strings.Contains(out.String(), "deploy.debug") {
+		t.Fatalf("expected deploy check failures in output, got: %s", out.String())
+	}
+
+	secureCfgPath := filepath.Join(dir, "goframe_secure.yaml")
+	writeFile(t, secureCfgPath, fmt.Sprintf(
+		"database_engine: bun\n"+
+			"database_url: sqlite://%s\n"+
+			"env: production\n"+
+			"debug: false\n"+
+			"log_format: json\n"+
+			"jwt_secret: 12345678901234567890123456789012\n"+
+			"rate_limit_requests: 100\n"+
+			"storage_driver: local\n",
+		filepath.Join(dir, "secure.db"),
+	))
+
+	out.Reset()
+	errOut.Reset()
+	code = run([]string{"check", "--config", secureCfgPath, "--deploy", "--json"}, &out, &errOut)
+	if code != 0 {
+		t.Fatalf("expected secure check --deploy to pass: code=%d stderr=%s output=%s", code, errOut.String(), out.String())
+	}
+	if !strings.Contains(out.String(), `"status": "ok"`) {
+		t.Fatalf("expected ok deploy report, got: %s", out.String())
+	}
+}
+
 func TestRun_Routes(t *testing.T) {
 	dir := t.TempDir()
 	dbPath := filepath.Join(dir, "app.db")
