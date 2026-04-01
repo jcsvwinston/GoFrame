@@ -280,6 +280,115 @@ func TestRun_SQLSequenceReset(t *testing.T) {
 	}
 }
 
+func TestRun_DumpDataAndLoadData(t *testing.T) {
+	dir := t.TempDir()
+	dbPath := filepath.Join(dir, "app.db")
+	cfgPath := writeCLIConfig(t, dir, dbPath)
+	fixturePath := filepath.Join(dir, "fixtures.json")
+
+	dbConn, err := sql.Open("sqlite", dbPath)
+	if err != nil {
+		t.Fatalf("open sqlite failed: %v", err)
+	}
+	defer dbConn.Close()
+
+	_, _ = dbConn.Exec("CREATE TABLE users (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL);")
+	_, _ = dbConn.Exec("CREATE TABLE posts (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL);")
+	_, _ = dbConn.Exec("CREATE TABLE goframe_schema_migrations (id TEXT PRIMARY KEY, applied_at TEXT NOT NULL);")
+	_, _ = dbConn.Exec("INSERT INTO users (name) VALUES ('alice'), ('bob');")
+	_, _ = dbConn.Exec("INSERT INTO posts (title) VALUES ('hello');")
+	_, _ = dbConn.Exec("INSERT INTO goframe_schema_migrations (id, applied_at) VALUES ('20260401120000_init', '2026-04-01T12:00:00Z');")
+
+	var out bytes.Buffer
+	var errOut bytes.Buffer
+	code := run([]string{"dumpdata", "--config", cfgPath, "--output", fixturePath}, &out, &errOut)
+	if code != 0 {
+		t.Fatalf("dumpdata failed: code=%d stderr=%s", code, errOut.String())
+	}
+
+	rawFixture, err := os.ReadFile(fixturePath)
+	if err != nil {
+		t.Fatalf("read fixture file failed: %v", err)
+	}
+	fixtureText := string(rawFixture)
+	if !strings.Contains(fixtureText, "\"name\": \"users\"") || !strings.Contains(fixtureText, "\"name\": \"posts\"") {
+		t.Fatalf("fixture output missing expected tables: %s", fixtureText)
+	}
+	if strings.Contains(fixtureText, "goframe_schema_migrations") {
+		t.Fatalf("fixture output should skip migration table: %s", fixtureText)
+	}
+
+	_, _ = dbConn.Exec("DELETE FROM users;")
+	_, _ = dbConn.Exec("DELETE FROM posts;")
+
+	out.Reset()
+	errOut.Reset()
+	code = run([]string{"loaddata", "--config", cfgPath, fixturePath}, &out, &errOut)
+	if code != 0 {
+		t.Fatalf("loaddata failed: code=%d stderr=%s", code, errOut.String())
+	}
+
+	var usersCount int
+	if err := dbConn.QueryRow("SELECT count(*) FROM users").Scan(&usersCount); err != nil {
+		t.Fatalf("count users failed: %v", err)
+	}
+	if usersCount != 2 {
+		t.Fatalf("expected 2 users after loaddata, got %d", usersCount)
+	}
+
+	var postsCount int
+	if err := dbConn.QueryRow("SELECT count(*) FROM posts").Scan(&postsCount); err != nil {
+		t.Fatalf("count posts failed: %v", err)
+	}
+	if postsCount != 1 {
+		t.Fatalf("expected 1 post after loaddata, got %d", postsCount)
+	}
+
+	var migrationsCount int
+	if err := dbConn.QueryRow("SELECT count(*) FROM goframe_schema_migrations").Scan(&migrationsCount); err != nil {
+		t.Fatalf("count migrations failed: %v", err)
+	}
+	if migrationsCount != 1 {
+		t.Fatalf("expected migrations table untouched, got %d", migrationsCount)
+	}
+}
+
+func TestRun_LoadDataTruncate(t *testing.T) {
+	dir := t.TempDir()
+	dbPath := filepath.Join(dir, "app.db")
+	cfgPath := writeCLIConfig(t, dir, dbPath)
+	fixturePath := filepath.Join(dir, "fixture_users.json")
+
+	dbConn, err := sql.Open("sqlite", dbPath)
+	if err != nil {
+		t.Fatalf("open sqlite failed: %v", err)
+	}
+	defer dbConn.Close()
+
+	_, _ = dbConn.Exec("CREATE TABLE users (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL);")
+	_, _ = dbConn.Exec("INSERT INTO users (name) VALUES ('legacy');")
+
+	writeFile(t, fixturePath, `{"tables":[{"name":"users","rows":[{"id":7,"name":"fresh"}]}]}`)
+
+	var out bytes.Buffer
+	var errOut bytes.Buffer
+	code := run([]string{"loaddata", "--config", cfgPath, "--truncate", "--yes", fixturePath}, &out, &errOut)
+	if code != 0 {
+		t.Fatalf("loaddata truncate failed: code=%d stderr=%s", code, errOut.String())
+	}
+
+	var (
+		id   int
+		name string
+	)
+	if err := dbConn.QueryRow("SELECT id, name FROM users LIMIT 1").Scan(&id, &name); err != nil {
+		t.Fatalf("query loaded user failed: %v", err)
+	}
+	if id != 7 || name != "fresh" {
+		t.Fatalf("unexpected loaded user row: id=%d name=%s", id, name)
+	}
+}
+
 func TestRun_GenerateModelAndHandler(t *testing.T) {
 	dir := t.TempDir()
 
