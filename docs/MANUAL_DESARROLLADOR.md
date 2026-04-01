@@ -583,6 +583,8 @@ goframe sqlmigrate [--migrations ...] [--down] <migration_id_or_name>
 goframe sqlflush [--config ...]
 goframe sqlsequencereset [--config ...] [tables...]
 goframe flush [--config ...] [--force] [--yes] [--dry-run]
+goframe dumpdata [--config ...] [--tables users,posts] [--exclude ...] [--output fixtures.json]
+goframe loaddata [--config ...] [--tables users] [--truncate] [--dry-run] [--force] [--yes] <fixture.json>
 goframe seed [--config ...] [--seeds ...] [--file ...] [--dry-run] [--force] [--yes]
 goframe createuser [--config ...] [--username ...] [--email ...] [--password ...] [--superuser] [--no-input]
 goframe shell [--config ...] [--command ...|-c ...] [--timeout 10s] [--sandbox]

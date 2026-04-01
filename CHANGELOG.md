@@ -26,6 +26,9 @@ while in pre-1.0 mode (`v0.x.y`).
   - `goframe sqlflush` (print generated flush SQL)
   - `goframe sqlsequencereset` (print sequence reset SQL)
   - `goframe flush` (execute flush SQL with production guardrails)
+- Fixture parity commands inspired by Django:
+  - `goframe dumpdata` (export table data as JSON fixtures)
+  - `goframe loaddata` (import JSON fixtures, optional `--truncate` with guardrails)
 - `pkg/tasks` baseline with Asynq support for background jobs (enqueue + worker runtime).
 - OpenTelemetry bootstrap (`pkg/observe/otel.go`) with OTLP traces/metrics initialization and graceful shutdown wiring from `app.New`.
 - HTTP telemetry middleware with spans and request metrics in `pkg/router`.
@@ -42,6 +45,7 @@ while in pre-1.0 mode (`v0.x.y`).
 - README/manual/CLI best practices updated with Django-style aliases and parity references.
 - CLI parity matrix updated to mark `startapp` and `test` alignment progress.
 - CLI parity matrix updated to mark SQL parity command alignment progress.
+- CLI parity matrix updated to mark fixture command alignment progress.
 
 ## [0.5.4] - 2026-04-01
 

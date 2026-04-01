@@ -23,6 +23,8 @@ Comandos canonicos:
 - `sqlflush`
 - `sqlsequencereset`
 - `flush`
+- `dumpdata`
+- `loaddata`
 - `new`
 - `startapp`
 - `createuser`
@@ -59,9 +61,11 @@ Aliases estilo Django:
 | `sqlflush` | `sqlflush` | equivalente funcional |
 | `sqlsequencereset` | `sqlsequencereset` | equivalente funcional |
 | `flush` | `flush` | equivalente funcional (con guardrails en produccion) |
+| `dumpdata` | `dumpdata` | equivalente funcional (export JSON por tablas) |
+| `loaddata` | `loaddata` | equivalente funcional (import JSON por tablas) |
 | `shell` / `dbshell` | `dbshell` | equivalente funcional (shell SQL) |
 | `test` | `test` | equivalente funcional (runner de test con flags) |
-| `seed` | `loaddata` | aproximado (GoFrame usa SQL seeds; Django usa fixtures) |
+| `seed` | n/a builtin Django | especifico GoFrame (SQL seeds operativos) |
 
 ## Lo que GoFrame tiene y Django no (core builtin)
 
@@ -76,9 +80,7 @@ Comandos core de `django-admin` sin equivalente directo hoy:
 - `compilemessages`
 - `createcachetable`
 - `diffsettings`
-- `dumpdata`
 - `inspectdb`
-- `loaddata` (fixtures nativas, distinto de SQL seed)
 - `makemessages`
 - `optimizemigration`
 - `sendtestemail`
