@@ -8,6 +8,19 @@ while in pre-1.0 mode (`v0.x.y`).
 
 ## [Unreleased]
 
+## [0.5.4] - 2026-04-01
+
+### Fixed
+
+- `goframe new` now supports `--template mvc`, aligned with the expected scaffolding workflow.
+- `goframe new` now returns a clear error when an unsupported template is requested.
+- CLI tests now cover supported and unsupported `--template` values.
+
+### Changed
+
+- README and developer manual examples now include `--template mvc` in `goframe new`.
+- Root `.gitignore` now ignores `dist/` release rehearsal artifacts.
+
 ## [0.5.3] - 2026-03-31
 
 ### Fixed
@@ -99,7 +112,8 @@ while in pre-1.0 mode (`v0.x.y`).
 
 ---
 
-[Unreleased]: https://github.com/jcsvwinston/GoFrame/compare/v0.5.3...HEAD
+[Unreleased]: https://github.com/jcsvwinston/GoFrame/compare/v0.5.4...HEAD
+[0.5.4]: https://github.com/jcsvwinston/GoFrame/compare/v0.5.3...v0.5.4
 [0.5.3]: https://github.com/jcsvwinston/GoFrame/compare/v0.5.2...v0.5.3
 [0.5.2]: https://github.com/jcsvwinston/GoFrame/compare/v0.5.1...v0.5.2
 [0.5.1]: https://github.com/jcsvwinston/GoFrame/compare/v0.5.0...v0.5.1
