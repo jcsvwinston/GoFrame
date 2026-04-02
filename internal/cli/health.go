@@ -7,6 +7,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"net/mail"
 	"strings"
 	"time"
 
@@ -133,6 +134,68 @@ func applyDeployChecks(cfg *app.Config, report *healthReport) {
 		Status:  statusByCondition(strings.TrimSpace(cfg.StorageDriver) != "", "ok", "warning"),
 		Details: "storage_driver should be configured",
 	})
+
+	applyDeployMailChecks(cfg, report)
+}
+
+func applyDeployMailChecks(cfg *app.Config, report *healthReport) {
+	driver := strings.ToLower(strings.TrimSpace(cfg.MailDriver))
+	if driver == "" {
+		driver = "noop"
+	}
+
+	mailFrom := strings.TrimSpace(cfg.MailFrom)
+	addHealthComponent(report, healthComponent{
+		Name:    "deploy.mail_from",
+		Status:  statusByCondition(isValidEmailAddress(mailFrom), "ok", "warning"),
+		Details: "mail_from should be a valid sender email address",
+	})
+
+	switch driver {
+	case "noop":
+		addHealthComponent(report, healthComponent{
+			Name:    "deploy.mail_driver",
+			Status:  "warning",
+			Details: "mail_driver is noop; configure smtp/sendgrid/plugin for production email",
+		})
+	case "smtp":
+		addHealthComponent(report, healthComponent{
+			Name:    "deploy.mail_driver",
+			Status:  "ok",
+			Details: "mail_driver=smtp",
+		})
+		addHealthComponent(report, healthComponent{
+			Name:    "deploy.mail.smtp",
+			Status:  statusByCondition(strings.TrimSpace(cfg.SMTPHost) != "" && cfg.SMTPPort > 0, "ok", "error"),
+			Details: "smtp_host and smtp_port should be configured for smtp driver",
+		})
+	case "sendgrid":
+		addHealthComponent(report, healthComponent{
+			Name:    "deploy.mail_driver",
+			Status:  "ok",
+			Details: "mail_driver=sendgrid",
+		})
+		addHealthComponent(report, healthComponent{
+			Name:    "deploy.mail.sendgrid",
+			Status:  statusByCondition(strings.TrimSpace(cfg.SendGridAPIKey) != "", "ok", "error"),
+			Details: "sendgrid_api_key should be configured for sendgrid driver",
+		})
+	default:
+		addHealthComponent(report, healthComponent{
+			Name:    "deploy.mail_driver",
+			Status:  "ok",
+			Details: fmt.Sprintf("mail_driver=%s (external plugin goframe-mail-%s)", driver, driver),
+		})
+	}
+}
+
+func isValidEmailAddress(raw string) bool {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return false
+	}
+	_, err := mail.ParseAddress(raw)
+	return err == nil
 }
 
 func addHealthComponent(report *healthReport, component healthComponent) {

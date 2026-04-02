@@ -1484,7 +1484,11 @@ func TestRun_CheckDeploy(t *testing.T) {
 			"log_format: json\n"+
 			"jwt_secret: 12345678901234567890123456789012\n"+
 			"rate_limit_requests: 100\n"+
-			"storage_driver: local\n",
+			"storage_driver: local\n"+
+			"mail_driver: smtp\n"+
+			"mail_from: noreply@example.com\n"+
+			"smtp_host: smtp.example.com\n"+
+			"smtp_port: 587\n",
 		filepath.Join(dir, "secure.db"),
 	))
 
@@ -1496,6 +1500,33 @@ func TestRun_CheckDeploy(t *testing.T) {
 	}
 	if !strings.Contains(out.String(), `"status": "ok"`) {
 		t.Fatalf("expected ok deploy report, got: %s", out.String())
+	}
+}
+
+func TestRun_CheckDeployWarnsOnNoopMailDriver(t *testing.T) {
+	dir := t.TempDir()
+	dbPath := filepath.Join(dir, "app.db")
+	cfgPath := filepath.Join(dir, "goframe.yaml")
+	writeFile(t, cfgPath, fmt.Sprintf(
+		"database_engine: bun\n"+
+			"database_url: sqlite://%s\n"+
+			"env: production\n"+
+			"debug: false\n"+
+			"log_format: json\n"+
+			"jwt_secret: 12345678901234567890123456789012\n"+
+			"rate_limit_requests: 100\n"+
+			"storage_driver: local\n",
+		dbPath,
+	))
+
+	var out bytes.Buffer
+	var errOut bytes.Buffer
+	code := run([]string{"check", "--config", cfgPath, "--deploy", "--json"}, &out, &errOut)
+	if code == 0 {
+		t.Fatalf("expected deploy check with noop mail driver to fail; output=%s", out.String())
+	}
+	if !strings.Contains(out.String(), "deploy.mail_driver") {
+		t.Fatalf("expected deploy.mail_driver finding, got: %s", out.String())
 	}
 }
 
