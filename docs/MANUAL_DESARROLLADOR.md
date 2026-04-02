@@ -674,6 +674,16 @@ Revisar:
 - conectividad
 - credenciales
 
+## 21.5 `check --deploy` falla por mail
+
+Si el reporte incluye componentes `deploy.mail_*`, revisa:
+
+- `mail_driver` (evitar `noop` en produccion)
+- `mail_from` valido
+- driver-specific:
+  - SMTP: `smtp_host` + `smtp_port`
+  - SendGrid: `sendgrid_api_key`
+
 ## 22. Referencia Rapida De Comandos
 
 ```bash

@@ -55,6 +55,7 @@ while in pre-1.0 mode (`v0.x.y`).
 
 ### Changed
 
+- `goframe check --deploy` now includes mail readiness checks (`deploy.mail_*`) based on `mail_driver` and provider-required settings.
 - CLI tests now cover `shell --sandbox` for both allowed (`SELECT`) and blocked write statements.
 - JWT middleware now enriches request context with `observe` user-id for cross-cutting middleware (logging/rate-limit correlation).
 - README, project layout, and developer manual updated to include worker/background jobs, OTel, and rate-limiting usage.
