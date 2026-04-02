@@ -46,11 +46,14 @@ type Config struct {
 	AdminTitle  string `koanf:"admin_title"`
 
 	// Mail
-	SMTPHost string `koanf:"smtp_host"`
-	SMTPPort int    `koanf:"smtp_port"`
-	SMTPUser string `koanf:"smtp_user"`
-	SMTPPass string `koanf:"smtp_pass"`
-	MailFrom string `koanf:"mail_from"`
+	MailDriver       string `koanf:"mail_driver"`
+	SMTPHost         string `koanf:"smtp_host"`
+	SMTPPort         int    `koanf:"smtp_port"`
+	SMTPUser         string `koanf:"smtp_user"`
+	SMTPPass         string `koanf:"smtp_pass"`
+	MailFrom         string `koanf:"mail_from"`
+	SendGridAPIKey   string `koanf:"sendgrid_api_key"`
+	SendGridEndpoint string `koanf:"sendgrid_endpoint"`
 
 	// Observability
 	LogLevel     string `koanf:"log_level"`
@@ -100,8 +103,10 @@ func defaults() Config {
 		AdminPrefix: "/admin",
 		AdminTitle:  "GoFrame Admin",
 
-		SMTPPort: 587,
-		MailFrom: "noreply@localhost",
+		MailDriver:       "noop",
+		SMTPPort:         587,
+		MailFrom:         "noreply@localhost",
+		SendGridEndpoint: "https://api.sendgrid.com/v3/mail/send",
 
 		LogLevel:    "info",
 		LogFormat:   "json",

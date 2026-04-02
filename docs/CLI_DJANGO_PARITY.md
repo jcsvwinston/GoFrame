@@ -79,7 +79,7 @@ Aliases estilo Django:
 | `compilemessages` | `compilemessages` | equivalente funcional (compilacion de `.po` a bundles JSON) |
 | `optimizemigration` | `optimizemigration` | equivalente aproximado (optimizacion SQL por archivo de migracion) |
 | `squashmigrations` | `squashmigrations` | equivalente aproximado (squash SQL-first por rango con salida `.up/.down.sql`) |
-| `sendtestemail` | `sendtestemail` | equivalente funcional (envio de email de prueba vía SMTP configurado) |
+| `sendtestemail` | `sendtestemail` | equivalente funcional (envio de email de prueba via `mail_driver`: SMTP, SendGrid o plugin externo) |
 | `inspectdb` | `inspectdb` | equivalente funcional (introspeccion DB a structs Go) |
 | `dumpdata` | `dumpdata` | equivalente funcional (export JSON por tablas) |
 | `loaddata` | `loaddata` | equivalente funcional (import JSON por tablas) |

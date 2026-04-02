@@ -47,6 +47,9 @@ func TestAppNew_InitializesCoreComponents(t *testing.T) {
 	if a.Config == nil || a.Logger == nil || a.Router == nil || a.DB == nil || a.Models == nil {
 		t.Fatal("expected app core components to be initialized")
 	}
+	if a.Mailer == nil {
+		t.Fatal("expected mailer to be initialized")
+	}
 	if a.Admin == nil {
 		t.Fatal("expected admin panel to be initialized")
 	}
@@ -182,5 +185,18 @@ func TestAppRun_InvalidAddress(t *testing.T) {
 	err = a.Run(context.Background())
 	if err == nil {
 		t.Fatal("expected run error for invalid server address")
+	}
+}
+
+func TestAppNew_InvalidMailDriver(t *testing.T) {
+	cfg := testAppConfig()
+	cfg.MailDriver = "unknown-provider"
+
+	_, err := New(cfg)
+	if err == nil {
+		t.Fatal("expected error for unknown mail driver")
+	}
+	if !strings.Contains(err.Error(), "unknown mail driver") {
+		t.Fatalf("expected unknown mail driver error, got %v", err)
 	}
 }

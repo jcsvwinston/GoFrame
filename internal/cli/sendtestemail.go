@@ -1,24 +1,17 @@
 package cli
 
 import (
-	"crypto/tls"
+	"context"
 	"errors"
 	"flag"
 	"fmt"
 	"io"
-	"net"
-	"net/smtp"
-	"strconv"
 	"strings"
 	"time"
-)
 
-type smtpSendConfig struct {
-	host string
-	port int
-	user string
-	pass string
-}
+	"github.com/jcsvwinston/GoFrame/pkg/app"
+	"github.com/jcsvwinston/GoFrame/pkg/mail"
+)
 
 func runSendTestEmail(args []string, _ io.Reader, stdout, stderr io.Writer) error {
 	fs := flag.NewFlagSet("sendtestemail", flag.ContinueOnError)
@@ -29,8 +22,8 @@ func runSendTestEmail(args []string, _ io.Reader, stdout, stderr io.Writer) erro
 	from := fs.String("from", "", "Sender email (defaults to config mail_from)")
 	subject := fs.String("subject", "GoFrame test email", "Subject line")
 	body := fs.String("body", "This is a test email sent by goframe sendtestemail.", "Email body")
-	timeout := fs.Duration("timeout", 10*time.Second, "SMTP operation timeout")
-	dryRun := fs.Bool("dry-run", false, "Print send plan without opening an SMTP connection")
+	timeout := fs.Duration("timeout", 10*time.Second, "Mail provider operation timeout")
+	dryRun := fs.Bool("dry-run", false, "Print send plan without contacting the mail provider")
 
 	if err := fs.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
@@ -81,41 +74,53 @@ func runSendTestEmail(args []string, _ io.Reader, stdout, stderr io.Writer) erro
 		return fmt.Errorf("timeout must be greater than 0")
 	}
 
-	smtpCfg := smtpSendConfig{
-		host: strings.TrimSpace(cfg.SMTPHost),
-		port: cfg.SMTPPort,
-		user: strings.TrimSpace(cfg.SMTPUser),
-		pass: cfg.SMTPPass,
-	}
-	if !*dryRun {
-		if smtpCfg.host == "" {
-			return fmt.Errorf("smtp_host is required in config for sendtestemail")
-		}
-		if smtpCfg.port <= 0 {
-			return fmt.Errorf("smtp_port must be greater than 0")
-		}
-	}
+	driver := resolveMailDriver(cfg.MailDriver)
 
 	if *dryRun {
+		providerDetails := sendTestEmailProviderDetails(driver, cfg)
 		fmt.Fprintf(
 			stdout,
-			"DRY-RUN\tSENDTESTEMAIL\tfrom=%s\tto=%s\tsubject=%q\thost=%s\tport=%d\ttimeout=%s\n",
+			"DRY-RUN\tSENDTESTEMAIL\tdriver=%s\tfrom=%s\tto=%s\tsubject=%q\tprovider=%s\ttimeout=%s\n",
+			driver,
 			fromAddr,
 			strings.Join(recipients, ","),
 			sub,
-			smtpCfg.host,
-			smtpCfg.port,
+			providerDetails,
 			timeout.String(),
 		)
 		return nil
 	}
 
-	payload := buildSMTPMessage(fromAddr, recipients, sub, msgBody)
-	if err := sendSMTPMessage(smtpCfg, fromAddr, recipients, payload, *timeout); err != nil {
-		return err
+	if driver == "noop" {
+		return fmt.Errorf("mail_driver is noop; configure smtp, sendgrid, or install goframe-mail-<driver> on PATH")
 	}
 
-	fmt.Fprintf(stdout, "Test email sent: from=%s to=%s subject=%q\n", fromAddr, strings.Join(recipients, ","), sub)
+	sender, err := mail.NewSender(mail.Config{
+		Driver:           driver,
+		Timeout:          *timeout,
+		SMTPHost:         strings.TrimSpace(cfg.SMTPHost),
+		SMTPPort:         cfg.SMTPPort,
+		SMTPUser:         strings.TrimSpace(cfg.SMTPUser),
+		SMTPPass:         cfg.SMTPPass,
+		SendGridAPIKey:   strings.TrimSpace(cfg.SendGridAPIKey),
+		SendGridEndpoint: strings.TrimSpace(cfg.SendGridEndpoint),
+	})
+	if err != nil {
+		return fmt.Errorf("configure mail driver %q: %w", driver, err)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), *timeout)
+	defer cancel()
+	if err := sender.Send(ctx, mail.Message{
+		From:    fromAddr,
+		To:      recipients,
+		Subject: sub,
+		Body:    msgBody,
+	}); err != nil {
+		return fmt.Errorf("send test email via %s: %w", driver, err)
+	}
+
+	fmt.Fprintf(stdout, "Test email sent: driver=%s from=%s to=%s subject=%q\n", driver, fromAddr, strings.Join(recipients, ","), sub)
 	return nil
 }
 
@@ -146,70 +151,32 @@ func collectSendTestEmailRecipients(toFlag string, positional []string) ([]strin
 	return out, nil
 }
 
-func buildSMTPMessage(from string, recipients []string, subject, body string) []byte {
-	lines := []string{
-		"From: " + from,
-		"To: " + strings.Join(recipients, ", "),
-		"Subject: " + subject,
-		"MIME-Version: 1.0",
-		"Content-Type: text/plain; charset=UTF-8",
-		"",
-		body,
+func resolveMailDriver(raw string) string {
+	driver := strings.ToLower(strings.TrimSpace(raw))
+	if driver == "" {
+		return "noop"
 	}
-	return []byte(strings.Join(lines, "\r\n"))
+	return driver
 }
 
-func sendSMTPMessage(cfg smtpSendConfig, from string, recipients []string, payload []byte, timeout time.Duration) error {
-	addr := net.JoinHostPort(cfg.host, strconv.Itoa(cfg.port))
-	conn, err := net.DialTimeout("tcp", addr, timeout)
-	if err != nil {
-		return fmt.Errorf("connect SMTP server %s: %w", addr, err)
+func sendTestEmailProviderDetails(driver string, cfg *app.Config) string {
+	if cfg == nil {
+		return "-"
 	}
-
-	client, err := smtp.NewClient(conn, cfg.host)
-	if err != nil {
-		_ = conn.Close()
-		return fmt.Errorf("start SMTP client: %w", err)
-	}
-	defer client.Close()
-
-	if ok, _ := client.Extension("STARTTLS"); ok {
-		tlsConfig := &tls.Config{ServerName: cfg.host}
-		if err := client.StartTLS(tlsConfig); err != nil {
-			return fmt.Errorf("starttls failed: %w", err)
+	switch driver {
+	case "smtp":
+		host := strings.TrimSpace(cfg.SMTPHost)
+		if host == "" {
+			host = "-"
 		}
-	}
-
-	if cfg.user != "" {
-		auth := smtp.PlainAuth("", cfg.user, cfg.pass, cfg.host)
-		if err := client.Auth(auth); err != nil {
-			return fmt.Errorf("smtp auth failed: %w", err)
+		return fmt.Sprintf("smtp_host=%s,smtp_port=%d", host, cfg.SMTPPort)
+	case "sendgrid":
+		endpoint := strings.TrimSpace(cfg.SendGridEndpoint)
+		if endpoint == "" {
+			endpoint = "https://api.sendgrid.com/v3/mail/send"
 		}
+		return fmt.Sprintf("sendgrid_endpoint=%s", endpoint)
+	default:
+		return fmt.Sprintf("plugin=goframe-mail-%s", driver)
 	}
-
-	if err := client.Mail(from); err != nil {
-		return fmt.Errorf("smtp MAIL FROM failed: %w", err)
-	}
-	for _, recipient := range recipients {
-		if err := client.Rcpt(recipient); err != nil {
-			return fmt.Errorf("smtp RCPT TO failed for %s: %w", recipient, err)
-		}
-	}
-
-	wc, err := client.Data()
-	if err != nil {
-		return fmt.Errorf("smtp DATA failed: %w", err)
-	}
-	if _, err := wc.Write(payload); err != nil {
-		_ = wc.Close()
-		return fmt.Errorf("write smtp payload: %w", err)
-	}
-	if err := wc.Close(); err != nil {
-		return fmt.Errorf("finalize smtp payload: %w", err)
-	}
-
-	if err := client.Quit(); err != nil {
-		return fmt.Errorf("smtp quit failed: %w", err)
-	}
-	return nil
 }

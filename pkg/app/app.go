@@ -14,6 +14,7 @@ import (
 
 	"github.com/jcsvwinston/GoFrame/pkg/admin"
 	"github.com/jcsvwinston/GoFrame/pkg/db"
+	"github.com/jcsvwinston/GoFrame/pkg/mail"
 	"github.com/jcsvwinston/GoFrame/pkg/model"
 	"github.com/jcsvwinston/GoFrame/pkg/observe"
 	"github.com/jcsvwinston/GoFrame/pkg/router"
@@ -26,6 +27,7 @@ type App struct {
 	Logger *slog.Logger
 	Router *router.Router
 	DB     *db.DB
+	Mailer mail.Sender
 	Models *model.Registry
 	Admin  *admin.Panel
 
@@ -50,6 +52,21 @@ func New(cfg *Config) (*App, error) {
 	}, logger)
 	if err != nil {
 		return nil, wrapOp("New telemetry", err)
+	}
+
+	mailer, err := mail.NewSender(mail.Config{
+		Driver:           effective.MailDriver,
+		Timeout:          effective.WriteTimeout,
+		SMTPHost:         effective.SMTPHost,
+		SMTPPort:         effective.SMTPPort,
+		SMTPUser:         effective.SMTPUser,
+		SMTPPass:         effective.SMTPPass,
+		SendGridAPIKey:   effective.SendGridAPIKey,
+		SendGridEndpoint: effective.SendGridEndpoint,
+	})
+	if err != nil {
+		_ = telemetryShutdown(context.Background())
+		return nil, wrapOp("New mail", err)
 	}
 
 	dbConn, err := db.New(db.Config{
@@ -82,6 +99,7 @@ func New(cfg *Config) (*App, error) {
 		Logger: logger,
 		Router: r,
 		DB:     dbConn,
+		Mailer: mailer,
 		Models: reg,
 		Admin:  adminPanel,
 	}
@@ -307,6 +325,18 @@ func mergeDefaults(cfg *Config) *Config {
 	}
 	if merged.AdminTitle == "" {
 		merged.AdminTitle = base.AdminTitle
+	}
+	if merged.MailDriver == "" {
+		merged.MailDriver = base.MailDriver
+	}
+	if merged.SMTPPort == 0 {
+		merged.SMTPPort = base.SMTPPort
+	}
+	if merged.MailFrom == "" {
+		merged.MailFrom = base.MailFrom
+	}
+	if merged.SendGridEndpoint == "" {
+		merged.SendGridEndpoint = base.SendGridEndpoint
 	}
 	if merged.LogLevel == "" {
 		merged.LogLevel = base.LogLevel

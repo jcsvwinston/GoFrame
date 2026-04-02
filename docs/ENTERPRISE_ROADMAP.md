@@ -37,6 +37,10 @@ Cerrar un baseline enterprise incremental sobre el core actual:
   - aliases Django-style (`runserver`, `makemigrations`, `showmigrations`, `createsuperuser`, `dbshell`, `check`)
   - comandos nuevos `startapp`, `test`, `testserver`, `sqlmigrate`, `sqlflush`, `sqlsequencereset`, `flush`, `diffsettings`, `createcachetable`, `makemessages`, `compilemessages`, `optimizemigration`, `squashmigrations`, `sendtestemail`, `inspectdb`, `dumpdata`, `loaddata`, `changepassword`, `clearsessions`
   - matriz de paridad documentada en `docs/CLI_DJANGO_PARITY.md`
+- [x] Baseline de extensibilidad para proveedores de email:
+  - `pkg/mail` con drivers `noop`/`smtp`/`sendgrid`
+  - registro in-process con `mail.RegisterProvider(...)`
+  - plugins externos por ejecutable `goframe-mail-<driver>` en `PATH`
 
 ## Estado De Alineacion (Resumen)
 
