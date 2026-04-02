@@ -30,7 +30,7 @@ var commandSpecs = []commandSpec{
 	{name: "loaddata", summary: "Import JSON fixtures into DB tables", run: runLoadData},
 	{name: "makemessages", summary: "Extract translatable strings into .po catalogs", run: runMakeMessages},
 	{name: "optimizemigration", summary: "Optimize SQL statements in one migration file", run: runOptimizeMigration},
-	{name: "sendtestemail", summary: "Send a test email through configured SMTP", run: runSendTestEmail},
+	{name: "sendtestemail", summary: "Send a test email through configured mail provider", run: runSendTestEmail},
 	{name: "serve", summary: "Start the HTTP server", run: runServe},
 	{name: "migrate", summary: "Apply and manage SQL migrations", run: runMigrate},
 	{name: "sqlmigrate", summary: "Print SQL for a migration file", run: runSQLMigrate},

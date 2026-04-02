@@ -162,6 +162,7 @@ func main() {
 - `pkg/db`: Bun-first + compatibilidad GORM explicita + migrador SQL por archivos (`Create`, `Up`, `Down`, `Steps`, `Status`).
 - `pkg/model`: metadatos por reflexion, registry y CRUD generico.
 - `pkg/admin`: panel embebido con CRUD, schema, export CSV y bulk delete.
+- `pkg/mail`: capa de envio de email por proveedor (`noop`, `smtp`, `sendgrid`) con extensibilidad por plugins `goframe-mail-<driver>`.
 - `pkg/tasks`: enqueue/worker runtime basado en Asynq para tareas asíncronas.
 - `cmd/goframe` + `internal/cli`: CLI modular con comandos `new`, `startapp`, `serve`, `migrate`, `sqlmigrate`, `sqlflush`, `sqlsequencereset`, `flush`, `diffsettings`, `makemessages`, `compilemessages`, `optimizemigration`, `squashmigrations`, `sendtestemail`, `inspectdb`, `dumpdata`, `loaddata`, `createcachetable`, `createuser`, `changepassword`, `clearsessions`, `seed`, `shell`, `generate`, `test`, `testserver`, `routes`, `health`.
 - `pkg/errors`, `pkg/validate`, `pkg/observe` (incluye OTel), `pkg/signals`.
@@ -249,6 +250,7 @@ Comparativa de comandos GoFrame vs Django 6.0: [docs/CLI_DJANGO_PARITY.md](/User
 - Politica de version de Go: [docs/GO_VERSION_POLICY.md](/Users/jcsv/GolandProjects/GoFrame/GoFrame/docs/GO_VERSION_POLICY.md)
 - Hoja de ruta enterprise y estado de alineacion: [docs/ENTERPRISE_ROADMAP.md](/Users/jcsv/GolandProjects/GoFrame/GoFrame/docs/ENTERPRISE_ROADMAP.md)
 - Paridad de comandos CLI contra Django: [docs/CLI_DJANGO_PARITY.md](/Users/jcsv/GolandProjects/GoFrame/GoFrame/docs/CLI_DJANGO_PARITY.md)
+- Proveedores de email y plugins: [docs/MAIL_PROVIDERS.md](/Users/jcsv/GolandProjects/GoFrame/GoFrame/docs/MAIL_PROVIDERS.md)
 - Changelog: [CHANGELOG.md](/Users/jcsv/GolandProjects/GoFrame/GoFrame/CHANGELOG.md)
 
 ## Nota De Transicion

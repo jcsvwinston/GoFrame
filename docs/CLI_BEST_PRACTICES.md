@@ -66,8 +66,8 @@ Implementado en `cmd/goframe` + `internal/cli`:
   - mantenimiento SQL-first de migraciones (normalizacion de sentencias y squash por rango).
   - `squashmigrations` soporta modo plan y archivado de migraciones origen.
 - `sendtestemail`:
-  - verificacion operativa de configuración SMTP.
-  - soporta `--dry-run` para validar payload/recipients sin abrir conexión.
+  - verificacion operativa del `mail_driver` configurado (`smtp`, `sendgrid` o plugin externo `goframe-mail-<driver>`).
+  - soporta `--dry-run` para validar payload/recipients sin contactar el proveedor.
 - `inspectdb`:
   - introspeccion de esquema SQL y generacion de structs Go con tags `db`.
 - `dumpdata` / `loaddata`:

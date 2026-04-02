@@ -151,6 +151,7 @@ a, _ := app.New(cfg)
 - `Logger`
 - `Router`
 - `DB`
+- `Mailer`
 - `Models`
 - `Admin`
 
@@ -199,6 +200,7 @@ Campos frecuentes:
 - queue/background: `redis_url`
 - auth/session: `jwt_secret`, `jwt_expiry`, `session_lifetime`
 - admin: `admin_prefix`, `admin_title`
+- mail: `mail_driver`, `mail_from`, `smtp_*`, `sendgrid_api_key`, `sendgrid_endpoint`
 - observabilidad: `log_level`, `log_format`, `metrics_path`, `otlp_endpoint`
 - hardening HTTP: `rate_limit_requests`, `rate_limit_window`
 - entorno: `env`, `debug`
@@ -457,15 +459,48 @@ goframe squashmigrations --migrations migrations --from init --to add_users --na
 goframe squashmigrations --migrations migrations --from init --to add_users --name baseline --write --archive-old
 ```
 
-## 13.4 Email SMTP de prueba
+## 13.4 Email de prueba por proveedor (`mail_driver`)
 
-Validar configuración SMTP con un correo de prueba:
+Validar el proveedor de correo configurado con un correo de prueba:
 
 ```bash
 goframe sendtestemail --config goframe.yaml --to dev@example.com --dry-run
-goframe sendtestemail --config goframe.yaml --to dev@example.com --subject "SMTP check"
+goframe sendtestemail --config goframe.yaml --to dev@example.com --subject "mail check"
 goframe sendtestemail --config goframe.yaml --to dev1@example.com,dev2@example.com --timeout 15s
 ```
+
+Drivers soportados en core:
+
+- `noop` (default seguro para desarrollo; no envia realmente)
+- `smtp`
+- `sendgrid`
+
+Ejemplo SMTP:
+
+```yaml
+mail_driver: smtp
+mail_from: noreply@example.com
+smtp_host: smtp.example.com
+smtp_port: 587
+smtp_user: user
+smtp_pass: secret
+```
+
+Ejemplo SendGrid:
+
+```yaml
+mail_driver: sendgrid
+mail_from: noreply@example.com
+sendgrid_api_key: SG.xxxxx
+sendgrid_endpoint: https://api.sendgrid.com/v3/mail/send
+```
+
+Soporte plugin externo:
+
+- define `mail_driver: mailgun` (o el nombre que quieras)
+- agrega un ejecutable `goframe-mail-mailgun` al `PATH`
+- GoFrame enviara un JSON por `stdin` con `from`, `to`, `subject`, `body` y `headers`
+- salida `0` = envio aceptado; salida no-cero = error operativo
 
 ## 14. Shell SQL
 
@@ -701,5 +736,6 @@ go run ./cmd/worker
 - layout recomendado: `docs/PROJECT_LAYOUT.md`
 - buenas practicas CLI: `docs/CLI_BEST_PRACTICES.md`
 - paridad CLI contra Django: `docs/CLI_DJANGO_PARITY.md`
+- proveedores de email y plugins: `docs/MAIL_PROVIDERS.md`
 - hoja de ruta enterprise: `docs/ENTERPRISE_ROADMAP.md`
 - checklist release: `docs/RELEASE_CHECKLIST.md`

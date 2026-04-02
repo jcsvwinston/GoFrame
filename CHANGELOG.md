@@ -40,7 +40,11 @@ while in pre-1.0 mode (`v0.x.y`).
 - `goframe compilemessages` command to compile locale `.po` catalogs into JSON bundles.
 - `goframe optimizemigration` command to normalize and deduplicate SQL statements in migration files.
 - `goframe squashmigrations` command to squash a migration range into one `.up.sql`/`.down.sql` pair, with optional source archiving.
-- `goframe sendtestemail` command to send SMTP test emails with `--dry-run` validation mode.
+- `goframe sendtestemail` command now validates and sends through configurable `mail_driver` (`smtp`, `sendgrid`, or external plugin `goframe-mail-<driver>`), with `--dry-run` mode.
+- New `pkg/mail` provider architecture with:
+  - provider registry via `mail.RegisterProvider(...)` for in-process extensions
+  - built-in drivers `noop`, `smtp`, and `sendgrid`
+  - external plugin bridge via executables named `goframe-mail-<driver>` on `PATH`
 - `pkg/tasks` baseline with Asynq support for background jobs (enqueue + worker runtime).
 - OpenTelemetry bootstrap (`pkg/observe/otel.go`) with OTLP traces/metrics initialization and graceful shutdown wiring from `app.New`.
 - HTTP telemetry middleware with spans and request metrics in `pkg/router`.

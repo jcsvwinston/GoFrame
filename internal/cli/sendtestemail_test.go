@@ -1,6 +1,9 @@
 package cli
 
 import (
+	"bytes"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -21,23 +24,60 @@ func TestCollectSendTestEmailRecipients(t *testing.T) {
 	}
 }
 
-func TestBuildSMTPMessage(t *testing.T) {
-	payload := string(buildSMTPMessage(
-		"noreply@example.com",
-		[]string{"dev@example.com"},
-		"Test Subject",
-		"Body line",
-	))
-	if !strings.Contains(payload, "From: noreply@example.com") {
-		t.Fatalf("missing From header: %s", payload)
+func TestResolveMailDriver(t *testing.T) {
+	if got := resolveMailDriver(""); got != "noop" {
+		t.Fatalf("expected noop fallback, got %q", got)
 	}
-	if !strings.Contains(payload, "To: dev@example.com") {
-		t.Fatalf("missing To header: %s", payload)
+	if got := resolveMailDriver("SendGrid"); got != "sendgrid" {
+		t.Fatalf("expected normalized sendgrid, got %q", got)
 	}
-	if !strings.Contains(payload, "Subject: Test Subject") {
-		t.Fatalf("missing Subject header: %s", payload)
+}
+
+func TestRunSendTestEmailDryRunIncludesDriver(t *testing.T) {
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, "goframe.yaml")
+	raw := "mail_driver: sendgrid\nmail_from: noreply@example.com\nsendgrid_endpoint: https://api.sendgrid.test/v3/mail/send\n"
+	if err := os.WriteFile(cfgPath, []byte(raw), 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
 	}
-	if !strings.HasSuffix(payload, "Body line") {
-		t.Fatalf("missing body: %s", payload)
+
+	var out bytes.Buffer
+	var errOut bytes.Buffer
+	if err := runSendTestEmail([]string{
+		"--config", cfgPath,
+		"--to", "dev@example.com",
+		"--dry-run",
+	}, strings.NewReader(""), &out, &errOut); err != nil {
+		t.Fatalf("runSendTestEmail dry-run failed: %v (stderr=%s)", err, errOut.String())
+	}
+
+	output := out.String()
+	if !strings.Contains(output, "driver=sendgrid") {
+		t.Fatalf("expected driver in dry-run output, got: %s", output)
+	}
+	if !strings.Contains(output, "sendgrid_endpoint=https://api.sendgrid.test/v3/mail/send") {
+		t.Fatalf("expected provider details in dry-run output, got: %s", output)
+	}
+}
+
+func TestRunSendTestEmailRejectsNoopWithoutDryRun(t *testing.T) {
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, "goframe.yaml")
+	raw := "mail_driver: noop\nmail_from: noreply@example.com\n"
+	if err := os.WriteFile(cfgPath, []byte(raw), 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	var out bytes.Buffer
+	var errOut bytes.Buffer
+	err := runSendTestEmail([]string{
+		"--config", cfgPath,
+		"--to", "dev@example.com",
+	}, strings.NewReader(""), &out, &errOut)
+	if err == nil {
+		t.Fatalf("expected sendtestemail without dry-run to reject noop driver; output=%s", out.String())
+	}
+	if !strings.Contains(err.Error(), "mail_driver is noop") {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }
