@@ -508,6 +508,7 @@ Validar el proveedor de correo configurado con un correo de prueba:
 
 ```bash
 goframe sendtestemail --config goframe.yaml --to dev@example.com --dry-run
+goframe sendtestemail --config goframe.yaml --driver sendgrid --to dev@example.com --dry-run
 goframe sendtestemail --config goframe.yaml --to dev@example.com --subject "mail check"
 goframe sendtestemail --config goframe.yaml --to dev1@example.com,dev2@example.com --timeout 15s
 ```
@@ -544,6 +545,13 @@ Soporte plugin externo:
 - agrega un ejecutable `goframe-mail-mailgun` al `PATH`
 - GoFrame enviara un JSON por `stdin` con `from`, `to`, `subject`, `body` y `headers`
 - salida `0` = envio aceptado; salida no-cero = error operativo
+
+Diagnostico rapido de proveedores disponibles:
+
+```bash
+goframe mailproviders --config goframe.yaml
+goframe mailproviders --config goframe.yaml --json
+```
 
 ## 14. Shell SQL
 
@@ -758,6 +766,7 @@ goframe findstatic [--config ...] [--source internal/web/static] [--first] [--js
 goframe optimizemigration [--migrations migrations] [--down] [--write] <migration_id_or_name>
 goframe squashmigrations [--migrations migrations] --from <migration> --to <migration> [--name baseline] [--write] [--archive-old] [--force] [--dry-run] [--print-sql]
 goframe sendtestemail [--config ...] --to dev@example.com[,ops@example.com] [--from ...] [--subject ...] [--body ...] [--timeout 10s] [--dry-run]
+goframe mailproviders [--config ...] [--json]
 goframe inspectdb [--config ...] [--tables users,posts] [--exclude ...] [--package models] [--output internal/models/inspected.go]
 goframe ogrinspect [--config ...] [--tables places,roads] [--exclude ...] [--package models] [--output internal/models/geospatial.go] [--all]
 goframe dumpdata [--config ...] [--tables users,posts] [--exclude ...] [--output fixtures.json]

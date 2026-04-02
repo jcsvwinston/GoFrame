@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -1329,6 +1330,76 @@ func TestRun_SendTestEmailDryRun(t *testing.T) {
 	}
 	if !strings.Contains(output, "dev@example.com") || !strings.Contains(output, "Hello from GoFrame") {
 		t.Fatalf("dry-run output missing expected fields: %s", output)
+	}
+}
+
+func TestRun_SendTestEmailDryRunDriverOverride(t *testing.T) {
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, "goframe.yaml")
+	writeFile(t, cfgPath, "mail_driver: smtp\nmail_from: noreply@example.com\nsendgrid_endpoint: https://api.sendgrid.test/v3/mail/send\n")
+
+	var out bytes.Buffer
+	var errOut bytes.Buffer
+	code := run([]string{
+		"sendtestemail",
+		"--config", cfgPath,
+		"--driver", "sendgrid",
+		"--to", "dev@example.com",
+		"--dry-run",
+	}, &out, &errOut)
+	if code != 0 {
+		t.Fatalf("sendtestemail --dry-run with driver override failed: code=%d stderr=%s", code, errOut.String())
+	}
+	output := out.String()
+	if !strings.Contains(output, "driver=sendgrid") {
+		t.Fatalf("expected sendgrid override driver in output: %s", output)
+	}
+	if strings.Contains(output, "driver=smtp") {
+		t.Fatalf("expected smtp driver to be overridden: %s", output)
+	}
+}
+
+func TestRun_MailProviders(t *testing.T) {
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, "goframe.yaml")
+	writeFile(t, cfgPath, "mail_driver: sendgrid\n")
+
+	pluginName := "goframe-mail-mailgun"
+	if runtime.GOOS == "windows" {
+		pluginName += ".exe"
+	}
+	pluginPath := filepath.Join(dir, pluginName)
+	writeFile(t, pluginPath, "#!/bin/sh\nexit 0\n")
+	if err := os.Chmod(pluginPath, 0o755); err != nil {
+		t.Fatalf("chmod plugin failed: %v", err)
+	}
+
+	previousPath := os.Getenv("PATH")
+	if err := os.Setenv("PATH", dir+string(os.PathListSeparator)+previousPath); err != nil {
+		t.Fatalf("set PATH failed: %v", err)
+	}
+	defer func() {
+		_ = os.Setenv("PATH", previousPath)
+	}()
+
+	var out bytes.Buffer
+	var errOut bytes.Buffer
+	code := run([]string{
+		"mailproviders",
+		"--config", cfgPath,
+	}, &out, &errOut)
+	if code != 0 {
+		t.Fatalf("mailproviders failed: code=%d stderr=%s", code, errOut.String())
+	}
+	output := out.String()
+	if !strings.Contains(output, "Active driver: sendgrid") {
+		t.Fatalf("expected active driver output, got: %s", output)
+	}
+	if !strings.Contains(output, "sendgrid") {
+		t.Fatalf("expected sendgrid in output, got: %s", output)
+	}
+	if !strings.Contains(output, "mailgun") {
+		t.Fatalf("expected external mailgun plugin in output, got: %s", output)
 	}
 }
 

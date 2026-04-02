@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/mail"
 	"os/exec"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -71,6 +72,20 @@ func RegisterProvider(name string, factory ProviderFactory) error {
 	}
 	providers[normalized] = factory
 	return nil
+}
+
+// RegisteredProviders returns the currently registered provider names sorted
+// alphabetically. Built-in providers are included.
+func RegisteredProviders() []string {
+	providersMu.RLock()
+	defer providersMu.RUnlock()
+
+	out := make([]string, 0, len(providers))
+	for name := range providers {
+		out = append(out, name)
+	}
+	sort.Strings(out)
+	return out
 }
 
 // NewSender resolves and constructs a mail sender for the given configuration.
