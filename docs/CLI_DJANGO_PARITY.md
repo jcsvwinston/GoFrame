@@ -1,21 +1,21 @@
 # GoFrame CLI vs Django 6.0
 
-Fecha de contraste: 2026-04-02.
+Reference date: 2026-04-02.
 
-Este documento compara la CLI actual de GoFrame con la lista oficial de comandos de Django 6.0 (`django-admin` / `manage.py`) y marca:
+This document compares the current GoFrame CLI against the official Django 6.0 command list (`django-admin` / `manage.py`) and highlights:
 
-- equivalencias directas o aproximadas
-- comandos que GoFrame tiene y Django no
-- comandos que Django tiene y GoFrame aun no tiene
+- direct or approximate equivalences
+- commands GoFrame has that Django does not
+- commands Django has that GoFrame does not yet provide
 
-Fuentes:
+Sources:
 
 - Django 6.0: [django-admin and manage.py](https://docs.djangoproject.com/en/6.0/ref/django-admin/)
 - GoFrame: `internal/cli/root.go` + `goframe help`
 
-## Comandos actuales de GoFrame
+## Current GoFrame commands
 
-Comandos canonicos:
+Canonical commands:
 
 - `serve`
 - `migrate`
@@ -51,7 +51,7 @@ Comandos canonicos:
 - `routes`
 - `health`
 
-Aliases estilo Django:
+Django-style aliases:
 
 - `runserver` -> `serve`
 - `startproject` -> `new`
@@ -61,63 +61,63 @@ Aliases estilo Django:
 - `dbshell` -> `shell`
 - `check` -> `health`
 
-## Equivalencias GoFrame <-> Django
+## GoFrame <-> Django mapping
 
-| GoFrame | Django | Tipo |
+| GoFrame | Django | Type |
 | --- | --- | --- |
-| `serve` / `runserver` | `runserver` | equivalente |
-| `new` / `startproject` | `startproject` | equivalente |
-| `startapp` | `startapp` | equivalente (scaffold de modulo/app) |
-| `createuser` / `createsuperuser` | `createsuperuser` | equivalente (admin user) |
-| `changepassword` | `changepassword` | equivalente funcional (rotacion de password de admin user) |
-| `health` / `check` | `check` | aproximado (salud dependencias + `--deploy` para hardening) |
-| `migrate up/down/steps/reset/refresh` | `migrate` | aproximado (semantica similar, opciones distintas) |
-| `migrate create <name>` / `makemigrations` | `makemigrations` | aproximado (GoFrame genera archivo SQL; Django deriva desde modelos) |
-| `migrate status` / `showmigrations` | `showmigrations` | aproximado |
-| `sqlmigrate` | `sqlmigrate` | equivalente funcional |
-| `sqlflush` | `sqlflush` | equivalente funcional |
-| `sqlsequencereset` | `sqlsequencereset` | equivalente funcional |
-| `flush` | `flush` | equivalente funcional (con guardrails en produccion) |
-| `diffsettings` | `diffsettings` | equivalente funcional (diff de config vs defaults) |
-| `createcachetable` | `createcachetable` | equivalente funcional (provision de tabla SQL de cache) |
-| `remove_stale_contenttypes` | `remove_stale_contenttypes` | equivalente aproximado (limpieza SQL-first de content types huerfanos respecto a tablas vigentes) |
-| `ogrinspect` | `ogrinspect` | equivalente aproximado (inspeccion de tablas geoespaciales SQL-first basada en tipos geometry/geography) |
-| `makemessages` | `makemessages` | equivalente funcional (extraccion de cadenas a catalogos `.po`) |
-| `compilemessages` | `compilemessages` | equivalente funcional (compilacion de `.po` a bundles JSON) |
-| `collectstatic` | `collectstatic` | equivalente funcional (copiado de assets estaticos a `static_root`) |
-| `findstatic` | `findstatic` | equivalente funcional (resolucion de assets estaticos por ruta/patron) |
-| `optimizemigration` | `optimizemigration` | equivalente aproximado (optimizacion SQL por archivo de migracion) |
-| `squashmigrations` | `squashmigrations` | equivalente aproximado (squash SQL-first por rango con salida `.up/.down.sql`) |
-| `sendtestemail` | `sendtestemail` | equivalente funcional (envio de email de prueba via `mail_driver`: SMTP, SendGrid o plugin externo) |
-| `inspectdb` | `inspectdb` | equivalente funcional (introspeccion DB a structs Go) |
-| `dumpdata` | `dumpdata` | equivalente funcional (export JSON por tablas) |
-| `loaddata` | `loaddata` | equivalente funcional (import JSON por tablas) |
-| `shell` / `dbshell` | `dbshell` | equivalente funcional (shell SQL) |
-| `test` | `test` | equivalente funcional (runner de test con flags) |
-| `testserver` | `testserver` | aproximado (pipeline fixture + server sobre DB configurada) |
-| `clearsessions` | `clearsessions` | equivalente funcional (limpieza de sesiones expiradas o completas) |
-| `seed` | n/a builtin Django | especifico GoFrame (SQL seeds operativos) |
+| `serve` / `runserver` | `runserver` | equivalent |
+| `new` / `startproject` | `startproject` | equivalent |
+| `startapp` | `startapp` | equivalent (module/app scaffold) |
+| `createuser` / `createsuperuser` | `createsuperuser` | equivalent (admin user) |
+| `changepassword` | `changepassword` | functional equivalent (admin password rotation) |
+| `health` / `check` | `check` | approximate (dependency health + `--deploy` hardening checks) |
+| `migrate up/down/steps/reset/refresh` | `migrate` | approximate (similar semantics, different options) |
+| `migrate create <name>` / `makemigrations` | `makemigrations` | approximate (GoFrame generates SQL files; Django derives from models) |
+| `migrate status` / `showmigrations` | `showmigrations` | approximate |
+| `sqlmigrate` | `sqlmigrate` | functional equivalent |
+| `sqlflush` | `sqlflush` | functional equivalent |
+| `sqlsequencereset` | `sqlsequencereset` | functional equivalent |
+| `flush` | `flush` | functional equivalent (with production guardrails) |
+| `diffsettings` | `diffsettings` | functional equivalent (effective config vs defaults diff) |
+| `createcachetable` | `createcachetable` | functional equivalent (SQL cache table provisioning) |
+| `remove_stale_contenttypes` | `remove_stale_contenttypes` | approximate equivalent (SQL-first cleanup of stale content types vs current tables) |
+| `ogrinspect` | `ogrinspect` | approximate equivalent (SQL-first geospatial introspection based on geometry/geography types) |
+| `makemessages` | `makemessages` | functional equivalent (extract strings into `.po` catalogs) |
+| `compilemessages` | `compilemessages` | functional equivalent (compile `.po` into JSON bundles) |
+| `collectstatic` | `collectstatic` | functional equivalent (copy static assets to `static_root`) |
+| `findstatic` | `findstatic` | functional equivalent (resolve static assets by path/pattern) |
+| `optimizemigration` | `optimizemigration` | approximate equivalent (per-file SQL migration optimization) |
+| `squashmigrations` | `squashmigrations` | approximate equivalent (range-based SQL-first squash with `.up/.down.sql` output) |
+| `sendtestemail` | `sendtestemail` | functional equivalent (test email through `mail_driver`: SMTP, SendGrid, or external plugin) |
+| `inspectdb` | `inspectdb` | functional equivalent (DB introspection to Go structs) |
+| `dumpdata` | `dumpdata` | functional equivalent (table-based JSON export) |
+| `loaddata` | `loaddata` | functional equivalent (table-based JSON import) |
+| `shell` / `dbshell` | `dbshell` | functional equivalent (SQL shell) |
+| `test` | `test` | functional equivalent (test runner with flags) |
+| `testserver` | `testserver` | approximate (fixture + server workflow over configured DB) |
+| `clearsessions` | `clearsessions` | functional equivalent (expired or full session cleanup) |
+| `seed` | n/a in Django core | GoFrame-specific (operational SQL seeding) |
 
-## Lo que GoFrame tiene y Django no (core builtin)
+## What GoFrame has and Django does not (core builtin)
 
-- `routes` (listado de rutas HTTP del proyecto).
-- `generate` (`model`, `handler`, `migration`, `resource`) en una sola entrada.
-- `mailproviders` (inventario de drivers/plugin de correo disponibles y activo).
-- plugins CLI por PATH: `goframe-<name>` (extensiones externas ejecutables).
+- `routes` (project HTTP route listing).
+- `generate` (`model`, `handler`, `migration`, `resource`) in one entry point.
+- `mailproviders` (inventory of available and active mail drivers/plugins).
+- PATH-based CLI plugins: `goframe-<name>` (external executable extensions).
 
-## Lo que Django 6.0 tiene y GoFrame aun no
+## What Django 6.0 has and GoFrame does not yet have
 
-Comandos core de `django-admin` sin equivalente directo hoy:
+`django-admin` core commands with no direct equivalent today:
 
-- `shell` (interprete Python; distinto a `dbshell`)
+- `shell` (Python interpreter; different from `dbshell`)
 
-Comandos de apps contrib de Django sin equivalente directo hoy:
+Django contrib app commands with no direct equivalent today:
 
-- ninguno de prioridad actual
+- none with current priority
 
-## Nota de alcance
+## Scope note
 
-La comparativa esta centrada en comandos builtin de framework.
+This comparison focuses on built-in framework commands.
 
-- En GoFrame algunos comandos son mas operativos SQL-first (por decision de arquitectura Bun-first).
-- En Django varios comandos dependen de su stack Python/runtime y de apps contrib (`auth`, `staticfiles`, etc.).
+- In GoFrame, some commands are intentionally more operational and SQL-first (Bun-first architecture decision).
+- In Django, several commands depend on its Python runtime stack and contrib apps (`auth`, `staticfiles`, etc.).

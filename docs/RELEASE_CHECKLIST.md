@@ -1,69 +1,37 @@
 # Release Checklist
 
-Fecha de referencia: 2026-03-31.
+Use this checklist before creating a GoFrame release tag.
 
-## 0) Toolchain
-
-- Minimo contractual de compilacion: `go 1.23` (`go.mod`).
-- Toolchain recomendada para release: `Go 1.26.x`.
-- GoReleaser usado en pipeline: `v2.14.1`.
-- Politica completa: `docs/GO_VERSION_POLICY.md`.
-
-## 1) Gate de calidad (obligatorio)
-
-Ejecutar antes de etiquetar release:
+## 1. Local Validation
 
 ```bash
-./scripts/release/rehearse_rc.sh
+go test ./...
+bash scripts/release/rehearse_rc.sh
 ```
 
-Este script ejecuta:
+## 2. Documentation and Changelog
 
-1. `go test ./...`
-2. `go test ./examples/mvc_api -run TestExampleMVCAPIAdmin_Smoke -v`
-3. `node --check pkg/admin/ui/components.js`
-4. `node --check pkg/admin/ui/app.js`
-5. `goreleaser check`
-6. `goreleaser release --snapshot --clean --skip=publish --skip=announce`
+- Ensure `CHANGELOG.md` includes all user-facing changes.
+- Ensure README and relevant docs match shipped behavior.
 
-## 2) Rehearsal en GitHub Actions (opcional recomendado)
+## 3. Version and Tag
 
-Lanzar manualmente:
+- Confirm target version (`v0.x.y` or `v0.x.y-rcN`).
+- Create and push tag from a clean `main` commit.
 
-- Workflow: `.github/workflows/rehearsal.yml`
-- Trigger: `workflow_dispatch`
+## 4. CI/Release Workflows
 
-Objetivo: repetir el rehearsal en runner limpio sin publicar artefactos.
+Verify:
 
-## 3) Documentacion (obligatorio)
+- CI workflow passes
+- release workflow completes
+- release asset smoke checks pass
 
-Comprobar coherencia entre codigo y docs:
+## 5. Artifact Review
 
-- `README.md`
-- `CHANGELOG.md`
-- `docs/VERSIONING.md`
-- `docs/QUICKSTART.md`
-- `docs/TUTORIAL_DETALLADO.md`
+Check release artifacts include expected OS/arch matrix and checksums.
 
-## 4) Tagging y publicacion
+## 6. Post-Release
 
-1. Actualizar `CHANGELOG.md` (mover `Unreleased` al nuevo tag).
-2. Crear tag SemVer:
-   - estable: `v0.x.y`
-   - pre-release: `v0.x.y-rcN`
-3. Push del tag para disparar `.github/workflows/release.yml`.
-
-## 5) Verificacion post-release
-
-1. Confirmar assets para:
-   - `linux/amd64`, `linux/arm64`
-   - `darwin/amd64`, `darwin/arm64`
-   - `windows/amd64`, `windows/arm64`
-2. Confirmar presencia de `checksums.txt`.
-3. Validar binario:
-
-```bash
-./goframe version
-```
-
-Debe imprimir version de release (no `dev`).
+- Verify `goframe version` prints the expected release version.
+- Update any roadmap/status docs if a phase milestone changed.
