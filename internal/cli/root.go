@@ -30,6 +30,7 @@ var commandSpecs = []commandSpec{
 	{name: "health", summary: "Check configured dependencies health", run: runHealth},
 	{name: "inspectdb", summary: "Inspect DB schema and generate Go model structs", run: runInspectDB},
 	{name: "loaddata", summary: "Import JSON fixtures into DB tables", run: runLoadData},
+	{name: "mailproviders", summary: "List registered and external mail providers", run: runMailProviders},
 	{name: "makemessages", summary: "Extract translatable strings into .po catalogs", run: runMakeMessages},
 	{name: "ogrinspect", summary: "Inspect geospatial tables and generate Go model structs", run: runOGRInspect},
 	{name: "optimizemigration", summary: "Optimize SQL statements in one migration file", run: runOptimizeMigration},
@@ -157,6 +158,7 @@ func printRootUsage(w io.Writer) {
 	fmt.Fprintln(w, "  goframe createcachetable --config goframe.yaml")
 	fmt.Fprintln(w, "  goframe clearsessions --config goframe.yaml")
 	fmt.Fprintln(w, "  goframe remove_stale_contenttypes --config goframe.yaml --dry-run")
+	fmt.Fprintln(w, "  goframe mailproviders --config goframe.yaml")
 	fmt.Fprintln(w, "  goframe makemessages --config goframe.yaml --locale es --input .")
 	fmt.Fprintln(w, "  goframe compilemessages --config goframe.yaml --locale es")
 	fmt.Fprintln(w, "  goframe collectstatic --config goframe.yaml --output public/assets")

@@ -20,6 +20,7 @@ func runSendTestEmail(args []string, _ io.Reader, stdout, stderr io.Writer) erro
 	configPath := fs.String("config", "", "Path to goframe config file")
 	toRaw := fs.String("to", "", "Comma-separated recipient emails")
 	from := fs.String("from", "", "Sender email (defaults to config mail_from)")
+	driverOverride := fs.String("driver", "", "Mail driver override (defaults to config mail_driver)")
 	subject := fs.String("subject", "GoFrame test email", "Subject line")
 	body := fs.String("body", "This is a test email sent by goframe sendtestemail.", "Email body")
 	timeout := fs.Duration("timeout", 10*time.Second, "Mail provider operation timeout")
@@ -74,7 +75,10 @@ func runSendTestEmail(args []string, _ io.Reader, stdout, stderr io.Writer) erro
 		return fmt.Errorf("timeout must be greater than 0")
 	}
 
-	driver := resolveMailDriver(cfg.MailDriver)
+	driver := resolveMailDriver(*driverOverride)
+	if strings.TrimSpace(*driverOverride) == "" {
+		driver = resolveMailDriver(cfg.MailDriver)
+	}
 
 	if *dryRun {
 		providerDetails := sendTestEmailProviderDetails(driver, cfg)

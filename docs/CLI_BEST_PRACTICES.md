@@ -76,7 +76,10 @@ Implementado en `cmd/goframe` + `internal/cli`:
   - `squashmigrations` soporta modo plan y archivado de migraciones origen.
 - `sendtestemail`:
   - verificacion operativa del `mail_driver` configurado (`smtp`, `sendgrid` o plugin externo `goframe-mail-<driver>`).
-  - soporta `--dry-run` para validar payload/recipients sin contactar el proveedor.
+  - soporta `--dry-run` y override temporal `--driver`.
+- `mailproviders`:
+  - lista drivers registrados y plugins externos detectados en `PATH` (`goframe-mail-<driver>`).
+  - util para diagnostico de extensiones de correo en entornos locales/CI.
 - `inspectdb`:
   - introspeccion de esquema SQL y generacion de structs Go con tags `db`.
 - `dumpdata` / `loaddata`:

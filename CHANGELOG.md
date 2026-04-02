@@ -42,6 +42,7 @@ while in pre-1.0 mode (`v0.x.y`).
 - `goframe findstatic` command to resolve static assets across discovered source directories, including glob queries.
 - `goframe remove_stale_contenttypes` command to purge orphan content-type rows based on current SQL tables, with `--dry-run` and production guardrails.
 - `goframe ogrinspect` command to inspect geospatial SQL tables (`geometry`/`geography`) and generate Go model structs.
+- `goframe mailproviders` command to list registered mail drivers and external `goframe-mail-<driver>` plugins discovered on `PATH`.
 - `goframe optimizemigration` command to normalize and deduplicate SQL statements in migration files.
 - `goframe squashmigrations` command to squash a migration range into one `.up.sql`/`.down.sql` pair, with optional source archiving.
 - `goframe sendtestemail` command now validates and sends through configurable `mail_driver` (`smtp`, `sendgrid`, or external plugin `goframe-mail-<driver>`), with `--dry-run` mode.
@@ -60,6 +61,7 @@ while in pre-1.0 mode (`v0.x.y`).
 ### Changed
 
 - `goframe check --deploy` now includes mail readiness checks (`deploy.mail_*`) based on `mail_driver` and provider-required settings.
+- `goframe sendtestemail` now accepts `--driver` to override `mail_driver` for one-off provider checks.
 - CLI tests now cover `shell --sandbox` for both allowed (`SELECT`) and blocked write statements.
 - JWT middleware now enriches request context with `observe` user-id for cross-cutting middleware (logging/rate-limit correlation).
 - README, project layout, and developer manual updated to include worker/background jobs, OTel, and rate-limiting usage.

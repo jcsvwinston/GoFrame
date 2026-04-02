@@ -45,6 +45,16 @@ func TestNewSender_UnknownDriver(t *testing.T) {
 	}
 }
 
+func TestRegisteredProvidersIncludesBuiltins(t *testing.T) {
+	registered := RegisteredProviders()
+	joined := strings.Join(registered, ",")
+	for _, expected := range []string{"noop", "smtp", "sendgrid"} {
+		if !strings.Contains(joined, expected) {
+			t.Fatalf("expected built-in provider %q in registered providers: %v", expected, registered)
+		}
+	}
+}
+
 func TestRegisterProviderAndResolve(t *testing.T) {
 	name := strings.ToLower(fmt.Sprintf("testprovider%d", time.Now().UnixNano()))
 	called := false

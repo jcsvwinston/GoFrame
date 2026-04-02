@@ -33,6 +33,7 @@ Comandos canonicos:
 - `ogrinspect`
 - `squashmigrations`
 - `sendtestemail`
+- `mailproviders`
 - `findstatic`
 - `inspectdb`
 - `dumpdata`
@@ -101,6 +102,7 @@ Aliases estilo Django:
 
 - `routes` (listado de rutas HTTP del proyecto).
 - `generate` (`model`, `handler`, `migration`, `resource`) en una sola entrada.
+- `mailproviders` (inventario de drivers/plugin de correo disponibles y activo).
 - plugins CLI por PATH: `goframe-<name>` (extensiones externas ejecutables).
 
 ## Lo que Django 6.0 tiene y GoFrame aun no

@@ -37,6 +37,13 @@ sendgrid_endpoint: https://api.sendgrid.com/v3/mail/send
 
 `goframe sendtestemail` usa el mismo resolver de proveedores y por eso valida de extremo a extremo la configuracion real.
 
+Para diagnosticar disponibilidad de drivers/plugins:
+
+```bash
+goframe mailproviders --config goframe.yaml
+goframe mailproviders --config goframe.yaml --json
+```
+
 ## 3. Extension in-process (registro de proveedor)
 
 Puedes registrar un proveedor propio desde codigo Go, por ejemplo en un paquete cargado al arrancar:
