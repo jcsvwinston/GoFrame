@@ -27,9 +27,11 @@ Comandos canonicos:
 - `createcachetable`
 - `makemessages`
 - `compilemessages`
+- `collectstatic`
 - `optimizemigration`
 - `squashmigrations`
 - `sendtestemail`
+- `findstatic`
 - `inspectdb`
 - `dumpdata`
 - `loaddata`
@@ -77,6 +79,8 @@ Aliases estilo Django:
 | `createcachetable` | `createcachetable` | equivalente funcional (provision de tabla SQL de cache) |
 | `makemessages` | `makemessages` | equivalente funcional (extraccion de cadenas a catalogos `.po`) |
 | `compilemessages` | `compilemessages` | equivalente funcional (compilacion de `.po` a bundles JSON) |
+| `collectstatic` | `collectstatic` | equivalente funcional (copiado de assets estaticos a `static_root`) |
+| `findstatic` | `findstatic` | equivalente funcional (resolucion de assets estaticos por ruta/patron) |
 | `optimizemigration` | `optimizemigration` | equivalente aproximado (optimizacion SQL por archivo de migracion) |
 | `squashmigrations` | `squashmigrations` | equivalente aproximado (squash SQL-first por rango con salida `.up/.down.sql`) |
 | `sendtestemail` | `sendtestemail` | equivalente funcional (envio de email de prueba via `mail_driver`: SMTP, SendGrid o plugin externo) |
@@ -104,8 +108,6 @@ Comandos core de `django-admin` sin equivalente directo hoy:
 Comandos de apps contrib de Django sin equivalente directo hoy:
 
 - `remove_stale_contenttypes`
-- `collectstatic`
-- `findstatic`
 - `ogrinspect`
 
 ## Nota de alcance

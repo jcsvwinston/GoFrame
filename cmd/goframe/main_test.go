@@ -1247,6 +1247,63 @@ func TestRun_SendTestEmailDryRun(t *testing.T) {
 	}
 }
 
+func TestRun_CollectStaticAndFindStatic(t *testing.T) {
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, "goframe.yaml")
+	writeFile(t, cfgPath, "static_root: collected_static\n")
+
+	if err := os.MkdirAll(filepath.Join(dir, "internal", "web", "static", "js"), 0o755); err != nil {
+		t.Fatalf("mkdir static source failed: %v", err)
+	}
+	writeFile(t, filepath.Join(dir, "internal", "web", "static", "app.css"), "body{}")
+	writeFile(t, filepath.Join(dir, "internal", "web", "static", "js", "app.js"), "console.log('ok')")
+
+	prevWD, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd failed: %v", err)
+	}
+	if err := os.Chdir(dir); err != nil {
+		t.Fatalf("chdir failed: %v", err)
+	}
+	defer func() {
+		_ = os.Chdir(prevWD)
+	}()
+
+	var out bytes.Buffer
+	var errOut bytes.Buffer
+	code := run([]string{
+		"collectstatic",
+		"--config", cfgPath,
+	}, &out, &errOut)
+	if code != 0 {
+		t.Fatalf("collectstatic failed: code=%d stderr=%s", code, errOut.String())
+	}
+	if !strings.Contains(out.String(), "Collected static files") {
+		t.Fatalf("unexpected collectstatic output: %s", out.String())
+	}
+
+	if _, err := os.Stat(filepath.Join(dir, "collected_static", "app.css")); err != nil {
+		t.Fatalf("expected collected app.css: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "collected_static", "js", "app.js")); err != nil {
+		t.Fatalf("expected collected app.js: %v", err)
+	}
+
+	out.Reset()
+	errOut.Reset()
+	code = run([]string{
+		"findstatic",
+		"--config", cfgPath,
+		"js/app.js",
+	}, &out, &errOut)
+	if code != 0 {
+		t.Fatalf("findstatic failed: code=%d stderr=%s", code, errOut.String())
+	}
+	if !strings.Contains(out.String(), filepath.Join("internal", "web", "static", "js", "app.js")) {
+		t.Fatalf("unexpected findstatic output: %s", out.String())
+	}
+}
+
 func TestRun_SendTestEmailRejectsNoopWithoutDryRun(t *testing.T) {
 	dir := t.TempDir()
 	cfgPath := filepath.Join(dir, "goframe.yaml")
