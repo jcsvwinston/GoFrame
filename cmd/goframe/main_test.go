@@ -1304,6 +1304,106 @@ func TestRun_CollectStaticAndFindStatic(t *testing.T) {
 	}
 }
 
+func TestRun_RemoveStaleContentTypes(t *testing.T) {
+	dir := t.TempDir()
+	dbPath := filepath.Join(dir, "app.db")
+	cfgPath := writeCLIConfig(t, dir, dbPath)
+
+	db, err := sql.Open("sqlite", dbPath)
+	if err != nil {
+		t.Fatalf("open sqlite failed: %v", err)
+	}
+	defer db.Close()
+
+	if _, err := db.Exec("CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT);"); err != nil {
+		t.Fatalf("create users failed: %v", err)
+	}
+	if _, err := db.Exec("CREATE TABLE goframe_content_types (id INTEGER PRIMARY KEY, model TEXT NOT NULL);"); err != nil {
+		t.Fatalf("create content types table failed: %v", err)
+	}
+	if _, err := db.Exec("INSERT INTO goframe_content_types(model) VALUES ('users'), ('ghost_model');"); err != nil {
+		t.Fatalf("seed content types failed: %v", err)
+	}
+
+	var out bytes.Buffer
+	var errOut bytes.Buffer
+	code := run([]string{
+		"remove_stale_contenttypes",
+		"--config", cfgPath,
+		"--dry-run",
+	}, &out, &errOut)
+	if code != 0 {
+		t.Fatalf("remove_stale_contenttypes --dry-run failed: code=%d stderr=%s", code, errOut.String())
+	}
+	if !strings.Contains(out.String(), "ghost_model") {
+		t.Fatalf("expected stale model in dry-run output, got: %s", out.String())
+	}
+
+	out.Reset()
+	errOut.Reset()
+	code = run([]string{
+		"remove_stale_contenttypes",
+		"--config", cfgPath,
+	}, &out, &errOut)
+	if code != 0 {
+		t.Fatalf("remove_stale_contenttypes failed: code=%d stderr=%s", code, errOut.String())
+	}
+	if !strings.Contains(out.String(), "Removed stale content types") {
+		t.Fatalf("unexpected command output: %s", out.String())
+	}
+
+	var count int
+	if err := db.QueryRow("SELECT COUNT(*) FROM goframe_content_types WHERE model = 'ghost_model'").Scan(&count); err != nil {
+		t.Fatalf("count stale model failed: %v", err)
+	}
+	if count != 0 {
+		t.Fatalf("expected stale content type removed, count=%d", count)
+	}
+}
+
+func TestRun_RemoveStaleContentTypesProductionGuardrail(t *testing.T) {
+	dir := t.TempDir()
+	dbPath := filepath.Join(dir, "app.db")
+	cfgPath := writeCLIConfigWithEnv(t, dir, dbPath, "production")
+
+	db, err := sql.Open("sqlite", dbPath)
+	if err != nil {
+		t.Fatalf("open sqlite failed: %v", err)
+	}
+	defer db.Close()
+
+	if _, err := db.Exec("CREATE TABLE goframe_content_types (id INTEGER PRIMARY KEY, model TEXT NOT NULL);"); err != nil {
+		t.Fatalf("create content types table failed: %v", err)
+	}
+	if _, err := db.Exec("INSERT INTO goframe_content_types(model) VALUES ('ghost_model');"); err != nil {
+		t.Fatalf("seed content types failed: %v", err)
+	}
+
+	var out bytes.Buffer
+	var errOut bytes.Buffer
+	code := runWithInput([]string{
+		"remove_stale_contenttypes",
+		"--config", cfgPath,
+	}, strings.NewReader(""), &out, &errOut)
+	if code == 0 {
+		t.Fatalf("expected production guardrail failure without --force/--yes")
+	}
+	if !strings.Contains(errOut.String(), "requires --force or --yes") {
+		t.Fatalf("unexpected guardrail error: %s", errOut.String())
+	}
+
+	out.Reset()
+	errOut.Reset()
+	code = runWithInput([]string{
+		"remove_stale_contenttypes",
+		"--config", cfgPath,
+		"--force",
+	}, strings.NewReader(""), &out, &errOut)
+	if code != 0 {
+		t.Fatalf("expected remove_stale_contenttypes with --force to pass: code=%d stderr=%s", code, errOut.String())
+	}
+}
+
 func TestRun_SendTestEmailRejectsNoopWithoutDryRun(t *testing.T) {
 	dir := t.TempDir()
 	cfgPath := filepath.Join(dir, "goframe.yaml")

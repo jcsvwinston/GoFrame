@@ -59,6 +59,9 @@ Implementado en `cmd/goframe` + `internal/cli`:
 - `createcachetable`:
   - crea tabla SQL de cache para backends DB-based.
   - soporta `--dry-run` para inspeccionar SQL generado.
+- `remove_stale_contenttypes`:
+  - limpieza operativa de content types huerfanos respecto al esquema SQL vigente.
+  - soporta `--dry-run` y guardrails de produccion con `--force` / `--yes`.
 - `makemessages` / `compilemessages`:
   - flujo i18n tipo Django (`.po` fuente y `.json` compilado).
   - `makemessages` extrae cadenas desde codigo/templates; `compilemessages` compila uno o varios locales.

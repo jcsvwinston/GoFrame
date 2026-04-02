@@ -164,7 +164,7 @@ func main() {
 - `pkg/admin`: panel embebido con CRUD, schema, export CSV y bulk delete.
 - `pkg/mail`: capa de envio de email por proveedor (`noop`, `smtp`, `sendgrid`) con extensibilidad por plugins `goframe-mail-<driver>`.
 - `pkg/tasks`: enqueue/worker runtime basado en Asynq para tareas asíncronas.
-- `cmd/goframe` + `internal/cli`: CLI modular con comandos `new`, `startapp`, `serve`, `migrate`, `sqlmigrate`, `sqlflush`, `sqlsequencereset`, `flush`, `diffsettings`, `makemessages`, `compilemessages`, `collectstatic`, `findstatic`, `optimizemigration`, `squashmigrations`, `sendtestemail`, `inspectdb`, `dumpdata`, `loaddata`, `createcachetable`, `createuser`, `changepassword`, `clearsessions`, `seed`, `shell`, `generate`, `test`, `testserver`, `routes`, `health`.
+- `cmd/goframe` + `internal/cli`: CLI modular con comandos `new`, `startapp`, `serve`, `migrate`, `sqlmigrate`, `sqlflush`, `sqlsequencereset`, `flush`, `diffsettings`, `makemessages`, `compilemessages`, `collectstatic`, `findstatic`, `optimizemigration`, `squashmigrations`, `sendtestemail`, `inspectdb`, `dumpdata`, `loaddata`, `createcachetable`, `createuser`, `changepassword`, `clearsessions`, `remove_stale_contenttypes`, `seed`, `shell`, `generate`, `test`, `testserver`, `routes`, `health`.
 - `pkg/errors`, `pkg/validate`, `pkg/observe` (incluye OTel), `pkg/signals`.
 
 ## CLI (Baseline Completa)
@@ -193,6 +193,7 @@ go run ./cmd/goframe sqlsequencereset --config goframe.yaml
 go run ./cmd/goframe flush --config goframe.yaml --yes
 go run ./cmd/goframe diffsettings --config goframe.yaml
 go run ./cmd/goframe createcachetable --config goframe.yaml
+go run ./cmd/goframe remove_stale_contenttypes --config goframe.yaml --dry-run
 go run ./cmd/goframe makemessages --config goframe.yaml --locale es --input .
 go run ./cmd/goframe compilemessages --config goframe.yaml --locale es
 go run ./cmd/goframe collectstatic --config goframe.yaml --output public/assets

@@ -459,7 +459,19 @@ goframe findstatic --config goframe.yaml "js/*.js"
 goframe findstatic --config goframe.yaml --first admin.css
 ```
 
-## 13.4 Mantenimiento avanzado de migraciones
+## 13.4 Limpieza de content types (`remove_stale_contenttypes`)
+
+Eliminar registros huerfanos en tabla de content types:
+
+```bash
+goframe remove_stale_contenttypes --config goframe.yaml --dry-run
+goframe remove_stale_contenttypes --config goframe.yaml
+goframe remove_stale_contenttypes --config goframe.yaml --table goframe_content_types --column model --keep custom_type
+```
+
+`--dry-run` imprime SQL y entradas candidatas sin borrar datos.
+
+## 13.5 Mantenimiento avanzado de migraciones
 
 Optimizar una migracion SQL eliminando no-op/comentarios/duplicados exactos:
 
@@ -477,7 +489,7 @@ goframe squashmigrations --migrations migrations --from init --to add_users --na
 goframe squashmigrations --migrations migrations --from init --to add_users --name baseline --write --archive-old
 ```
 
-## 13.5 Email de prueba por proveedor (`mail_driver`)
+## 13.6 Email de prueba por proveedor (`mail_driver`)
 
 Validar el proveedor de correo configurado con un correo de prueba:
 
@@ -702,6 +714,14 @@ Si el reporte incluye componentes `deploy.mail_*`, revisa:
   - SMTP: `smtp_host` + `smtp_port`
   - SendGrid: `sendgrid_api_key`
 
+## 21.6 `remove_stale_contenttypes` no elimina filas
+
+Revisar:
+
+- tabla objetivo (`--table`)
+- columna con nombre de modelo (`--column`)
+- uso de `--dry-run` para validar SQL generado
+
 ## 22. Referencia Rapida De Comandos
 
 ```bash
@@ -717,6 +737,7 @@ goframe sqlsequencereset [--config ...] [tables...]
 goframe flush [--config ...] [--force] [--yes] [--dry-run]
 goframe diffsettings [--config ...] [--all] [--json]
 goframe createcachetable [--config ...] [--table goframe_cache_entries] [--dry-run]
+goframe remove_stale_contenttypes [--config ...] [--table goframe_content_types] [--column model] [--keep custom1,custom2] [--dry-run] [--force] [--yes]
 goframe makemessages [--config ...] [--locale es] [--domain messages] [--input .] [--extensions .go,.html,.templ] [--locales-path locales] [--output ...] [--dry-run]
 goframe compilemessages [--config ...] [--locale es] [--domain messages] [--locales-path locales] [--output ...] [--dry-run]
 goframe collectstatic [--config ...] [--output static_collected] [--source internal/web/static] [--clear] [--dry-run]
