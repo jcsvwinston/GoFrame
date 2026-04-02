@@ -1,70 +1,70 @@
-# Manual Del Desarrollador Final De GoFrame
+# GoFrame Final Developer Manual
 
-Fecha de referencia: 2026-03-31.
+Reference date: 2026-03-31.
 
-Este documento es la guia principal para construir, operar y desplegar aplicaciones con GoFrame.
+This is the main guide to build, operate, and deploy applications with GoFrame.
 
-## 1. Objetivo
+## 1. Objective
 
-GoFrame es un framework web para Go inspirado en Django, con foco en:
+GoFrame is a Go web framework inspired by Django, focused on:
 
-- aplicaciones MVC + API REST
-- admin panel integrado
-- CLI operativa para ciclo de vida (scaffold, migraciones, seed, inspeccion)
-- base SQL Bun-first con contrato de modelo estable
+- MVC + REST API applications
+- integrated admin panel
+- operational lifecycle CLI (scaffold, migrations, seed, inspection)
+- Bun-first SQL foundation with a stable model contract
 
-## 2. Alcance Real (Estado Actual)
+## 2. Current Scope (Actual State)
 
-A dia de hoy, GoFrame incluye de forma funcional:
+As of today, GoFrame includes:
 
-- `pkg/app`: contenedor de aplicacion (config, logger, router, DB, admin, lifecycle)
-- `pkg/db`: conexion SQL (Bun-first, compat GORM), health y migraciones SQL por archivos
-- `pkg/model`: registro de modelos, metadata por reflexion, CRUD generico, hooks
-- `pkg/admin`: admin panel embebido (SPA + API CRUD)
-- `pkg/tasks`: capa base para tareas asíncronas con Asynq
-- `pkg/observe`: logging estructurado + bootstrap OpenTelemetry (traces/metrics OTLP)
-- `pkg/router`: guardrails HTTP (`CSRF`, security headers, rate limiting configurable)
-- `cmd/goframe`: CLI modular
-- ejemplo oficial runnable: `examples/mvc_api`
+- `pkg/app`: application container (config, logger, router, DB, admin, lifecycle)
+- `pkg/db`: SQL connectivity (Bun-first, GORM-compatible), health checks, file-based SQL migrations
+- `pkg/model`: model registry, reflection-based metadata, generic CRUD, hooks
+- `pkg/admin`: embedded admin panel (SPA + CRUD API)
+- `pkg/tasks`: async task base layer with Asynq
+- `pkg/observe`: structured logging + OpenTelemetry bootstrap (OTLP traces/metrics)
+- `pkg/router`: HTTP guardrails (`CSRF`, security headers, configurable rate limiting)
+- `cmd/goframe`: modular CLI
+- official runnable example: `examples/mvc_api`
 
-Documentos complementarios:
+Related documents:
 
 - `docs/QUICKSTART.md`
 - `docs/TUTORIAL_DETALLADO.md`
 - `docs/PROJECT_LAYOUT.md`
 - `docs/RELEASE_CHECKLIST.md`
 
-## 3. Requisitos
+## 3. Requirements
 
-## 3.1 Runtime y toolchain
+## 3.1 Runtime and toolchain
 
-- Go minimo de compatibilidad: `1.23`
-- Go recomendado para desarrollo/release: `1.26.x`
-- Node.js: requerido para checks de sintaxis del admin UI en CI/rehearsal
+- Minimum supported Go version: `1.23`
+- Recommended Go for development/release: `1.26.x`
+- Node.js: required for admin UI syntax checks in CI/rehearsal
 
-Politica completa:
+Full policy:
 
 - `docs/GO_VERSION_POLICY.md`
 
-## 3.2 Base de datos
+## 3.2 Database
 
-Motores SQL soportados por URL:
+Supported SQL engines by URL:
 
-- SQLite: `sqlite://app.db` (o `:memory:`)
-- PostgreSQL: `postgres://...` o `postgresql://...`
+- SQLite: `sqlite://app.db` (or `:memory:`)
+- PostgreSQL: `postgres://...` or `postgresql://...`
 - MySQL: `mysql://...`
 
-## 4. Instalacion De La CLI
+## 4. CLI Installation
 
-Hay dos caminos recomendados.
+There are two recommended paths.
 
-## 4.1 Desde binarios de release (recomendado)
+## 4.1 From release binaries (recommended)
 
-Descarga desde releases oficiales:
+Download from official releases:
 
 - `https://github.com/jcsvwinston/GoFrame/releases`
 
-Assets por release:
+Assets per release:
 
 - `goframe_<version>_linux_amd64.tar.gz`
 - `goframe_<version>_linux_arm64.tar.gz`
@@ -74,12 +74,12 @@ Assets por release:
 - `goframe_<version>_windows_arm64.zip`
 - `checksums.txt`
 
-Validacion recomendada:
+Recommended validation:
 
-1. verificar checksum
-2. ejecutar `goframe version`
+1. Verify checksum.
+2. Run `goframe version`.
 
-## 4.2 Desde codigo fuente
+## 4.2 From source code
 
 ```bash
 git clone https://github.com/jcsvwinston/GoFrame.git
@@ -88,25 +88,25 @@ go build -o goframe ./cmd/goframe
 ./goframe version
 ```
 
-## 4.3 Nota sobre import path canonico
+## 4.3 Canonical import path note
 
-Actualmente, `go.mod` declara:
+Currently, `go.mod` declares:
 
 - `module github.com/jcsvwinston/GoFrame`
 
-Si vas a consumir el framework como dependencia en un proyecto externo, mantente alineado con ese path de modulo en imports y scripts hasta cerrar la migracion de modulo canonico.
+If you consume GoFrame as a dependency in an external project, keep imports/scripts aligned with that module path until canonical module migration is fully closed.
 
-## 5. Primer Proyecto En 5 Minutos
+## 5. First Project in 5 Minutes
 
-## 5.1 Generar scaffold
+## 5.1 Generate scaffold
 
 ```bash
-goframe new miapp --module example.com/miapp --out . --port 8080 --template mvc
-cd miapp
+goframe new myapp --module example.com/myapp --out . --port 8080 --template mvc
+cd myapp
 go mod tidy
 ```
 
-Estructura generada principal:
+Main generated structure:
 
 - `cmd/server/main.go`
 - `cmd/worker/main.go`
@@ -120,32 +120,32 @@ Estructura generada principal:
 - `seeds/001_articles.sql`
 - `goframe.yaml`
 
-## 5.2 Levantar la app
+## 5.2 Run the app
 
 ```bash
 go run ./cmd/server
 go run ./cmd/worker
 ```
 
-Accesos por defecto:
+Default endpoints:
 
 - `http://localhost:8080/`
 - `http://localhost:8080/api/health`
 - `http://localhost:8080/api/articles`
 - `http://localhost:8080/admin`
 
-## 6. Arquitectura De Aplicacion
+## 6. Application Architecture
 
-## 6.1 Contenedor `app.App`
+## 6.1 `app.App` container
 
-Creacion:
+Creation:
 
 ```go
 cfg, _ := app.LoadConfig("goframe.yaml")
 a, _ := app.New(cfg)
 ```
 
-`App` expone:
+`App` exposes:
 
 - `Config`
 - `Logger`
@@ -155,7 +155,7 @@ a, _ := app.New(cfg)
 - `Models`
 - `Admin`
 
-Funciones clave:
+Key methods:
 
 - `RegisterModel(...)`
 - `MountAdmin()`
@@ -163,19 +163,19 @@ Funciones clave:
 - `Shutdown(ctx)`
 - `OnShutdown(fn)`
 
-## 6.2 Router y lifecycle
+## 6.2 Router and lifecycle
 
-- Router base sobre `chi`
-- `Run` arranca HTTP server
-- parada limpia por contexto o `SIGINT/SIGTERM`
+- `chi`-based router
+- `Run` starts HTTP server
+- clean shutdown by context cancel or `SIGINT/SIGTERM`
 
-## 6.3 Admin auto-montado
+## 6.3 Auto-mounted admin
 
-`app.New` monta el admin automaticamente en `admin_prefix` (default `/admin`).
+`app.New` mounts admin automatically at `admin_prefix` (default `/admin`).
 
-## 7. Configuracion (`goframe.yaml`)
+## 7. Configuration (`goframe.yaml`)
 
-Ejemplo minimo:
+Minimum example:
 
 ```yaml
 database_engine: bun
@@ -190,10 +190,10 @@ otlp_endpoint: ""
 rate_limit_requests: 0
 rate_limit_window: 1m
 admin_prefix: /admin
-admin_title: Mi Admin
+admin_title: My Admin
 ```
 
-Campos frecuentes:
+Frequent fields:
 
 - server: `host`, `port`, `read_timeout`, `write_timeout`, `idle_timeout`
 - database: `database_engine`, `database_url`, `database_max_open`, `database_max_idle`, `database_max_lifetime`
@@ -201,21 +201,21 @@ Campos frecuentes:
 - auth/session: `jwt_secret`, `jwt_expiry`, `session_lifetime`
 - admin: `admin_prefix`, `admin_title`
 - mail: `mail_driver`, `mail_from`, `smtp_*`, `sendgrid_api_key`, `sendgrid_endpoint`
-- observabilidad: `log_level`, `log_format`, `metrics_path`, `otlp_endpoint`
-- hardening HTTP: `rate_limit_requests`, `rate_limit_window`
-- entorno: `env`, `debug`
+- observability: `log_level`, `log_format`, `metrics_path`, `otlp_endpoint`
+- HTTP hardening: `rate_limit_requests`, `rate_limit_window`
+- environment: `env`, `debug`
 
-Soporte de entorno por prefijo `GOFRAME_`.
-Ejemplo:
+Environment override prefix: `GOFRAME_`.
+Example:
 
 - `GOFRAME_PORT=9090`
 - `GOFRAME_DATABASE_URL=postgres://...`
 
-## 8. Modelos
+## 8. Models
 
 ## 8.1 BaseModel
 
-Embed recomendado:
+Recommended embed:
 
 ```go
 type Project struct {
@@ -224,9 +224,9 @@ type Project struct {
 }
 ```
 
-## 8.2 Tags soportados
+## 8.2 Supported tags
 
-`db` / `gorm` (metadata de almacenamiento):
+`db` / `gorm` (storage metadata):
 
 - `column:<name>`
 - `primaryKey` / `pk`
@@ -235,7 +235,7 @@ type Project struct {
 
 `validate`:
 
-- `required` (detecta requerido para metadata)
+- `required` (required field metadata detection)
 
 `admin`:
 
@@ -244,21 +244,21 @@ type Project struct {
 - `filter`
 - `readonly`
 - `exclude`
-- `label:<texto>`
-- `choices:valor|Label;valor2|Label2`
+- `label:<text>`
+- `choices:value|Label;value2|Label2`
 
-Ejemplo completo:
+Full example:
 
 ```go
 type User struct {
     model.BaseModel
     Email string `db:"column:email;required" validate:"required,email" admin:"list,search"`
     Role  string `db:"column:role" admin:"list,filter,choices:admin|Admin;user|User"`
-    Bio   string `db:"column:bio" admin:"label:Biografia"`
+    Bio   string `db:"column:bio" admin:"label:Biography"`
 }
 ```
 
-## 8.3 Registro de modelos
+## 8.3 Model registration
 
 ```go
 err := a.RegisterModel(&User{}, model.ModelConfig{
@@ -274,9 +274,9 @@ err := a.RegisterModel(&User{}, model.ModelConfig{
 
 ## 9. MVC + API
 
-En GoFrame, MVC y API conviven en el mismo router.
+In GoFrame, MVC and API run side by side in the same router.
 
-Ejemplo:
+Example:
 
 ```go
 a.Router.Get("/", controllers.HomePage(tpl))
@@ -285,34 +285,34 @@ a.Router.Get("/api/articles", controllers.ListArticles(sqlDB))
 a.Router.Post("/api/articles", controllers.CreateArticle(sqlDB))
 ```
 
-Recomendacion:
+Recommendation:
 
-- mantener handlers HTTP en `internal/controllers` o `handlers`
-- mantener logica de negocio fuera del handler
+- keep HTTP handlers in `internal/controllers` or `handlers`
+- keep business logic outside handlers
 
 ## 10. Admin Panel
 
-## 10.1 Alta
+## 10.1 Setup
 
-El panel se crea y monta desde `app.New`.
+The panel is created and mounted from `app.New`.
 
-Configuracion:
+Configuration:
 
 - `admin_prefix` (default `/admin`)
 - `admin_title`
 
-## 10.2 Capacidades
+## 10.2 Capabilities
 
-- listado de modelos
-- schema por modelo
+- model listing
+- per-model schema
 - CRUD
-- filtros y busqueda
-- export CSV
-- acciones bulk
+- filters and search
+- CSV export
+- bulk actions
 
-## 10.3 API admin
+## 10.3 Admin API
 
-Rutas principales:
+Main routes:
 
 - `GET /admin/api/models`
 - `GET /admin/api/models/{name}/schema`
@@ -324,12 +324,12 @@ Rutas principales:
 - `POST /admin/api/models/{name}/bulk`
 - `GET /admin/api/models/{name}/export`
 
-## 11. Migraciones SQL
+## 11. SQL Migrations
 
-Comando raiz:
+Root command:
 
 ```bash
-goframe migrate [flags] [accion]
+goframe migrate [flags] [action]
 ```
 
 Flags:
@@ -339,7 +339,7 @@ Flags:
 - `--force`
 - `--yes`
 
-Acciones:
+Actions:
 
 - `up [n]`
 - `down [n]`
@@ -349,7 +349,7 @@ Acciones:
 - `reset`
 - `refresh`
 
-Ejemplos:
+Examples:
 
 ```bash
 goframe migrate --config goframe.yaml create add_project_owner
@@ -362,7 +362,7 @@ goframe migrate --config goframe.yaml --force reset
 
 ## 12. Seeds
 
-Comando:
+Command:
 
 ```bash
 goframe seed --config goframe.yaml --seeds seeds
@@ -375,7 +375,7 @@ Flags:
 - `--force`
 - `--yes`
 
-Ejemplos:
+Examples:
 
 ```bash
 goframe seed --config goframe.yaml --seeds seeds --dry-run
@@ -383,7 +383,7 @@ goframe seed --config goframe.yaml --seeds seeds --file 001_users.sql
 goframe seed --config goframe.yaml --seeds seeds --force
 ```
 
-## 13. Creacion De Usuario Admin
+## 13. Admin User Creation
 
 ```bash
 goframe createuser --config goframe.yaml \
@@ -394,28 +394,28 @@ goframe createuser --config goframe.yaml \
   --no-input
 ```
 
-Notas:
+Notes:
 
-- si no usas `--no-input`, pide datos interactivos
-- valida username/email/password
-- crea o actualiza usuario existente por username/email
+- without `--no-input`, it prompts interactively
+- validates username/email/password
+- creates or updates existing user by username/email
 
-Cambiar password de un admin existente:
+Change an existing admin password:
 
 ```bash
 goframe changepassword admin --config goframe.yaml --password newsecret123 --no-input
 ```
 
-## 13.1 Cache y sesiones (paridad Django)
+## 13.1 Cache and sessions (Django parity)
 
-Crear tabla SQL para cache basada en DB:
+Create SQL table for DB-based cache:
 
 ```bash
 goframe createcachetable --config goframe.yaml
 goframe createcachetable --config goframe.yaml --dry-run
 ```
 
-Limpiar sesiones expiradas (o todas):
+Clear expired sessions (or all sessions):
 
 ```bash
 goframe clearsessions --config goframe.yaml
@@ -423,9 +423,9 @@ goframe clearsessions --config goframe.yaml --all
 goframe clearsessions --config goframe.yaml --dry-run
 ```
 
-## 13.2 i18n (paridad Django)
+## 13.2 i18n (Django parity)
 
-Extraer cadenas traducibles a catalogos `.po`:
+Extract translatable strings into `.po` catalogs:
 
 ```bash
 goframe makemessages --config goframe.yaml --locale es --input .
@@ -433,7 +433,7 @@ goframe makemessages --config goframe.yaml --locale es --domain messages --exten
 goframe makemessages --config goframe.yaml --dry-run
 ```
 
-Compilar catalogos `.po` a bundles `.json`:
+Compile `.po` catalogs to `.json` bundles:
 
 ```bash
 goframe compilemessages --config goframe.yaml --locale es
@@ -443,7 +443,7 @@ goframe compilemessages --config goframe.yaml --dry-run
 
 ## 13.3 Static files (`collectstatic`, `findstatic`)
 
-Recopilar assets estaticos en `static_root`:
+Collect static assets into `static_root`:
 
 ```bash
 goframe collectstatic --config goframe.yaml
@@ -451,7 +451,7 @@ goframe collectstatic --config goframe.yaml --output public/assets --clear
 goframe collectstatic --config goframe.yaml --dry-run
 ```
 
-Localizar assets estaticos por ruta (o patron):
+Find static assets by path (or glob pattern):
 
 ```bash
 goframe findstatic --config goframe.yaml app.css
@@ -459,9 +459,9 @@ goframe findstatic --config goframe.yaml "js/*.js"
 goframe findstatic --config goframe.yaml --first admin.css
 ```
 
-## 13.4 Limpieza de content types (`remove_stale_contenttypes`)
+## 13.4 Content type cleanup (`remove_stale_contenttypes`)
 
-Eliminar registros huerfanos en tabla de content types:
+Delete orphan records in content type table:
 
 ```bash
 goframe remove_stale_contenttypes --config goframe.yaml --dry-run
@@ -469,11 +469,11 @@ goframe remove_stale_contenttypes --config goframe.yaml
 goframe remove_stale_contenttypes --config goframe.yaml --table goframe_content_types --column model --keep custom_type
 ```
 
-`--dry-run` imprime SQL y entradas candidatas sin borrar datos.
+`--dry-run` prints SQL and candidate entries without deleting data.
 
-## 13.5 Inspeccion geoespacial (`ogrinspect`)
+## 13.5 Geospatial inspection (`ogrinspect`)
 
-Generar structs Go para tablas con columnas geoespaciales (`geometry`/`geography`):
+Generate Go structs for tables with geospatial columns (`geometry`/`geography`):
 
 ```bash
 goframe ogrinspect --config goframe.yaml --output internal/models/geospatial.go
@@ -481,12 +481,12 @@ goframe ogrinspect --config goframe.yaml --tables places,roads
 goframe ogrinspect --config goframe.yaml --all --output internal/models/all_from_ogrinspect.go
 ```
 
-Por defecto filtra tablas geoespaciales.
-Usa `--all` para incluir tablas no geoespaciales.
+By default, it filters geospatial tables.
+Use `--all` to include non-geospatial tables.
 
-## 13.6 Mantenimiento avanzado de migraciones
+## 13.6 Advanced migration maintenance
 
-Optimizar una migracion SQL eliminando no-op/comentarios/duplicados exactos:
+Optimize a SQL migration by removing no-op/comments/exact duplicates:
 
 ```bash
 goframe optimizemigration --migrations migrations add_users_table
@@ -494,7 +494,7 @@ goframe optimizemigration --migrations migrations --write add_users_table
 goframe optimizemigration --migrations migrations --down --write add_users_table
 ```
 
-Squash de un rango de migraciones:
+Squash a migration range:
 
 ```bash
 goframe squashmigrations --migrations migrations --from init --to add_users --name baseline
@@ -502,9 +502,9 @@ goframe squashmigrations --migrations migrations --from init --to add_users --na
 goframe squashmigrations --migrations migrations --from init --to add_users --name baseline --write --archive-old
 ```
 
-## 13.7 Email de prueba por proveedor (`mail_driver`)
+## 13.7 Provider-based test email (`mail_driver`)
 
-Validar el proveedor de correo configurado con un correo de prueba:
+Validate configured mail provider with a test email:
 
 ```bash
 goframe sendtestemail --config goframe.yaml --to dev@example.com --dry-run
@@ -513,13 +513,13 @@ goframe sendtestemail --config goframe.yaml --to dev@example.com --subject "mail
 goframe sendtestemail --config goframe.yaml --to dev1@example.com,dev2@example.com --timeout 15s
 ```
 
-Drivers soportados en core:
+Core-supported drivers:
 
-- `noop` (default seguro para desarrollo; no envia realmente)
+- `noop` (safe default for development; does not actually send)
 - `smtp`
 - `sendgrid`
 
-Ejemplo SMTP:
+SMTP example:
 
 ```yaml
 mail_driver: smtp
@@ -530,7 +530,7 @@ smtp_user: user
 smtp_pass: secret
 ```
 
-Ejemplo SendGrid:
+SendGrid example:
 
 ```yaml
 mail_driver: sendgrid
@@ -539,54 +539,54 @@ sendgrid_api_key: SG.xxxxx
 sendgrid_endpoint: https://api.sendgrid.com/v3/mail/send
 ```
 
-Soporte plugin externo:
+External plugin support:
 
-- define `mail_driver: mailgun` (o el nombre que quieras)
-- agrega un ejecutable `goframe-mail-mailgun` al `PATH`
-- GoFrame enviara un JSON por `stdin` con `from`, `to`, `subject`, `body` y `headers`
-- salida `0` = envio aceptado; salida no-cero = error operativo
+- set `mail_driver: mailgun` (or any custom name)
+- add executable `goframe-mail-mailgun` to `PATH`
+- GoFrame sends JSON to `stdin` with `from`, `to`, `subject`, `body`, `headers`
+- exit code `0` means accepted; non-zero means operational error
 
-Diagnostico rapido de proveedores disponibles:
+Quick diagnostics of available providers:
 
 ```bash
 goframe mailproviders --config goframe.yaml
 goframe mailproviders --config goframe.yaml --json
 ```
 
-## 14. Shell SQL
+## 14. SQL Shell
 
-Ejecucion puntual:
+Ad hoc execution:
 
 ```bash
 goframe shell --config goframe.yaml -c "SELECT count(*) FROM users"
 goframe shell --config goframe.yaml --sandbox -c "SELECT count(*) FROM users"
 ```
 
-Modo interactivo:
+Interactive mode:
 
 ```bash
 goframe shell --config goframe.yaml
 ```
 
-Soporta entrada por `stdin` (scripts SQL).
-Con `--sandbox`, limita la ejecucion a sentencias SQL de solo lectura.
+It also supports `stdin` input (SQL scripts).
+With `--sandbox`, execution is limited to read-only SQL statements.
 
-## 14.1 Tareas De Fondo (Asynq)
+## 14.1 Background tasks (Asynq)
 
-El scaffold `goframe new` genera:
+The `goframe new` scaffold generates:
 
-- `cmd/worker/main.go`: entrypoint de worker
-- `internal/tasks/article_events.go`: ejemplo de registro de handlers
+- `cmd/worker/main.go`: worker entrypoint
+- `internal/tasks/article_events.go`: sample handler registration
 
-Arranque:
+Run:
 
 ```bash
 go run ./cmd/worker
 ```
 
-Requiere `redis_url` configurado en `goframe.yaml`.
+Requires `redis_url` in `goframe.yaml`.
 
-## 15. Generadores (`generate`)
+## 15. Generators (`generate`)
 
 ```bash
 goframe generate model User
@@ -601,14 +601,14 @@ Flags:
 - `--force`
 - `--migrations <dir>`
 
-`resource` crea:
+`resource` creates:
 
-- modelo
-- handler CRUD scaffold
-- test de handler
-- migracion up/down
+- model
+- CRUD scaffold handler
+- handler test
+- migration up/down
 
-## 16. Comandos De Diagnostico
+## 16. Diagnostic Commands
 
 ## 16.1 routes
 
@@ -625,31 +625,31 @@ goframe health --config goframe.yaml
 goframe health --config goframe.yaml --json --timeout 5s
 ```
 
-## 17. Guardrails En Produccion
+## 17. Production Guardrails
 
-Cuando `env: production`:
+When `env: production`:
 
-- operaciones destructivas (`migrate down/reset/refresh`, `seed`) requieren confirmacion
-- en CI no interactivo usa `--force` o `--yes`
+- destructive operations (`migrate down/reset/refresh`, `seed`) require confirmation
+- in non-interactive CI use `--force` or `--yes`
 
-Recomendacion CI/CD:
+CI/CD recommendation:
 
-- usar `--force` explicitamente
-- ejecutar siempre `health` y smoke test post deploy
+- use `--force` explicitly
+- always run `health` and post-deploy smoke tests
 
-## 18. Flujo Recomendado De Desarrollo
+## 18. Recommended Development Flow
 
-1. generar modulo con `goframe new`
-2. definir modelos y tags
-3. registrar modelos en `main`
-4. ajustar migraciones SQL
-5. ejecutar `migrate` + `seed`
-6. crear usuario admin
-7. desarrollar handlers MVC/API
-8. revisar rutas y health
-9. automatizar pruebas
+1. Generate project/module with `goframe new`.
+2. Define models and tags.
+3. Register models in `main`.
+4. Adjust SQL migrations.
+5. Run `migrate` + `seed`.
+6. Create admin user.
+7. Implement MVC/API handlers.
+8. Review routes and health checks.
+9. Automate tests.
 
-## 19. Pruebas
+## 19. Testing
 
 Local:
 
@@ -657,93 +657,93 @@ Local:
 go test ./...
 ```
 
-Smoke oficial del ejemplo:
+Official example smoke test:
 
 ```bash
 go test ./examples/mvc_api -run TestExampleMVCAPIAdmin_Smoke -v
 ```
 
-Rehearsal de release:
+Release rehearsal:
 
 ```bash
 ./scripts/release/rehearse_rc.sh
 ```
 
-## 20. Despliegue Real
+## 20. Real Deployment
 
-## 20.1 Estrategia recomendada
+## 20.1 Recommended strategy
 
-1. descargar binario release para el SO/arquitectura objetivo
-2. verificar `checksums.txt`
-3. provisionar `goframe.yaml`
-4. ejecutar binario de tu app (`cmd/server`) o servicio equivalente
+1. Download release binary for target OS/architecture.
+2. Verify `checksums.txt`.
+3. Provision `goframe.yaml`.
+4. Run your app binary (`cmd/server`) or equivalent service.
 
-## 20.2 Health post-deploy
+## 20.2 Post-deploy health
 
-Validar:
+Validate:
 
-- endpoint de app (`/`)
-- endpoint API (`/api/health`)
+- app endpoint (`/`)
+- API endpoint (`/api/health`)
 - admin (`/admin`)
-- comando `goframe health --json`
+- `goframe health --json`
 
-## 20.3 Artefactos de release
+## 20.3 Release artifacts
 
-Cada release publica:
+Each release publishes:
 
-- 6 binarios empaquetados (3 SO x 2 arquitecturas)
-- checksum SHA256
+- 6 packaged binaries (3 OS x 2 architectures)
+- SHA256 checksums
 
 ## 21. Troubleshooting
 
-## 21.1 `go install` falla por module path
+## 21.1 `go install` fails due to module path
 
-Si aparece error de mismatch de modulo, revisa `module` en `go.mod` y usa temporalmente:
+If you get module mismatch errors, review `module` in `go.mod` and temporarily use:
 
-- binarios de release, o
-- build local desde repo
+- release binaries, or
+- local build from this repository
 
-## 21.2 `admin` sin modelos
+## 21.2 `admin` has no models
 
-Causa comun:
+Common cause:
 
-- no se llamo `RegisterModel(...)`
+- `RegisterModel(...)` was not called
 
-## 21.3 `migrate` no aplica cambios
+## 21.3 `migrate` does not apply changes
 
-Revisar:
+Review:
 
-- directorio `migrations`
-- archivos `.up.sql` / `.down.sql`
-- estado: `goframe migrate status`
+- `migrations` directory
+- `.up.sql` / `.down.sql` files
+- status via `goframe migrate status`
 
-## 21.4 `health` devuelve degraded
+## 21.4 `health` returns degraded
 
-Revisar:
+Review:
 
 - `database_url`
-- conectividad
-- credenciales
+- connectivity
+- credentials
 
-## 21.5 `check --deploy` falla por mail
+## 21.5 `check --deploy` fails on mail
 
-Si el reporte incluye componentes `deploy.mail_*`, revisa:
+If report includes `deploy.mail_*` components, review:
 
-- `mail_driver` (evitar `noop` en produccion)
-- `mail_from` valido
-- driver-specific:
+- `mail_driver` (avoid `noop` in production)
+- valid `mail_from`
+- driver-specific settings:
   - SMTP: `smtp_host` + `smtp_port`
   - SendGrid: `sendgrid_api_key`
 
-## 21.6 `remove_stale_contenttypes` no elimina filas
+## 21.6 `remove_stale_contenttypes` does not delete rows
 
-Revisar:
+Review:
 
-- tabla objetivo (`--table`)
-- columna con nombre de modelo (`--column`)
-- uso de `--dry-run` para validar SQL generado
+- target table (`--table`)
+- model name column (`--column`)
+- `--dry-run` output to validate generated SQL
 
-## 22. Referencia Rapida De Comandos
+## 22. Quick Command Reference
 
 ```bash
 goframe help
@@ -751,7 +751,7 @@ goframe version
 goframe new <name> [--module ...] [--out ...] [--port ...] [--template mvc] [--force]
 goframe startapp <name> [--out ...] [--migrations ...] [--skip-migration] [--force]
 goframe serve [--config ...] [--host ...] [--port ...]
-goframe migrate [--config ...] [--migrations ...] [--force] [--yes] [accion]
+goframe migrate [--config ...] [--migrations ...] [--force] [--yes] [action]
 goframe sqlmigrate [--migrations ...] [--down] <migration_id_or_name>
 goframe sqlflush [--config ...]
 goframe sqlsequencereset [--config ...] [tables...]
@@ -783,33 +783,33 @@ goframe routes [--config ...] [--path ...] [--json] [--verbose]
 goframe health [--config ...] [--timeout 3s] [--json] [--deploy]
 ```
 
-Aliases estilo Django:
+Django-style aliases:
 
 ```bash
 goframe runserver [addr:port]
-goframe startproject <name> [flags de new]
+goframe startproject <name> [new flags]
 goframe makemigrations <name>
 goframe showmigrations [--config ...] [--migrations ...]
-goframe createsuperuser [flags de createuser]
-goframe dbshell [flags de shell]
-goframe check [flags de health]             # alias de health
-goframe check --deploy [--config ...]       # hardening checks de despliegue
+goframe createsuperuser [createuser flags]
+goframe dbshell [shell flags]
+goframe check [health flags]             # health alias
+goframe check --deploy [--config ...]    # deployment hardening checks
 ```
 
-En proyectos generados con `goframe new`, tambien dispones de:
+In projects generated with `goframe new`, you also have:
 
 ```bash
 go run ./cmd/server
 go run ./cmd/worker
 ```
 
-## 23. Siguiente Lectura
+## 23. Suggested Next Reading
 
-- onboarding rapido: `docs/QUICKSTART.md`
-- tutorial paso a paso: `docs/TUTORIAL_DETALLADO.md`
-- layout recomendado: `docs/PROJECT_LAYOUT.md`
-- buenas practicas CLI: `docs/CLI_BEST_PRACTICES.md`
-- paridad CLI contra Django: `docs/CLI_DJANGO_PARITY.md`
-- proveedores de email y plugins: `docs/MAIL_PROVIDERS.md`
-- hoja de ruta enterprise: `docs/ENTERPRISE_ROADMAP.md`
-- checklist release: `docs/RELEASE_CHECKLIST.md`
+- quick onboarding: `docs/QUICKSTART.md`
+- step-by-step tutorial: `docs/TUTORIAL_DETALLADO.md`
+- recommended layout: `docs/PROJECT_LAYOUT.md`
+- CLI best practices: `docs/CLI_BEST_PRACTICES.md`
+- CLI parity with Django: `docs/CLI_DJANGO_PARITY.md`
+- email providers and plugins: `docs/MAIL_PROVIDERS.md`
+- enterprise roadmap: `docs/ENTERPRISE_ROADMAP.md`
+- release checklist: `docs/RELEASE_CHECKLIST.md`

@@ -1,43 +1,22 @@
-# Fase 0 - Contrato y Direccion
+# Phase 0 - Contract and Technical Direction
 
-## Objetivo
+Status: Closed.
 
-Cerrar decisiones de arquitectura y alinear el contrato publico del proyecto antes de expandir funcionalidad.
+## Objective
 
-## Decisiones Cerradas
+Establish the non-negotiable architecture contract for GoFrame before implementation scaling.
 
-1. SQL oficial: Bun.
-2. MongoDB oficial: `go.mongodb.org/mongo-driver`.
-3. Cache y pub/sub: `redis/go-redis/v9`.
-4. Admin objetivo: Tailwind CSS + componentes reutilizables.
-5. Arquitectura polyglot por interfaces; sin unificar SQL/Mongo/Redis en una API magica.
+## Decisions Locked in Phase 0
 
-## Entregables Hechos
+- SQL runtime path: Bun-first
+- HTTP routing: Chi
+- Worker runtime: Asynq
+- Observability baseline: OpenTelemetry
+- Security baseline: structured guardrails and production checks
+- Framework extensibility via explicit interfaces and plugin-like command hooks
 
-1. SPEC actualizado con estrategia polyglot y stack oficial:
-   [SPEC.md](/Users/jcsv/GolandProjects/GoFrame/GoFrame/SPEC.md)
-2. Estructura objetivo ampliada con `pkg/document`:
-   [SPEC.md](/Users/jcsv/GolandProjects/GoFrame/GoFrame/SPEC.md)
-3. Config objetivo ampliada con `MongoURL` y `MongoDB`:
-   [SPEC.md](/Users/jcsv/GolandProjects/GoFrame/GoFrame/SPEC.md)
-4. README alineado al estado real y al target:
-   [README.md](/Users/jcsv/GolandProjects/GoFrame/GoFrame/README.md)
+## Outcomes
 
-## Riesgos Identificados
-
-1. Divergencia temporal entre codigo actual (GORM) y target (Bun).
-2. Admin actual sin Tailwind ni set completo de componentes.
-3. (Mitigado en iteraciones posteriores) CLI inicialmente incompleta respecto a `manage.py`.
-
-## Criterios de Salida de Fase 0
-
-- [x] Decisiones de stack formalizadas.
-- [x] Contrato documental alineado (README + SPEC).
-- [x] Diferencia entre estado actual y target explicitada.
-- [x] Backlog de Fase 1 convertido en tareas tecnicas ejecutables ([docs/PHASE1_BACKLOG.md](/Users/jcsv/GolandProjects/GoFrame/GoFrame/docs/PHASE1_BACKLOG.md)).
-
-## Entrada a Fase 1
-
-1. Implementar `pkg/app/app.go` como contenedor principal y lifecycle.
-2. Definir wiring minimo obligatorio (`Config`, `Logger`, `Router`, `DB`, `Registry`).
-3. Establecer plantilla de arranque para proyectos nuevos (base MVC + API).
+- Core architecture direction documented in `SPEC.md`
+- Initial package boundaries agreed
+- Development roadmap split into incremental phases

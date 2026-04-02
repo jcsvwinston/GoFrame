@@ -1,27 +1,29 @@
-# Example: MVC + API + Admin
+# MVC + API Example
 
-Este ejemplo abre Fase 4 con una app ejecutable que mezcla:
+This example demonstrates how to run a GoFrame project that combines:
 
-- pagina MVC (`/`)
-- API REST (`/api/articles`)
-- panel admin (`/admin`)
+- MVC pages
+- REST API endpoints
+- embedded admin panel
 
-## Ejecutar
+## Run
+
+From repository root:
 
 ```bash
 go run ./examples/mvc_api
 ```
 
-Abrir:
+Open:
 
-- `http://localhost:8090/`
-- `http://localhost:8090/api/articles`
-- `http://localhost:8090/admin`
+- `http://localhost:8080/`
+- `http://localhost:8080/api/health`
+- `http://localhost:8080/admin`
 
-## Crear un articulo por API
+## Purpose
 
-```bash
-curl -X POST http://localhost:8090/api/articles \
-  -H "Content-Type: application/json" \
-  -d '{"title":"Nuevo","content":"Texto desde API","published":true}'
-```
+Use this example as a reference for:
+
+- app bootstrap with `pkg/app`
+- model registration and admin exposure
+- route composition and practical wiring

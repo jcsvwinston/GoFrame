@@ -1,44 +1,40 @@
 # Versioning Strategy
 
-Fecha de referencia: 2026-03-31.
+GoFrame follows Semantic Versioning while in pre-1.0 mode.
 
-## Objetivo
+## Current Policy
 
-Definir una estrategia simple y predecible para etiquetar releases de GoFrame hasta `v1.0.0`.
-
-## Regla principal
-
-Se usa SemVer en modo pre-1.0:
+Version format:
 
 - `v0.x.y`
-- `x`: incremento por entregas funcionales relevantes o cambios de contrato.
-- `y`: fixes y mejoras compatibles sin ruptura intencional.
 
-## Politica para cambios de contrato
+Interpretation in pre-1.0:
 
-Mientras estemos en `v0.x.y`, los cambios incompatibles se permiten, pero deben:
+- `x` (minor): may include significant feature additions and limited breaking changes
+- `y` (patch): bug fixes, hardening, and non-breaking improvements
 
-1. mencionarse en `CHANGELOG.md` en seccion `Changed` o `Removed`,
-2. reflejarse en docs de fase/quickstart,
-3. subir al menos el minor (`x`).
+## Release Types
 
-## Cadencia sugerida
+1. Release candidates
+- Format: `v0.x.y-rcN`
+- Used to validate release packaging and workflows before stable promotion
 
-- Release tecnica cada cierre de fase relevante.
-- Patch release para fixes criticos entre fases.
+2. Stable pre-1.0
+- Format: `v0.x.y`
+- Promoted after CI, rehearsal, and artifact checks pass
 
-## Tagging
+## Source of Truth
 
-- Formato de tag: `v0.x.y`
-- Formato pre-release: `v0.x.y-rcN`
-- Ejemplos:
-  - `v0.4.0` cierre Fase 4
-  - `v0.4.1` fix compatible post-release
-  - `v0.5.0-rc1` primer candidato de release
-  - `v0.5.0` release estable tras rehearsal
+- Git tags are the version source of truth.
+- Binary version output is injected at build time.
 
-## Criterio de paso a v1.0.0
+## Required Checks Before Tagging
 
-1. Contratos estables en `pkg/app`, `pkg/model`, `pkg/admin`.
-2. CLI base estable (`new`, `serve`, `migrate`, `seed`, `createuser`, `routes`, `health`).
-3. Quickstart/tutorial y ejemplo oficial mantenidos y validados por CI.
+```bash
+go test ./...
+bash scripts/release/rehearse_rc.sh
+```
+
+## Changelog Discipline
+
+Every user-facing change should be reflected in `CHANGELOG.md` under `Unreleased` before release.

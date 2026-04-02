@@ -1,22 +1,22 @@
-# Tutorial Detallado: Construir una App con GoFrame (MVC + API)
+# Detailed Tutorial: Build an App with GoFrame (MVC + API)
 
-Este tutorial recorre el flujo completo para construir una aplicacion real con GoFrame:
+This tutorial walks through the full flow to build a real app with GoFrame:
 
-1. Bootstrap del proyecto
-2. Modelado de dominio
-3. Migraciones y seeds
-4. API REST
-5. Vista HTML (enfoque MVC clasico)
+1. Project bootstrap
+2. Domain modeling
+3. Migrations and seeds
+4. REST API
+5. HTML view (classic MVC approach)
 6. Admin panel
-7. Operacion diaria con CLI
-8. Checklist para pasar a produccion
+7. Daily CLI operations
+8. Production readiness checklist
 
-## 0) Estructura recomendada
+## 0) Recommended structure
 
-Guia ampliada de estructura: [docs/PROJECT_LAYOUT.md](/Users/jcsv/GolandProjects/GoFrame/GoFrame/docs/PROJECT_LAYOUT.md)
+Expanded structure guide: [docs/PROJECT_LAYOUT.md](/Users/jcsv/GolandProjects/GoFrame/GoFrame/docs/PROJECT_LAYOUT.md)
 
 ```text
-miapp/
+myapp/
   cmd/
     server/
       main.go
@@ -29,9 +29,9 @@ miapp/
   goframe.yaml
 ```
 
-## 1) Configuracion del framework
+## 1) Framework configuration
 
-Archivo `goframe.yaml`:
+`goframe.yaml`:
 
 ```yaml
 database_engine: bun
@@ -42,23 +42,23 @@ env: development
 log_level: info
 log_format: text
 admin_prefix: /admin
-admin_title: MiApp Admin
+admin_title: MyApp Admin
 ```
 
-Notas:
+Notes:
 
-- En desarrollo, `sqlite://app.db` acelera el arranque.
-- En produccion, cambia `database_url` y `env: production`.
+- In development, `sqlite://app.db` speeds up bootstrapping.
+- In production, update `database_url` and set `env: production`.
 
-## 2) Generar primer recurso de dominio
+## 2) Generate your first domain resource
 
-Genera un recurso base (modelo + handler CRUD scaffold + test + migracion):
+Generate a base resource (model + scaffold CRUD handler + test + migration):
 
 ```bash
 go run ./cmd/goframe generate resource Project
 ```
 
-Esto crea, entre otros:
+This creates, among others:
 
 - `models/project.go`
 - `handlers/project_handler.go`
@@ -66,9 +66,9 @@ Esto crea, entre otros:
 - `migrations/<timestamp>_create_projects_table.up.sql`
 - `migrations/<timestamp>_create_projects_table.down.sql`
 
-## 3) Ajustar modelo de dominio
+## 3) Adjust your domain model
 
-Edita `models/project.go` para reflejar tu caso real:
+Edit `models/project.go` to match your real use case:
 
 ```go
 package models
@@ -83,9 +83,9 @@ type Project struct {
 }
 ```
 
-## 4) Ajustar migracion SQL
+## 4) Adjust SQL migration
 
-Edita el `.up.sql` generado para igualar columnas:
+Edit the generated `.up.sql` so columns match your model:
 
 ```sql
 CREATE TABLE IF NOT EXISTS projects (
@@ -99,33 +99,33 @@ CREATE TABLE IF NOT EXISTS projects (
 );
 ```
 
-Y el `.down.sql`:
+And `.down.sql`:
 
 ```sql
 DROP TABLE IF EXISTS projects;
 ```
 
-## 5) Aplicar migraciones y cargar seed
+## 5) Apply migrations and load seed data
 
 ```bash
 go run ./cmd/goframe migrate --config goframe.yaml
 go run ./cmd/goframe migrate --config goframe.yaml status
 ```
 
-Crea `seeds/001_projects.sql`:
+Create `seeds/001_projects.sql`:
 
 ```sql
 INSERT INTO projects (name, description, active)
-VALUES ('Roadmap 2026', 'Plan principal del producto', 1);
+VALUES ('Roadmap 2026', 'Main product plan', 1);
 ```
 
-Ejecuta:
+Run:
 
 ```bash
 go run ./cmd/goframe seed --config goframe.yaml --seeds seeds
 ```
 
-## 6) Bootstrap de aplicacion y registro de modelo
+## 6) App bootstrap and model registration
 
 `cmd/server/main.go`:
 
@@ -141,7 +141,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/jcsvwinston/GoFrame/pkg/app"
 	"github.com/jcsvwinston/GoFrame/pkg/model"
-	"miapp/models"
+	"myapp/models"
 )
 
 func main() {
@@ -183,7 +183,7 @@ func registerMVCRoutes(r chi.Router) {
 	tpl := template.Must(template.ParseFiles("templates/home.html"))
 	r.Get("/", func(w http.ResponseWriter, _ *http.Request) {
 		_ = tpl.Execute(w, map[string]any{
-			"Title": "MiApp",
+			"Title": "MyApp",
 		})
 	})
 }
@@ -193,21 +193,21 @@ func registerMVCRoutes(r chi.Router) {
 
 ```html
 <!doctype html>
-<html lang="es">
+<html lang="en">
   <head>
     <meta charset="utf-8" />
     <title>{{ .Title }}</title>
   </head>
   <body>
     <h1>{{ .Title }}</h1>
-    <p>App MVC + API con GoFrame</p>
+    <p>MVC + API app with GoFrame</p>
   </body>
 </html>
 ```
 
-## 7) Usuario admin y arranque
+## 7) Admin user and startup
 
-Crear admin:
+Create admin:
 
 ```bash
 go run ./cmd/goframe createuser \
@@ -218,67 +218,67 @@ go run ./cmd/goframe createuser \
   --password supersecret123
 ```
 
-Arrancar server:
+Start server:
 
 ```bash
 go run ./cmd/server
 ```
 
-Verificar:
+Verify:
 
 - `http://localhost:8080/`
 - `http://localhost:8080/api/health`
 - `http://localhost:8080/admin`
 
-## 8) Flujo de desarrollo diario
+## 8) Daily development workflow
 
-Comandos recomendados:
+Recommended commands:
 
 ```bash
-# Ver rutas efectivas
+# Show effective routes
 go run ./cmd/goframe routes --config goframe.yaml
 
-# Health de dependencias
+# Dependency health check
 go run ./cmd/goframe health --config goframe.yaml --json
 
-# Crear nueva migracion
+# Create a new migration
 go run ./cmd/goframe migrate --config goframe.yaml create add_project_owner
 
-# Ejecutar SQL puntual
+# Run an ad-hoc SQL query
 go run ./cmd/goframe shell --config goframe.yaml -c "SELECT count(*) FROM projects"
 ```
 
-## 9) Guardrails de produccion
+## 9) Production guardrails
 
-Con `env: production`, GoFrame protege acciones sensibles (`seed`, `migrate down/reset/refresh`):
+With `env: production`, GoFrame protects sensitive actions (`seed`, `migrate down/reset/refresh`):
 
-- Usa `--force` en CI/CD no interactivo.
-- O usa `--yes` para confirmar sin prompt.
+- Use `--force` in non-interactive CI/CD.
+- Or use `--yes` to confirm without a prompt.
 
-Ejemplos:
+Examples:
 
 ```bash
 go run ./cmd/goframe seed --config goframe.yaml --seeds seeds --force
 go run ./cmd/goframe migrate --config goframe.yaml reset --force
 ```
 
-## 10) Extender la CLI por proyecto
+## 10) Extend CLI per project
 
-Puedes añadir comandos propios sin tocar el core creando binarios ejecutables `goframe-<nombre>` en `PATH`.
+You can add custom commands without touching core by creating executables named `goframe-<name>` in `PATH`.
 
-Ejemplo:
+Example:
 
-- Si existe `goframe-report` en `PATH`, entonces:
+- If `goframe-report` exists in `PATH`, then:
 
 ```bash
 go run ./cmd/goframe report --from 2026-01-01
 ```
 
-GoFrame delega automaticamente en ese comando externo.
+GoFrame automatically delegates to that external command.
 
-## 11) Siguiente evolucion sugerida
+## 11) Suggested next evolution
 
-- Crear carpeta `internal/repository` para aislar acceso a datos.
-- Añadir tests HTTP sobre handlers API.
-- Migrar de SQLite a Postgres para entornos staging/produccion.
-- Incorporar pipeline CI con `go test ./...` + migraciones de smoke test.
+- Create `internal/repository` to isolate data access.
+- Add HTTP tests for API handlers.
+- Migrate from SQLite to PostgreSQL for staging/production.
+- Add CI pipeline with `go test ./...` + migration smoke tests.

@@ -1,32 +1,46 @@
 # Go Version Policy
 
-Fecha de referencia: 2026-03-31.
+This document defines how GoFrame handles Go runtime compatibility.
 
-## Objetivo
+## Goals
 
-Equilibrar estabilidad para usuarios del framework y adopcion progresiva de nuevas versiones de Go.
+- Keep the framework usable for teams on stable enterprise environments.
+- Allow contributors to use modern Go toolchains for development and release automation.
+- Avoid accidental breakages caused by implicit toolchain upgrades.
 
-## Niveles de soporte
+## Supported Versions
 
-1. Minimo soportado (contrato de compilacion): `go 1.23` (definido en `go.mod`).
-2. Recomendado para desarrollo local: `Go 1.26.x`.
-3. Toolchain de release CI: `Go 1.26.x`.
+- Minimum supported Go version: `1.23`
+- Recommended Go version for active development and releases: latest `1.26.x`
 
-## CI y compatibilidad
+## Rules
 
-- CI ejecuta pruebas de Go en matriz `1.23.x` y `1.26.x`.
-- Smoke test y checks de UI se ejecutan en `1.26.x`.
-- La release por tag usa `1.26.x` y GoReleaser `v2.14.1`.
+1. Public compatibility target
+- New framework features must compile and run on Go `1.23+` unless explicitly documented otherwise.
 
-## Plan de elevacion del minimo
+2. Development baseline
+- CI and release workflows may run on newer Go versions to stay aligned with ecosystem support.
 
-Para subir el minimo de `go.mod` a una version superior:
+3. Upgrading minimum version
+- Any minimum-version bump must be explicit and documented in:
+  - `go.mod`
+  - `CHANGELOG.md`
+  - `README.md`
+  - this policy file
 
-1. Mantener durante al menos 2 ciclos de release la matriz con la nueva version.
-2. Verificar quickstart y ejemplo oficial en la nueva toolchain.
-3. Anunciarlo en `CHANGELOG.md` y docs de fase antes del cambio.
+4. Third-party dependencies
+- Dependency upgrades should be evaluated for Go version constraints before merge.
 
-## Decision para Fase 5
+## Contributor Guidance
 
-- No se eleva aun el minimo contractual (`go.mod`).
-- Si no aparecen incidencias en siguientes ciclos, objetivo: considerar subida del minimo en `v0.6.0`.
+Before opening a PR:
+
+```bash
+go test ./...
+```
+
+For release-level confidence:
+
+```bash
+bash scripts/release/rehearse_rc.sh
+```

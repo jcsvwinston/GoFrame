@@ -1,143 +1,143 @@
-# CLI Completa: Buenas Practicas (MVC + API)
+# Complete CLI: Best Practices (MVC + API)
 
-Fecha de contraste: 2026-04-01.
+Reference date: 2026-04-01.
 
-Este documento resume practicas observadas en CLIs de frameworks consolidados y su traduccion a GoFrame.
+This document summarizes patterns observed in mature framework CLIs and how they map to GoFrame.
 
-## Referentes contrastados
+## Benchmarked frameworks
 
 - Django `django-admin` / `manage.py`
 - Rails `bin/rails`
 - Laravel Artisan
 - Phoenix Mix (`mix phx.*`, `mix ecto.*`)
 
-Fuentes oficiales al final del documento.
+Official sources are listed at the end of this document.
 
-## Patrones comunes en frameworks grandes
+## Common patterns in large frameworks
 
-1. Descubribilidad y ayuda consistente
-- Un comando raiz con listado corto y claro de comandos.
-- Ayuda por subcomando (`help <cmd>` o `<cmd> --help`).
-- Nombres de comandos estables y predecibles.
+1. Discoverability and consistent help
+- One root command with a short, clear command list.
+- Help per subcommand (`help <cmd>` or `<cmd> --help`).
+- Stable, predictable command names.
 
-2. Comandos troncales de operacion
-- Servidor local (`serve`/`server`/`runserver`).
-- Migraciones con ciclo completo (`up`, `down/rollback`, `status`, `steps`).
-- Listado de rutas (`routes`, `route:list`, `phx.routes`).
-- Shell/console interactiva para inspeccion y debugging.
-- Health/checks para validacion de entorno.
+2. Core operational commands
+- Local server (`serve`/`server`/`runserver`).
+- Full migration lifecycle (`up`, `down/rollback`, `status`, `steps`).
+- Route listing (`routes`, `route:list`, `phx.routes`).
+- Interactive shell/console for inspection and debugging.
+- Health/check commands for environment validation.
 
-3. Generacion de codigo (scaffolding)
-- Generadores para modelos, handlers/controllers y migraciones.
-- Estructura de salida predecible y facil de editar.
-- Prevencion de sobreescritura accidental (modo `--force` explicito).
+3. Code generation (scaffolding)
+- Generators for models, handlers/controllers, and migrations.
+- Predictable, easy-to-edit output structure.
+- Accidental overwrite prevention (explicit `--force` mode).
 
-4. Seguridad operativa y automatizacion
-- Modo no interactivo para CI/CD (`--no-input`).
-- Banderas de seguridad para acciones destructivas en produccion (`--force` con confirmacion previa en otros frameworks).
-- Exit codes consistentes (0 ok, !=0 error) para pipelines.
+4. Operational safety and automation
+- Non-interactive mode for CI/CD (`--no-input`).
+- Safety flags for destructive production actions (`--force`, usually with prior confirmation in other frameworks).
+- Consistent exit codes (0 success, non-zero error) for pipelines.
 
-5. Semantica de migraciones
-- Orden por timestamp/version en nombre de archivo.
-- Tabla de tracking de migraciones aplicadas.
-- Soporte de rollback parcial (`step`) y estado (`status`).
+5. Migration semantics
+- Timestamp/version ordering in file names.
+- Migration tracking table.
+- Partial rollback support (`step`) and status output.
 
-## Estado actual de GoFrame CLI
+## Current GoFrame CLI status
 
-Implementado en `cmd/goframe` + `internal/cli`:
+Implemented in `cmd/goframe` + `internal/cli`:
 
 - `serve`:
-  - arranque del servidor con `--config`, `--host`, `--port`.
+  - starts the server with `--config`, `--host`, `--port`.
 - `migrate`:
   - `up`, `down`, `steps`, `status`, `create`, `reset`, `refresh`.
-  - guardrails en produccion con `--force` / `--yes` para acciones destructivas.
+  - production guardrails with `--force` / `--yes` for destructive actions.
 - `sqlmigrate` / `sqlflush` / `sqlsequencereset` / `flush`:
-  - inspeccion SQL de migraciones y mantenimiento de datos/secuencias.
-  - `flush` con guardrails de produccion (`--force` / `--yes`).
+  - SQL migration inspection and data/sequence maintenance.
+  - `flush` includes production guardrails (`--force` / `--yes`).
 - `diffsettings`:
-  - comparacion de configuracion efectiva contra defaults del framework.
+  - compares effective configuration against framework defaults.
 - `createcachetable`:
-  - crea tabla SQL de cache para backends DB-based.
-  - soporta `--dry-run` para inspeccionar SQL generado.
+  - creates SQL cache table for DB-based cache backends.
+  - supports `--dry-run` to inspect generated SQL.
 - `remove_stale_contenttypes`:
-  - limpieza operativa de content types huerfanos respecto al esquema SQL vigente.
-  - soporta `--dry-run` y guardrails de produccion con `--force` / `--yes`.
+  - operational cleanup of stale content types vs current SQL schema.
+  - supports `--dry-run` and production guardrails with `--force` / `--yes`.
 - `ogrinspect`:
-  - introspeccion SQL-first de tablas geoespaciales para generar structs Go.
-  - por defecto filtra tablas con columnas `geometry/geography` (usa `--all` para incluir todas).
+  - SQL-first introspection of geospatial tables to generate Go structs.
+  - filters by `geometry/geography` columns by default (`--all` includes everything).
 - `makemessages` / `compilemessages`:
-  - flujo i18n tipo Django (`.po` fuente y `.json` compilado).
-  - `makemessages` extrae cadenas desde codigo/templates; `compilemessages` compila uno o varios locales.
+  - Django-style i18n flow (`.po` source and compiled `.json`).
+  - `makemessages` extracts strings from code/templates; `compilemessages` compiles one or more locales.
 - `collectstatic` / `findstatic`:
-  - ciclo estaticos tipo Django para recopilar assets y resolver rutas efectivas.
-  - `collectstatic` soporta `--dry-run` y `--clear`; `findstatic` soporta busqueda por patron y `--first`.
+  - Django-style static cycle to gather assets and resolve effective paths.
+  - `collectstatic` supports `--dry-run` and `--clear`; `findstatic` supports pattern search and `--first`.
 - `optimizemigration` / `squashmigrations`:
-  - mantenimiento SQL-first de migraciones (normalizacion de sentencias y squash por rango).
-  - `squashmigrations` soporta modo plan y archivado de migraciones origen.
+  - SQL-first migration maintenance (statement normalization and range squash).
+  - `squashmigrations` supports plan mode and source migration archiving.
 - `sendtestemail`:
-  - verificacion operativa del `mail_driver` configurado (`smtp`, `sendgrid` o plugin externo `goframe-mail-<driver>`).
-  - soporta `--dry-run` y override temporal `--driver`.
+  - operational check of configured `mail_driver` (`smtp`, `sendgrid`, or external plugin `goframe-mail-<driver>`).
+  - supports `--dry-run` and temporary `--driver` override.
 - `mailproviders`:
-  - lista drivers registrados y plugins externos detectados en `PATH` (`goframe-mail-<driver>`).
-  - util para diagnostico de extensiones de correo en entornos locales/CI.
+  - lists registered drivers and detected external plugins in `PATH` (`goframe-mail-<driver>`).
+  - useful for diagnosing mail extensions in local/CI environments.
 - `inspectdb`:
-  - introspeccion de esquema SQL y generacion de structs Go con tags `db`.
+  - SQL schema introspection and Go struct generation with `db` tags.
 - `dumpdata` / `loaddata`:
-  - export/import JSON de fixtures por tabla.
-  - `loaddata --truncate` con guardrails de produccion (`--force` / `--yes`).
+  - fixture JSON export/import by table.
+  - `loaddata --truncate` includes production guardrails (`--force` / `--yes`).
 - `routes`:
-  - listado de rutas, filtro por prefijo y salida JSON.
+  - route listing, prefix filtering, and JSON output.
 - `health`:
-  - check de DB con timeout y salida texto/JSON.
-  - `--deploy` agrega checks de hardening de configuracion.
+  - dependency/DB check with timeout and text/JSON output.
+  - `--deploy` adds configuration hardening checks.
 - `generate`:
-  - scaffolds de `model`, `handler`, `migration` y `resource` (CRUD base).
+  - scaffolds `model`, `handler`, `migration`, and `resource` (base CRUD).
 - `new`:
-  - bootstrap de proyecto completo MVC + API + Admin con estructura recomendada.
+  - full MVC + API + Admin project bootstrap with recommended structure.
 - `startapp`:
-  - scaffold de modulo en proyecto existente (`internal/models/controllers/tasks/web/templates`).
+  - module scaffold in an existing project (`internal/models/controllers/tasks/web/templates`).
 - `seed`:
-  - ejecucion de ficheros SQL ordenados.
-  - guardrails en produccion con `--force` / `--yes`.
+  - executes ordered SQL seed files.
+  - production guardrails with `--force` / `--yes`.
 - `createuser`:
-  - creacion/actualizacion de usuario admin, modo no interactivo con `--no-input`.
+  - create/update admin user, non-interactive mode with `--no-input`.
 - `changepassword`:
-  - rotacion de password para usuarios admin existentes (`--no-input` en CI).
+  - password rotation for existing admin users (`--no-input` in CI).
 - `clearsessions`:
-  - elimina sesiones expiradas por defecto, o todas con `--all`.
-  - soporta `--dry-run` para revisar SQL antes de ejecutar.
+  - removes expired sessions by default, or all sessions with `--all`.
+  - supports `--dry-run` to review SQL before execution.
 - `shell`:
-  - modo interactivo y modo no interactivo (`-c` o stdin).
-  - modo `--sandbox` para limitar a sentencias SQL de solo lectura.
+  - interactive and non-interactive mode (`-c` or stdin).
+  - `--sandbox` mode limits to read-only SQL statements.
 - `test`:
-  - wrapper de `go test` con defaults de proyecto y flags (`--run`, `--race`, `--cover`, `--timeout`, `--dry-run`).
+  - `go test` wrapper with project defaults and flags (`--run`, `--race`, `--cover`, `--timeout`, `--dry-run`).
 - `testserver`:
-  - carga fixtures (`loaddata`) y arranca servidor local en un solo comando.
-  - soporta `--dry-run` para validar el plan sin levantar el servidor.
-- extensibilidad:
-  - comandos externos `goframe-<nombre>` en `PATH` (plugin-like).
-- aliases estilo Django:
+  - loads fixtures (`loaddata`) and starts a local server in one command.
+  - supports `--dry-run` to validate the plan without starting the server.
+- extensibility:
+  - external commands `goframe-<name>` in `PATH` (plugin-like behavior).
+- Django-style aliases:
   - `runserver`, `startproject`, `makemigrations`, `showmigrations`, `createsuperuser`, `dbshell`, `check`.
 
-## Gaps para hardening posterior
+## Gaps for future hardening
 
-1. Experiencia avanzada de shell
-- Historial persistente y multilinea.
+1. Advanced shell UX
+- Persistent history and multiline editing.
 
-2. Cobertura de tests CLI por matriz de motores SQL
-- SQLite ya cubierto; ampliar con Postgres/MySQL en CI.
+2. CLI test coverage across SQL engine matrix
+- SQLite is already covered; extend CI to PostgreSQL/MySQL.
 
-## Criterio practico de salida (CLI v1)
+## Practical v1 CLI readiness criteria
 
-- [x] Comandos troncales disponibles.
-- [x] Ayuda raiz y por subcomando.
-- [x] Exit codes consistentes para automatizacion.
-- [x] Migraciones con estado y rollback.
-- [x] Generacion de scaffolds basicos.
-- [x] Guardrails de produccion unificados (`--force`/`--yes` + confirmacion interactiva).
-- [x] Plugins/comandos custom por proyecto (via `goframe-<nombre>`).
+- [x] Core commands available.
+- [x] Root and subcommand help.
+- [x] Consistent exit codes for automation.
+- [x] Migrations with status and rollback.
+- [x] Basic scaffold generation.
+- [x] Unified production guardrails (`--force`/`--yes` + interactive confirmation).
+- [x] Per-project plugins/custom commands (via `goframe-<name>`).
 
-## Fuentes oficiales
+## Official sources
 
 - Django: [django-admin and manage.py](https://docs.djangoproject.com/en/6.0/ref/django-admin/)
 - Django: [Custom management commands](https://docs.djangoproject.com/en/6.0/howto/custom-management-commands/)
@@ -150,6 +150,6 @@ Implementado en `cmd/goframe` + `internal/cli`:
 - Phoenix: [Phoenix Mix Tasks (`mix phx.routes`, generators)](https://hexdocs.pm/phoenix/1.4.17/phoenix_mix_tasks.html)
 - Phoenix/Ecto: [Ecto in Phoenix (`mix ecto.migrate`, `mix ecto.rollback`)](https://hexdocs.pm/phoenix/ecto.html)
 
-Comparativa detallada GoFrame vs Django 6.0:
+Detailed GoFrame vs Django 6.0 comparison:
 
 - `docs/CLI_DJANGO_PARITY.md`
