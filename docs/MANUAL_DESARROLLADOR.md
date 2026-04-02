@@ -441,7 +441,25 @@ goframe compilemessages --config goframe.yaml
 goframe compilemessages --config goframe.yaml --dry-run
 ```
 
-## 13.3 Mantenimiento avanzado de migraciones
+## 13.3 Static files (`collectstatic`, `findstatic`)
+
+Recopilar assets estaticos en `static_root`:
+
+```bash
+goframe collectstatic --config goframe.yaml
+goframe collectstatic --config goframe.yaml --output public/assets --clear
+goframe collectstatic --config goframe.yaml --dry-run
+```
+
+Localizar assets estaticos por ruta (o patron):
+
+```bash
+goframe findstatic --config goframe.yaml app.css
+goframe findstatic --config goframe.yaml "js/*.js"
+goframe findstatic --config goframe.yaml --first admin.css
+```
+
+## 13.4 Mantenimiento avanzado de migraciones
 
 Optimizar una migracion SQL eliminando no-op/comentarios/duplicados exactos:
 
@@ -459,7 +477,7 @@ goframe squashmigrations --migrations migrations --from init --to add_users --na
 goframe squashmigrations --migrations migrations --from init --to add_users --name baseline --write --archive-old
 ```
 
-## 13.4 Email de prueba por proveedor (`mail_driver`)
+## 13.5 Email de prueba por proveedor (`mail_driver`)
 
 Validar el proveedor de correo configurado con un correo de prueba:
 
@@ -701,6 +719,8 @@ goframe diffsettings [--config ...] [--all] [--json]
 goframe createcachetable [--config ...] [--table goframe_cache_entries] [--dry-run]
 goframe makemessages [--config ...] [--locale es] [--domain messages] [--input .] [--extensions .go,.html,.templ] [--locales-path locales] [--output ...] [--dry-run]
 goframe compilemessages [--config ...] [--locale es] [--domain messages] [--locales-path locales] [--output ...] [--dry-run]
+goframe collectstatic [--config ...] [--output static_collected] [--source internal/web/static] [--clear] [--dry-run]
+goframe findstatic [--config ...] [--source internal/web/static] [--first] [--json] <asset_path_or_glob> [more...]
 goframe optimizemigration [--migrations migrations] [--down] [--write] <migration_id_or_name>
 goframe squashmigrations [--migrations migrations] --from <migration> --to <migration> [--name baseline] [--write] [--archive-old] [--force] [--dry-run] [--print-sql]
 goframe sendtestemail [--config ...] --to dev@example.com[,ops@example.com] [--from ...] [--subject ...] [--body ...] [--timeout 10s] [--dry-run]

@@ -19,10 +19,12 @@ var commandSpecs = []commandSpec{
 	{name: "changepassword", summary: "Update an admin user's password", run: runChangePassword},
 	{name: "clearsessions", summary: "Delete expired or all session rows", run: runClearSessions},
 	{name: "compilemessages", summary: "Compile .po message catalogs into JSON bundles", run: runCompileMessages},
+	{name: "collectstatic", summary: "Collect static assets into configured static_root", run: runCollectStatic},
 	{name: "createcachetable", summary: "Create SQL table used by database-backed cache", run: runCreateCacheTable},
 	{name: "createuser", summary: "Create or update an admin user", run: runCreateUser},
 	{name: "diffsettings", summary: "Show configuration differences from defaults", run: runDiffSettings},
 	{name: "dumpdata", summary: "Export DB rows as JSON fixtures", run: runDumpData},
+	{name: "findstatic", summary: "Find static assets across discovered source directories", run: runFindStatic},
 	{name: "flush", summary: "Delete all data from database tables (keeps migration history)", run: runFlush},
 	{name: "generate", summary: "Generate model, handler, or migration scaffolds", run: runGenerate},
 	{name: "health", summary: "Check configured dependencies health", run: runHealth},
@@ -154,6 +156,8 @@ func printRootUsage(w io.Writer) {
 	fmt.Fprintln(w, "  goframe clearsessions --config goframe.yaml")
 	fmt.Fprintln(w, "  goframe makemessages --config goframe.yaml --locale es --input .")
 	fmt.Fprintln(w, "  goframe compilemessages --config goframe.yaml --locale es")
+	fmt.Fprintln(w, "  goframe collectstatic --config goframe.yaml --output public/assets")
+	fmt.Fprintln(w, "  goframe findstatic --config goframe.yaml app.css")
 	fmt.Fprintln(w, "  goframe optimizemigration --migrations migrations add_users_table")
 	fmt.Fprintln(w, "  goframe squashmigrations --migrations migrations --from init --to add_users --name baseline --write")
 	fmt.Fprintln(w, "  goframe sendtestemail --config goframe.yaml --to dev@example.com --dry-run")
