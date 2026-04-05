@@ -165,6 +165,7 @@ CLI and parity references:
 - [docs/CLI_BEST_PRACTICES.md](docs/CLI_BEST_PRACTICES.md)
 - [docs/CLI_DJANGO_PARITY.md](docs/CLI_DJANGO_PARITY.md)
 - [docs/MAIL_PROVIDERS.md](docs/MAIL_PROVIDERS.md)
+- [docs/OBSERVABILITY_BASELINE.md](docs/OBSERVABILITY_BASELINE.md)
 
 Release and governance docs:
 

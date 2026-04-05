@@ -467,8 +467,10 @@ func TestTelemetryMiddleware_InjectsSpanIntoContext(t *testing.T) {
 	}()
 
 	var spanValid bool
+	var observedTraceID string
 	handler := TelemetryMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		spanValid = oteltrace.SpanFromContext(r.Context()).SpanContext().IsValid()
+		observedTraceID = observe.TraceIDFromCtx(r.Context())
 		w.WriteHeader(http.StatusOK)
 	}))
 
@@ -481,5 +483,8 @@ func TestTelemetryMiddleware_InjectsSpanIntoContext(t *testing.T) {
 	}
 	if !spanValid {
 		t.Fatal("expected valid span in request context")
+	}
+	if observedTraceID == "" {
+		t.Fatal("expected trace id in observe context")
 	}
 }

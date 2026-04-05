@@ -635,6 +635,21 @@ go run ./cmd/worker
 
 Requires `redis_url` in `goframe.yaml`.
 
+For request-to-job correlation in tracing/logging, enqueue jobs with context:
+
+```go
+info, err := manager.EnqueueJSONCtx(r.Context(), tasks.TaskArticleCreated, map[string]any{
+    "article_id": articleID,
+    "title":      title,
+})
+```
+
+This preserves `request_id`/`user_id`/`traceparent` metadata for worker-side observability.
+
+Observability dashboards and alert baseline:
+
+- `docs/OBSERVABILITY_BASELINE.md`
+
 ## 15. Generators (`generate`)
 
 ```bash

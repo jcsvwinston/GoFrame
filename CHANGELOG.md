@@ -52,6 +52,14 @@ while in pre-1.0 mode (`v0.x.y`).
   - explicit unsupported-scheme behavior coverage in `pkg/db`
   - exploratory URL smoke (`GOFRAME_SQL_EXPLORATORY_URL`)
 - CI SQL matrix profile reference with local reproduction commands in `docs/CI_MATRIX.md`.
+- DB observability metrics in `pkg/db`:
+  - query total/error counters and query duration histogram
+  - pool utilization/wait metrics (`open`, `idle`, `in_use`, `wait_count`, `wait_duration_ms`)
+- Job observability and tracing in `pkg/tasks`:
+  - enqueue and processing lifecycle metrics (`started`, `succeeded`, `retried`, `failed`, duration)
+  - producer/consumer spans for enqueue and worker processing
+  - request-context correlation helpers via `Manager.EnqueueJSONCtx(...)`
+- Observability dashboard and alert recommendations in `docs/OBSERVABILITY_BASELINE.md`.
 
 ### Changed
 
@@ -81,6 +89,7 @@ while in pre-1.0 mode (`v0.x.y`).
   - exploratory non-blocking lanes: MS SQL Server + Oracle compatibility smoke
 - CI now emits a stable required check context `CI Required Gate` that aggregates required lanes for branch protection.
 - Added branch-protection automation script `scripts/ci/configure_branch_protection.sh` and merge-policy guidance in `docs/CI_MATRIX.md`.
+- HTTP telemetry middleware now stores `trace_id` in `observe` context for downstream correlation.
 
 ## [0.5.5] - 2026-04-05
 
