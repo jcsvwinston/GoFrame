@@ -60,6 +60,10 @@ Planned expansion track (not core-supported yet in runtime/CLI SQL helpers):
 - MS SQL Server
 - Oracle
 
+CI matrix profiles and local reproduction:
+
+- `docs/CI_MATRIX.md`
+
 ## 4. CLI Installation
 
 There are two recommended paths.

@@ -171,6 +171,7 @@ Release and governance docs:
 - [docs/RELEASE_CHECKLIST.md](docs/RELEASE_CHECKLIST.md)
 - [docs/VERSIONING.md](docs/VERSIONING.md)
 - [docs/GO_VERSION_POLICY.md](docs/GO_VERSION_POLICY.md)
+- [docs/CI_MATRIX.md](docs/CI_MATRIX.md)
 - [CHANGELOG.md](CHANGELOG.md)
 
 ## Compatibility

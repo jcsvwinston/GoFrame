@@ -129,7 +129,8 @@ Implemented in `cmd/goframe` + `internal/cli`:
 - Persistent history and multiline editing.
 
 2. CLI test coverage across SQL engine matrix
-- SQLite is already covered; keep PostgreSQL/MySQL as required CI targets and add MS SQL Server/Oracle as exploratory non-blocking lanes.
+- Required CI lanes now cover SQLite/PostgreSQL/MySQL.
+- MS SQL Server/Oracle remain exploratory compatibility lanes until runtime and SQL-helper support are implemented.
 
 ## Practical v1 CLI readiness criteria
 

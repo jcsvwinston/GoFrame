@@ -45,6 +45,13 @@ while in pre-1.0 mode (`v0.x.y`).
   - CSRF token mismatch rejection
   - CORS origin allow/deny behavior
   - session config fallback/invalid-store handling
+- SQL matrix integration tests for required DB profiles (`PostgreSQL`/`MySQL`):
+  - `pkg/db` runtime connect + ping smoke (`GOFRAME_SQL_MATRIX_URL`)
+  - `internal/cli` critical command smoke for migrate/health/fixtures/shell (`GOFRAME_SQL_MATRIX_URL`)
+- SQL matrix compatibility tests for exploratory DB profiles (`MS SQL Server`/`Oracle`):
+  - explicit unsupported-scheme behavior coverage in `pkg/db`
+  - exploratory URL smoke (`GOFRAME_SQL_EXPLORATORY_URL`)
+- CI SQL matrix profile reference with local reproduction commands in `docs/CI_MATRIX.md`.
 
 ### Changed
 
@@ -69,6 +76,9 @@ while in pre-1.0 mode (`v0.x.y`).
   - `migrate down`
   - `migrate steps -N`
   - `migrate refresh`
+- CI now includes dedicated SQL matrix jobs:
+  - required lanes: PostgreSQL + MySQL
+  - exploratory non-blocking lanes: MS SQL Server + Oracle compatibility smoke
 
 ## [0.5.5] - 2026-04-05
 
