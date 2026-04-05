@@ -100,3 +100,28 @@ func TestSQLSessionStore_ExpiredTokenReturnsMissingAndIsRemoved(t *testing.T) {
 		t.Fatalf("expected expired session row deleted, got count=%d", count)
 	}
 }
+
+func TestSQLSessionStore_AllReturnsOnlyActiveSessions(t *testing.T) {
+	store, _ := newTestSQLSessionStore(t)
+
+	if err := store.Commit("token-active", []byte("active"), time.Now().UTC().Add(20*time.Minute)); err != nil {
+		t.Fatalf("commit active failed: %v", err)
+	}
+	if err := store.Commit("token-expired", []byte("expired"), time.Now().UTC().Add(-20*time.Minute)); err != nil {
+		t.Fatalf("commit expired failed: %v", err)
+	}
+
+	all, err := store.All()
+	if err != nil {
+		t.Fatalf("all failed: %v", err)
+	}
+	if len(all) != 1 {
+		t.Fatalf("expected 1 active session, got %d", len(all))
+	}
+	if string(all["token-active"]) != "active" {
+		t.Fatalf("unexpected payload for active token: %q", string(all["token-active"]))
+	}
+	if _, ok := all["token-expired"]; ok {
+		t.Fatal("expired token should not be included in All()")
+	}
+}

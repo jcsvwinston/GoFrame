@@ -10,6 +10,7 @@ import (
 )
 
 const defaultSessionTableName = "goframe_sessions"
+const defaultSessionStoreListLimit = 5000
 
 type sqlSessionStoreFlavor string
 
@@ -76,6 +77,11 @@ func (s *SQLSessionStore) Commit(token string, b []byte, expiry time.Time) error
 	return s.CommitCtx(context.Background(), token, b, expiry)
 }
 
+// All returns all non-expired sessions.
+func (s *SQLSessionStore) All() (map[string][]byte, error) {
+	return s.AllCtx(context.Background())
+}
+
 // DeleteCtx removes the session token from the store.
 func (s *SQLSessionStore) DeleteCtx(ctx context.Context, token string) error {
 	if token == "" {
@@ -136,6 +142,44 @@ func (s *SQLSessionStore) CommitCtx(ctx context.Context, token string, b []byte,
 		return fmt.Errorf("sql session commit: %w", err)
 	}
 	return nil
+}
+
+// AllCtx returns all non-expired sessions.
+func (s *SQLSessionStore) AllCtx(ctx context.Context) (map[string][]byte, error) {
+	query := fmt.Sprintf(`SELECT token, data, expires_at FROM %s LIMIT %d`, s.quotedTable(), defaultSessionStoreListLimit)
+	rows, err := s.db.QueryContext(ctx, query)
+	if err != nil {
+		return nil, fmt.Errorf("sql session all: %w", err)
+	}
+	defer rows.Close()
+
+	now := time.Now().UTC()
+	result := make(map[string][]byte)
+	for rows.Next() {
+		var token string
+		var payload []byte
+		var expiresRaw any
+		if err := rows.Scan(&token, &payload, &expiresRaw); err != nil {
+			return nil, fmt.Errorf("sql session all scan: %w", err)
+		}
+
+		expiresAt, err := parseSessionExpiryValue(expiresRaw)
+		if err != nil {
+			continue
+		}
+		if !expiresAt.After(now) {
+			continue
+		}
+
+		copyPayload := make([]byte, len(payload))
+		copy(copyPayload, payload)
+		result[token] = copyPayload
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("sql session all rows: %w", err)
+	}
+
+	return result, nil
 }
 
 func (s *SQLSessionStore) ensureSchema(ctx context.Context) error {

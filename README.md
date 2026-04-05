@@ -22,7 +22,7 @@ GoFrame combines `chi` routing, Bun-first SQL access, auto-generated admin, back
 - HTTP stack (`pkg/router`) with security middleware, CSRF, rate limit, and OTel HTTP telemetry.
 - Auth/Authz (`pkg/auth`, `pkg/authz`) with JWT support, server-side sessions (`memory|sql|redis`), and Casbin integration points.
 - Model system (`pkg/model`) with metadata extraction, registry, generic CRUD.
-- Embedded admin UI (`pkg/admin`) for CRUD, schema, filters, CSV export, and bulk operations.
+- Embedded admin UI (`pkg/admin`) for CRUD, schema, filters, CSV export, bulk operations, and live session observability (`/admin` sessions view).
 - Task runtime (`pkg/tasks`) with Asynq manager + worker scaffold.
 - Mail layer (`pkg/mail`) with `noop`, `smtp`, `sendgrid`, and external plugin runtime (`goframe-plugin-<driver>` with legacy fallback `goframe-mail-<driver>`), plus capability discovery via `pkg/plugins`.
 - Rich CLI (`cmd/goframe`) with Django-style aliases and operational commands.

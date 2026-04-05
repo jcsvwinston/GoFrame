@@ -99,10 +99,19 @@ func New(cfg *Config) (*App, error) {
 	}
 	r := router.New(logger, routerOpts...)
 	r.Use(sessionManager.Middleware())
+	sessionRuntimeIdentity := auth.DetectSessionRuntimeIdentity()
+	r.Use(auth.RuntimeMetadataMiddleware(sessionManager, sessionRuntimeIdentity, 30*time.Second))
 	reg := model.NewRegistry()
+	sessionStoreLabel := strings.ToLower(strings.TrimSpace(effective.SessionStore))
+	if sessionStoreLabel == "" {
+		sessionStoreLabel = "memory"
+	}
 	adminPanel := admin.NewPanel(dbConn, reg, logger, admin.PanelConfig{
-		Prefix: effective.AdminPrefix,
-		Title:  effective.AdminTitle,
+		Prefix:         effective.AdminPrefix,
+		Title:          effective.AdminTitle,
+		Session:        sessionManager,
+		SessionStore:   sessionStoreLabel,
+		SessionRuntime: sessionRuntimeIdentity,
 	})
 
 	a := &App{

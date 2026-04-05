@@ -31,6 +31,12 @@ while in pre-1.0 mode (`v0.x.y`).
   - SQL-backed store with automatic session table bootstrap (`session_table`, default `goframe_sessions`)
   - Redis-backed store (`session_redis_url` or `redis_url` fallback)
   - configurable session cookie settings (`session_cookie_*`) and idle timeout
+- Session runtime metadata middleware now records serving-node identity in session state:
+  - first/last seen timestamps
+  - runtime pod, host, and instance identifiers for shared-session environments
+- Admin session observability endpoint and UI:
+  - `GET /admin/api/sessions`
+  - `/admin` sessions dashboard with active-session table, pod/host attribution, and telemetry windows (real-time, last hour, today)
 
 ### Changed
 
@@ -44,6 +50,9 @@ while in pre-1.0 mode (`v0.x.y`).
 - `app.New` now wires session middleware by default and exposes `App.Session`.
 - `goframe check --deploy` now validates session/cookie production posture (store mode, redis/sql requirements, secure cookie and SameSite combinations).
 - Documentation updated with cluster-safe session guidance (`sql`/`redis` for multi-replica environments).
+- Roadmap updated with:
+  - completed admin session observability item for `v0.6.0`
+  - MongoDB adapter exploration listed as non-priority post-`v0.6.0` backlog
 
 ## [0.5.5] - 2026-04-05
 

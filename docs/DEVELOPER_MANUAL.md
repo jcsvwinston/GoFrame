@@ -323,6 +323,10 @@ Configuration:
 - filters and search
 - CSV export
 - bulk actions
+- session observability dashboard:
+  - active session inventory
+  - runtime attribution (`pod`, `host`, `instance`) for shared session stores
+  - telemetry windows (real-time, last hour, current day)
 
 ## 10.3 Admin API
 
@@ -337,6 +341,7 @@ Main routes:
 - `DELETE /admin/api/models/{name}/{id}`
 - `POST /admin/api/models/{name}/bulk`
 - `GET /admin/api/models/{name}/export`
+- `GET /admin/api/sessions`
 
 ## 11. SQL Migrations
 
