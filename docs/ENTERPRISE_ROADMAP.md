@@ -4,6 +4,10 @@ Reference date: 2026-04-02.
 
 This roadmap summarizes the enterprise-alignment track for GoFrame.
 
+Execution plan for the next major iteration:
+
+- `docs/V0.6.0_ROADMAP.md`
+
 ## Strategic Goal
 
 Deliver a Django-inspired framework baseline for Go teams that is:

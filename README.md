@@ -142,6 +142,7 @@ Current baseline includes:
 Roadmap and alignment status:
 
 - [docs/ENTERPRISE_ROADMAP.md](docs/ENTERPRISE_ROADMAP.md)
+- [docs/V0.6.0_ROADMAP.md](docs/V0.6.0_ROADMAP.md)
 
 ## Documentation
 
