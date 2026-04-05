@@ -61,6 +61,7 @@ while in pre-1.0 mode (`v0.x.y`).
 - Roadmap updated with:
   - completed admin session observability item for `v0.6.0`
   - MongoDB adapter exploration listed as non-priority post-`v0.6.0` backlog
+  - MS SQL Server and Oracle explicitly tracked as exploratory CI lanes with promotion criteria to first-class support
 - Router middleware now supports token-bucket rate limiting with optional route and role dimensions while preserving previous config compatibility.
 - CLI test suite now verifies production guardrails in non-interactive runs across destructive commands:
   - `flush`

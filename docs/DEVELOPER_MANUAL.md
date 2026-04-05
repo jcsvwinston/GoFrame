@@ -55,6 +55,11 @@ Supported SQL engines by URL:
 - PostgreSQL: `postgres://...` or `postgresql://...`
 - MySQL: `mysql://...`
 
+Planned expansion track (not core-supported yet in runtime/CLI SQL helpers):
+
+- MS SQL Server
+- Oracle
+
 ## 4. CLI Installation
 
 There are two recommended paths.
