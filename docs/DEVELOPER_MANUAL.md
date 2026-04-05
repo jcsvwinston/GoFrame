@@ -542,9 +542,10 @@ sendgrid_endpoint: https://api.sendgrid.com/v3/mail/send
 External plugin support:
 
 - set `mail_driver: mailgun` (or any custom name)
-- add executable `goframe-mail-mailgun` to `PATH`
-- GoFrame sends JSON to `stdin` with `from`, `to`, `subject`, `body`, `headers`
-- exit code `0` means accepted; non-zero means operational error
+- add executable `goframe-plugin-mailgun` to `PATH` and advertise capability `mail.send`
+- runtime fallback remains supported with legacy `goframe-mail-mailgun`
+- generic plugins receive SDK envelope (`version: v1`) over `stdin`
+- legacy plugins receive JSON with `from`, `to`, `subject`, `body`, `headers`
 
 Capability-based plugin diagnostics:
 

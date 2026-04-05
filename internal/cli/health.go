@@ -184,7 +184,7 @@ func applyDeployMailChecks(cfg *app.Config, report *healthReport) {
 		addHealthComponent(report, healthComponent{
 			Name:    "deploy.mail_driver",
 			Status:  "ok",
-			Details: fmt.Sprintf("mail_driver=%s (external plugin goframe-mail-%s)", driver, driver),
+			Details: fmt.Sprintf("mail_driver=%s (external plugin goframe-plugin-%s or legacy goframe-mail-%s)", driver, driver, driver),
 		})
 	}
 }

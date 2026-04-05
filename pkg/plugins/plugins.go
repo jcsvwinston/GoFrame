@@ -12,15 +12,12 @@ import (
 	"sort"
 	"strings"
 	"time"
-
-	"github.com/jcsvwinston/GoFrame/pkg/mail"
 )
 
 const (
 	GenericBinaryPrefix    = "goframe-plugin-"
 	LegacyMailBinaryPrefix = "goframe-mail-"
 	DefaultProbeTimeout    = 2 * time.Second
-	mailSendCapability     = "mail.send"
 )
 
 type Source string
@@ -39,12 +36,11 @@ type Descriptor struct {
 	ProbeError   string   `json:"probe_error,omitempty"`
 }
 
-func BuiltinMailDescriptors() []Descriptor {
-	registered := mail.RegisteredProviders()
-	seen := make(map[string]struct{}, len(registered))
-	out := make([]Descriptor, 0, len(registered))
+func BuiltinMailDescriptorsFromProviders(providers []string) []Descriptor {
+	seen := make(map[string]struct{}, len(providers))
+	out := make([]Descriptor, 0, len(providers))
 
-	for _, driver := range registered {
+	for _, driver := range providers {
 		normalized := normalizeToken(driver)
 		if normalized == "" {
 			continue
@@ -55,7 +51,7 @@ func BuiltinMailDescriptors() []Descriptor {
 		seen[normalized] = struct{}{}
 		out = append(out, Descriptor{
 			Provider:     normalized,
-			Capabilities: []string{mailSendCapability},
+			Capabilities: []string{CapabilityMailSend},
 			Source:       SourceBuiltinMail,
 		})
 	}
@@ -129,7 +125,7 @@ func DiscoverExternal(pathEnv string, probeTimeout time.Duration) []Descriptor {
 
 			switch source {
 			case SourceExternalLegacyMail:
-				desc.Capabilities = []string{mailSendCapability}
+				desc.Capabilities = []string{CapabilityMailSend}
 			case SourceExternalGeneric:
 				caps, err := ProbeCapabilities(context.Background(), fullPath, probeTimeout)
 				if err != nil {
@@ -146,8 +142,8 @@ func DiscoverExternal(pathEnv string, probeTimeout time.Duration) []Descriptor {
 	return out
 }
 
-func CollectInventory(pathEnv string, probeTimeout time.Duration) []Descriptor {
-	out := BuiltinMailDescriptors()
+func CollectInventory(pathEnv string, builtinMailProviders []string, probeTimeout time.Duration) []Descriptor {
+	out := BuiltinMailDescriptorsFromProviders(builtinMailProviders)
 	out = append(out, DiscoverExternal(pathEnv, probeTimeout)...)
 	sortDescriptors(out)
 	return out

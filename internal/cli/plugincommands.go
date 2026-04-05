@@ -15,7 +15,7 @@ import (
 	"github.com/jcsvwinston/GoFrame/pkg/plugins"
 )
 
-const pluginMailCapability = "mail.send"
+const pluginMailCapability = plugins.CapabilityMailSend
 
 type pluginListItem struct {
 	Provider     string         `json:"provider"`
@@ -116,7 +116,7 @@ func runPluginList(args []string, stdout, stderr io.Writer) error {
 		return err
 	}
 	activeMailDriver := resolveMailDriver(cfg.MailDriver)
-	inventory := plugins.CollectInventory(os.Getenv("PATH"), *timeout)
+	inventory := plugins.CollectInventory(os.Getenv("PATH"), mail.RegisteredProviders(), *timeout)
 	report := pluginListReport{
 		ActiveMailDriver: activeMailDriver,
 		Providers:        toPluginListItems(inventory, activeMailDriver),
@@ -179,7 +179,7 @@ func runPluginDoctor(args []string, stdout, stderr io.Writer) error {
 		return err
 	}
 	activeDriver := resolveMailDriver(cfg.MailDriver)
-	inventory := plugins.CollectInventory(os.Getenv("PATH"), *timeout)
+	inventory := plugins.CollectInventory(os.Getenv("PATH"), mail.RegisteredProviders(), *timeout)
 
 	report := pluginDoctorReport{
 		Status:    "ok",
@@ -344,7 +344,7 @@ func runPluginTest(args []string, stdout, stderr io.Writer) error {
 		CheckedAt:  nowRFC3339(),
 	}
 
-	inventory := plugins.CollectInventory(os.Getenv("PATH"), *timeout)
+	inventory := plugins.CollectInventory(os.Getenv("PATH"), mail.RegisteredProviders(), *timeout)
 	desc, ok := selectPluginDescriptor(inventory, targetProvider, targetCapability)
 	if !ok {
 		report.Details = fmt.Sprintf("provider=%s capability=%s was not discovered", targetProvider, targetCapability)

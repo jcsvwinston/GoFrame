@@ -50,9 +50,14 @@ goframe plugin test --provider sendgrid --capability mail.send
 
 ## External Plugin Contract
 
-If `mail_driver: mailgun`, GoFrame looks for `goframe-mail-mailgun`.
+If `mail_driver: mailgun`, GoFrame resolves in this order:
 
-Input is sent over `stdin` as JSON:
+1. `goframe-plugin-mailgun` (requires capability `mail.send`)
+2. `goframe-mail-mailgun` (legacy fallback)
+
+Generic capability plugins receive `pkg/plugins` request envelope (`version: v1`) over `stdin`.
+
+Legacy mail plugins receive JSON over `stdin`:
 
 - `driver`
 - `from`

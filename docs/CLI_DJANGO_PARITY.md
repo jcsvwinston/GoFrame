@@ -89,7 +89,7 @@ Django-style aliases:
 | `findstatic` | `findstatic` | functional equivalent (resolve static assets by path/pattern) |
 | `optimizemigration` | `optimizemigration` | approximate equivalent (per-file SQL migration optimization) |
 | `squashmigrations` | `squashmigrations` | approximate equivalent (range-based SQL-first squash with `.up/.down.sql` output) |
-| `sendtestemail` | `sendtestemail` | functional equivalent (test email through `mail_driver`: SMTP, SendGrid, or external plugin) |
+| `sendtestemail` | `sendtestemail` | functional equivalent (test email through `mail_driver`: SMTP, SendGrid, or external plugin runtime with legacy fallback) |
 | `inspectdb` | `inspectdb` | functional equivalent (DB introspection to Go structs) |
 | `dumpdata` | `dumpdata` | functional equivalent (table-based JSON export) |
 | `loaddata` | `loaddata` | functional equivalent (table-based JSON import) |

@@ -26,10 +26,10 @@ func TestParseProviderFromBinary(t *testing.T) {
 	}
 }
 
-func TestBuiltinMailDescriptors(t *testing.T) {
-	descriptors := BuiltinMailDescriptors()
-	if len(descriptors) == 0 {
-		t.Fatal("expected at least one built-in mail descriptor")
+func TestBuiltinMailDescriptorsFromProviders(t *testing.T) {
+	descriptors := BuiltinMailDescriptorsFromProviders([]string{"noop", "smtp", "sendgrid"})
+	if len(descriptors) != 3 {
+		t.Fatalf("expected exactly 3 built-in mail descriptors, got %d", len(descriptors))
 	}
 
 	foundNoop := false
@@ -178,7 +178,7 @@ fi
 exit 1
 `)
 
-	inventory := CollectInventory(dir, time.Second)
+	inventory := CollectInventory(dir, []string{"noop", "smtp", "sendgrid"}, time.Second)
 	if len(inventory) == 0 {
 		t.Fatal("expected non-empty inventory")
 	}

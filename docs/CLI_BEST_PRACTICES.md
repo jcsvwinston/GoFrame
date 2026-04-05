@@ -75,7 +75,7 @@ Implemented in `cmd/goframe` + `internal/cli`:
   - SQL-first migration maintenance (statement normalization and range squash).
   - `squashmigrations` supports plan mode and source migration archiving.
 - `sendtestemail`:
-  - operational check of configured `mail_driver` (`smtp`, `sendgrid`, or external plugin `goframe-mail-<driver>`).
+  - operational check of configured `mail_driver` (`smtp`, `sendgrid`, or external plugin `goframe-plugin-<driver>` with legacy fallback `goframe-mail-<driver>`).
   - supports `--dry-run` and temporary `--driver` override.
 - `mailproviders`:
   - lists registered drivers and detected external plugins in `PATH` (`goframe-mail-<driver>`).

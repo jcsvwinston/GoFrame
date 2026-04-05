@@ -156,6 +156,12 @@ Minimum schemas to define and ship in `v0.6.0`:
 - `queue.publish`
 - `webhook.deliver`
 
+Current baseline implementation includes typed payload/response structs in `pkg/plugins`:
+
+- `MailSendPayload` / `MailSendOutput`
+- `QueuePublishPayload` / `QueuePublishOutput`
+- `WebhookDeliverPayload` / `WebhookDeliverOutput`
+
 Stretch schema set:
 
 - `subscription.create`
@@ -172,6 +178,12 @@ Stretch schema set:
 - `version: v1` envelope fields remain backward compatible in all `v0.6.x` releases
 - legacy mail executable pattern (`goframe-mail-<driver>`) remains supported
 - breaking contract changes require a new envelope version (`v2`)
+
+Runtime bridge status:
+
+- `pkg/mail.NewSender` now resolves external mail providers in this order:
+  1. `goframe-plugin-<driver>` when capability `mail.send` is advertised
+  2. `goframe-mail-<driver>` legacy fallback
 
 ## Test Strategy
 

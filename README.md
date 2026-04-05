@@ -24,7 +24,7 @@ GoFrame combines `chi` routing, Bun-first SQL access, auto-generated admin, back
 - Model system (`pkg/model`) with metadata extraction, registry, generic CRUD.
 - Embedded admin UI (`pkg/admin`) for CRUD, schema, filters, CSV export, and bulk operations.
 - Task runtime (`pkg/tasks`) with Asynq manager + worker scaffold.
-- Mail layer (`pkg/mail`) with `noop`, `smtp`, `sendgrid`, and plugin fallback (`goframe-mail-<driver>`) plus capability discovery via `pkg/plugins`.
+- Mail layer (`pkg/mail`) with `noop`, `smtp`, `sendgrid`, and external plugin runtime (`goframe-plugin-<driver>` with legacy fallback `goframe-mail-<driver>`), plus capability discovery via `pkg/plugins`.
 - Rich CLI (`cmd/goframe`) with Django-style aliases and operational commands.
 
 ## Install

@@ -18,10 +18,18 @@ while in pre-1.0 mode (`v0.x.y`).
   - `goframe plugin list`
   - `goframe plugin doctor`
   - `goframe plugin test --provider <p> --capability <c>`
+- Typed Plugin SDK v1 envelope and baseline capability schemas in `pkg/plugins`:
+  - request/response envelopes (`version: v1`)
+  - capability payload/output structs for `mail.send`, `queue.publish`, and `webhook.deliver`
+  - external plugin executor with exit-code/retriable mapping
+- Mail runtime bridge now supports capability plugins:
+  - preferred external provider binary `goframe-plugin-<driver>` when `mail.send` is advertised
+  - legacy fallback `goframe-mail-<driver>`
+- Plugin runtime tests now cover success, provider error mapping, and timeout behavior for external execution.
 
 ### Changed
 
-- `goframe mailproviders` discovery path now reuses the shared `pkg/plugins` scanner for legacy mail plugin detection.
+- `goframe sendtestemail` and deploy health messaging now reference generic plugin naming (`goframe-plugin-<driver>`) with legacy fallback details.
 - README and plugin/mail docs updated with capability-based plugin command references.
 - `docs/V0.6.0_ROADMAP.md` checklist updated for completed Plugin SDK baseline items.
 
