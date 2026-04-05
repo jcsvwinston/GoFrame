@@ -95,7 +95,13 @@ func New(cfg *Config) (*App, error) {
 		router.WithTimeout(toTimeoutSeconds(effective.ReadTimeout)),
 	}
 	if effective.RateLimitRequests > 0 {
-		routerOpts = append(routerOpts, router.WithRateLimit(effective.RateLimitRequests, effective.RateLimitWindow))
+		routerOpts = append(routerOpts, router.WithRateLimitPolicy(router.RateLimitPolicy{
+			Requests: effective.RateLimitRequests,
+			Window:   effective.RateLimitWindow,
+			Burst:    effective.RateLimitBurst,
+			ByRoute:  effective.RateLimitByRoute,
+			ByRole:   effective.RateLimitByRole,
+		}))
 	}
 	r := router.New(logger, routerOpts...)
 	r.Use(sessionManager.Middleware())

@@ -19,7 +19,7 @@ GoFrame combines `chi` routing, Bun-first SQL access, auto-generated admin, back
 ## What You Get Today
 
 - App container (`pkg/app`) with lifecycle, config, logger, router, DB, admin mount, and mail sender wiring.
-- HTTP stack (`pkg/router`) with security middleware, CSRF, rate limit, and OTel HTTP telemetry.
+- HTTP stack (`pkg/router`) with security middleware, CSRF, advanced rate limit dimensions (burst/route/role), and OTel HTTP telemetry.
 - Auth/Authz (`pkg/auth`, `pkg/authz`) with JWT support, server-side sessions (`memory|sql|redis`), and Casbin integration points.
 - Model system (`pkg/model`) with metadata extraction, registry, generic CRUD.
 - Embedded admin UI (`pkg/admin`) for CRUD, schema, filters, CSV export, bulk operations, and live session observability (`/admin` sessions view).

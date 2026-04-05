@@ -768,6 +768,9 @@ func TestRun_NewProjectScaffold(t *testing.T) {
 	if !strings.Contains(cfg, "rate_limit_requests: 0") || !strings.Contains(cfg, "rate_limit_window: 1m") {
 		t.Fatalf("goframe.yaml missing rate limit defaults: %s", cfg)
 	}
+	if !strings.Contains(cfg, "rate_limit_burst: 0") || !strings.Contains(cfg, "rate_limit_by_route: false") || !strings.Contains(cfg, "rate_limit_by_role: false") {
+		t.Fatalf("goframe.yaml missing advanced rate limit defaults: %s", cfg)
+	}
 	if !strings.Contains(cfg, "otlp_endpoint: \"\"") {
 		t.Fatalf("goframe.yaml missing otlp_endpoint default: %s", cfg)
 	}

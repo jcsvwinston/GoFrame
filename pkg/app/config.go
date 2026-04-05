@@ -76,6 +76,9 @@ type Config struct {
 	// Security
 	RateLimitRequests int           `koanf:"rate_limit_requests"`
 	RateLimitWindow   time.Duration `koanf:"rate_limit_window"`
+	RateLimitBurst    int           `koanf:"rate_limit_burst"`
+	RateLimitByRoute  bool          `koanf:"rate_limit_by_route"`
+	RateLimitByRole   bool          `koanf:"rate_limit_by_role"`
 
 	// i18n
 	DefaultLocale string `koanf:"default_locale"`
@@ -133,6 +136,9 @@ func defaults() Config {
 
 		RateLimitRequests: 0,
 		RateLimitWindow:   time.Minute,
+		RateLimitBurst:    0,
+		RateLimitByRoute:  false,
+		RateLimitByRole:   false,
 
 		DefaultLocale: "en",
 		LocalesPath:   "locales/",

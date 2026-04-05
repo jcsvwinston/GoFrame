@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jcsvwinston/GoFrame/pkg/auth"
 	gferrors "github.com/jcsvwinston/GoFrame/pkg/errors"
 	"github.com/jcsvwinston/GoFrame/pkg/observe"
 	"go.opentelemetry.io/otel"
@@ -286,6 +287,123 @@ func TestRateLimitKeyFromRequest_UsesUserIDFromContext(t *testing.T) {
 	key := rateLimitKeyFromRequest(req)
 	if key != "user:user-42" {
 		t.Fatalf("expected user key, got %q", key)
+	}
+}
+
+func TestRateLimitMiddleware_BurstAllowsTemporarySpike(t *testing.T) {
+	mw := RateLimitMiddleware(RateLimitOptions{
+		Requests: 1,
+		Window:   time.Minute,
+		Burst:    2,
+		KeyFunc: func(*http.Request) string {
+			return "burst-client"
+		},
+	})
+
+	handler := mw(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	for i := 0; i < 3; i++ {
+		req := httptest.NewRequest(http.MethodGet, "/", nil)
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("request #%d expected 200, got %d", i+1, rec.Code)
+		}
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusTooManyRequests {
+		t.Fatalf("expected request beyond burst to be 429, got %d", rec.Code)
+	}
+}
+
+func TestRateLimitMiddleware_ScopeByRoute(t *testing.T) {
+	mw := RateLimitMiddleware(RateLimitOptions{
+		Requests:     1,
+		Window:       time.Minute,
+		ScopeByRoute: true,
+		KeyFunc: func(*http.Request) string {
+			return "same-client"
+		},
+	})
+
+	handler := mw(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	req := httptest.NewRequest(http.MethodGet, "/projects/100", nil)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected first projects request 200, got %d", rec.Code)
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/users/100", nil)
+	rec = httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected users route to have separate budget, got %d", rec.Code)
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/projects/200", nil)
+	rec = httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusTooManyRequests {
+		t.Fatalf("expected second projects request to be limited, got %d", rec.Code)
+	}
+}
+
+func TestRateLimitMiddleware_ScopeByRole(t *testing.T) {
+	jwtMgr := auth.NewJWTManager("router-test-rate-limit-secret-123456", time.Hour)
+	adminToken, err := jwtMgr.Generate("1", "alice", "admin")
+	if err != nil {
+		t.Fatalf("generate admin token failed: %v", err)
+	}
+	userToken, err := jwtMgr.Generate("2", "bob", "user")
+	if err != nil {
+		t.Fatalf("generate user token failed: %v", err)
+	}
+
+	rateMW := RateLimitMiddleware(RateLimitOptions{
+		Requests:    1,
+		Window:      time.Minute,
+		ScopeByRole: true,
+		KeyFunc: func(*http.Request) string {
+			return "same-client"
+		},
+	})
+
+	base := rateMW(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	handler := jwtMgr.OptionalJWTMiddleware()(base)
+
+	req := httptest.NewRequest(http.MethodGet, "/reports", nil)
+	req.Header.Set("Authorization", "Bearer "+adminToken)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected admin request 200, got %d", rec.Code)
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/reports", nil)
+	req.Header.Set("Authorization", "Bearer "+userToken)
+	rec = httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected user request to have separate role budget, got %d", rec.Code)
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/reports", nil)
+	req.Header.Set("Authorization", "Bearer "+adminToken)
+	rec = httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusTooManyRequests {
+		t.Fatalf("expected second admin request to be limited, got %d", rec.Code)
 	}
 }
 

@@ -50,6 +50,15 @@ func TestLoadConfig_Defaults(t *testing.T) {
 	if cfg.SessionCookieSameSite != "lax" {
 		t.Errorf("expected session cookie same-site lax, got %s", cfg.SessionCookieSameSite)
 	}
+	if cfg.RateLimitBurst != 0 {
+		t.Errorf("expected rate limit burst 0, got %d", cfg.RateLimitBurst)
+	}
+	if cfg.RateLimitByRoute {
+		t.Error("expected rate_limit_by_route false by default")
+	}
+	if cfg.RateLimitByRole {
+		t.Error("expected rate_limit_by_role false by default")
+	}
 	if cfg.Env != "development" {
 		t.Errorf("expected development, got %s", cfg.Env)
 	}

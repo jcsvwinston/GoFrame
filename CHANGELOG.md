@@ -37,6 +37,10 @@ while in pre-1.0 mode (`v0.x.y`).
 - Admin session observability endpoint and UI:
   - `GET /admin/api/sessions`
   - `/admin` sessions dashboard with active-session table, pod/host attribution, and telemetry windows (real-time, last hour, today)
+- Advanced in-process rate limiting dimensions:
+  - `rate_limit_burst` for controlled token-bucket burst capacity
+  - `rate_limit_by_route` for route-scoped budgets
+  - `rate_limit_by_role` for role-scoped budgets (JWT claims)
 
 ### Changed
 
@@ -53,6 +57,7 @@ while in pre-1.0 mode (`v0.x.y`).
 - Roadmap updated with:
   - completed admin session observability item for `v0.6.0`
   - MongoDB adapter exploration listed as non-priority post-`v0.6.0` backlog
+- Router middleware now supports token-bucket rate limiting with optional route and role dimensions while preserving previous config compatibility.
 
 ## [0.5.5] - 2026-04-05
 

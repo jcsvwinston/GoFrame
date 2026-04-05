@@ -195,6 +195,9 @@ log_format: text
 otlp_endpoint: ""
 rate_limit_requests: 0
 rate_limit_window: 1m
+rate_limit_burst: 0
+rate_limit_by_route: false
+rate_limit_by_role: false
 admin_prefix: /admin
 admin_title: My Admin
 ```
@@ -208,7 +211,7 @@ Frequent fields:
 - admin: `admin_prefix`, `admin_title`
 - mail: `mail_driver`, `mail_from`, `smtp_*`, `sendgrid_api_key`, `sendgrid_endpoint`
 - observability: `log_level`, `log_format`, `metrics_path`, `otlp_endpoint`
-- HTTP hardening: `rate_limit_requests`, `rate_limit_window`
+- HTTP hardening: `rate_limit_requests`, `rate_limit_window`, `rate_limit_burst`, `rate_limit_by_route`, `rate_limit_by_role`
 - environment: `env`, `debug`
 
 Session backend guidance:
