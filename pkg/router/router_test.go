@@ -218,6 +218,22 @@ func TestCSRFMiddleware_PostWithValidToken(t *testing.T) {
 	}
 }
 
+func TestCSRFMiddleware_PostWithMismatchedToken(t *testing.T) {
+	handler := CSRFMiddleware(CSRFOptions{})(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(200)
+	}))
+
+	r := httptest.NewRequest(http.MethodPost, "/", nil)
+	r.Header.Set("X-CSRF-Token", "token-a")
+	r.AddCookie(&http.Cookie{Name: "_csrf", Value: "token-b"})
+	w := httptest.NewRecorder()
+	handler.ServeHTTP(w, r)
+
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("expected 403 for mismatched csrf token, got %d", w.Code)
+	}
+}
+
 func TestCSRFMiddleware_ExemptPath(t *testing.T) {
 	handler := CSRFMiddleware(CSRFOptions{ExemptPaths: []string{"/api/"}})(
 		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -287,6 +303,40 @@ func TestRateLimitKeyFromRequest_UsesUserIDFromContext(t *testing.T) {
 	key := rateLimitKeyFromRequest(req)
 	if key != "user:user-42" {
 		t.Fatalf("expected user key, got %q", key)
+	}
+}
+
+func TestCORSMiddleware_DisallowsUnknownOriginWhenOriginsConfigured(t *testing.T) {
+	logger := observe.NewLogger("error", "text")
+	r := New(logger, WithCORSOrigins("https://allowed.example"))
+	r.Get("/test", func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	req.Header.Set("Origin", "https://evil.example")
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	if got := rec.Header().Get("Access-Control-Allow-Origin"); got != "" {
+		t.Fatalf("expected no ACAO header for disallowed origin, got %q", got)
+	}
+}
+
+func TestCORSMiddleware_AllowsConfiguredOrigin(t *testing.T) {
+	logger := observe.NewLogger("error", "text")
+	r := New(logger, WithCORSOrigins("https://allowed.example"))
+	r.Get("/test", func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	req.Header.Set("Origin", "https://allowed.example")
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	if got := rec.Header().Get("Access-Control-Allow-Origin"); got != "https://allowed.example" {
+		t.Fatalf("expected ACAO header for allowed origin, got %q", got)
 	}
 }
 

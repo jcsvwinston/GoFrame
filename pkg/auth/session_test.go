@@ -59,3 +59,13 @@ func TestNewSessionManager_CookieSettings(t *testing.T) {
 		t.Fatalf("expected strict same-site, got %v", sm.SCS().Cookie.SameSite)
 	}
 }
+
+func TestNewSessionManager_InvalidSameSiteFallsBackToLax(t *testing.T) {
+	sm := NewSessionManager(SessionConfig{
+		SameSite: "invalid-value",
+	})
+
+	if sm.SCS().Cookie.SameSite != http.SameSiteLaxMode {
+		t.Fatalf("expected lax same-site fallback, got %v", sm.SCS().Cookie.SameSite)
+	}
+}

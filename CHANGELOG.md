@@ -41,6 +41,10 @@ while in pre-1.0 mode (`v0.x.y`).
   - `rate_limit_burst` for controlled token-bucket burst capacity
   - `rate_limit_by_route` for route-scoped budgets
   - `rate_limit_by_role` for role-scoped budgets (JWT claims)
+- Added negative-test coverage for security defaults and edge cases:
+  - CSRF token mismatch rejection
+  - CORS origin allow/deny behavior
+  - session config fallback/invalid-store handling
 
 ### Changed
 

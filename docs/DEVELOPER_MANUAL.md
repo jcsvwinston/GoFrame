@@ -214,6 +214,13 @@ Frequent fields:
 - HTTP hardening: `rate_limit_requests`, `rate_limit_window`, `rate_limit_burst`, `rate_limit_by_route`, `rate_limit_by_role`
 - environment: `env`, `debug`
 
+Rate-limit dimensions:
+
+- `rate_limit_requests`: sustained token refill budget per `rate_limit_window`.
+- `rate_limit_burst`: temporary extra capacity above sustained budget.
+- `rate_limit_by_route`: isolate budgets per normalized route.
+- `rate_limit_by_role`: isolate budgets per authenticated role (JWT claims, fallback `anonymous`).
+
 Session backend guidance:
 
 - `session_store: memory` (default): fastest local dev path, but process-local.

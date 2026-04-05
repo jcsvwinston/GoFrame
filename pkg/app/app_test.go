@@ -221,6 +221,19 @@ func TestAppNew_SessionStoreRedisRequiresURL(t *testing.T) {
 	}
 }
 
+func TestAppNew_UnsupportedSessionStore(t *testing.T) {
+	cfg := testAppConfig()
+	cfg.SessionStore = "unknown-store"
+
+	_, err := New(cfg)
+	if err == nil {
+		t.Fatal("expected unsupported session store error")
+	}
+	if !strings.Contains(err.Error(), "unsupported session_store") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
 func TestAppNew_SQLSessionStorePersistsAcrossRequests(t *testing.T) {
 	cfg := testAppConfig()
 	cfg.SessionStore = "sql"
