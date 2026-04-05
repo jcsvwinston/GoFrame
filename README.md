@@ -151,6 +151,7 @@ Start here:
 - [docs/QUICKSTART.md](docs/QUICKSTART.md)
 - [docs/DETAILED_TUTORIAL.md](docs/DETAILED_TUTORIAL.md)
 - [docs/DEVELOPER_MANUAL.md](docs/DEVELOPER_MANUAL.md)
+- [docs/PLUGIN_SDK.md](docs/PLUGIN_SDK.md)
 
 CLI and parity references:
 
