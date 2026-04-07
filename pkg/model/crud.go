@@ -2,15 +2,17 @@ package model
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"fmt"
 	"math"
 	"reflect"
+	"strconv"
 	"strings"
 	"time"
 
 	gferrors "github.com/jcsvwinston/GoFrame/pkg/errors"
 	"github.com/jcsvwinston/GoFrame/pkg/signals"
-	"gorm.io/gorm"
 )
 
 // QueryOpts controls filtering, searching, sorting, and pagination.
@@ -36,14 +38,14 @@ type PaginatedResult struct {
 // It uses reflection to create model instances dynamically so the admin panel can
 // operate on any registered model without compile-time type knowledge.
 type CRUD struct {
-	db   *gorm.DB
+	db   *sql.DB
 	meta *ModelMeta
 	bus  *signals.Bus
 }
 
 // NewCRUD creates a CRUD operator for the given model metadata.
 // The signals bus is optional (pass nil to disable signal emission).
-func NewCRUD(db *gorm.DB, meta *ModelMeta, bus *signals.Bus) *CRUD {
+func NewCRUD(db *sql.DB, meta *ModelMeta, bus *signals.Bus) *CRUD {
 	return &CRUD{db: db, meta: meta, bus: bus}
 }
 
@@ -59,74 +61,63 @@ func (c *CRUD) FindAll(ctx context.Context, opts QueryOpts) (*PaginatedResult, e
 		opts.PageSize = 25
 	}
 
-	// Create a slice to hold results: reflect.SliceOf(meta.Type)
-	slicePtr := reflect.New(reflect.SliceOf(c.meta.Type))
+	whereExpr, whereArgs := c.buildWhere(opts)
 
-	query := c.db.WithContext(ctx).Table(c.meta.Table)
-
-	// Apply search across search fields using LOWER(col) LIKE ?
-	if opts.Search != "" {
-		searchFields := c.searchFields()
-		if len(searchFields) > 0 {
-			pattern := "%" + strings.ToLower(opts.Search) + "%"
-			var clauses []string
-			var args []interface{}
-			for _, col := range searchFields {
-				clauses = append(clauses, fmt.Sprintf("LOWER(%s) LIKE ?", col))
-				args = append(args, pattern)
-			}
-			query = query.Where(strings.Join(clauses, " OR "), args...)
-		}
+	countSQL := fmt.Sprintf("SELECT COUNT(*) FROM %s", c.meta.Table)
+	if whereExpr != "" {
+		countSQL += " WHERE " + whereExpr
 	}
 
-	// Apply exact-match filters
-	for col, val := range opts.Filters {
-		if c.isValidColumn(col) {
-			query = query.Where(fmt.Sprintf("%s = ?", col), val)
-		}
-	}
-
-	// Soft delete filter: only non-deleted records if model has DeletedAt
-	if c.hasDeletedAt() {
-		query = query.Where("deleted_at IS NULL")
-	}
-
-	// Count total matching records
 	var total int64
-	if err := query.Count(&total).Error; err != nil {
+	if err := c.db.QueryRowContext(ctx, countSQL, whereArgs...).Scan(&total); err != nil {
 		return nil, fmt.Errorf("model.CRUD.FindAll count model=%s: %w", c.meta.Name, err)
 	}
 
-	// Apply ordering
-	orderBy := opts.OrderBy
-	if orderBy == "" {
-		orderBy = c.meta.Config.OrderBy
-	}
-	if orderBy == "" {
-		orderBy = c.meta.PrimaryKey + " desc"
-		if c.meta.PrimaryKey == "" {
-			orderBy = "id desc"
-		}
-	}
-	query = query.Order(orderBy)
-
-	// Apply select fields
-	if len(opts.Fields) > 0 {
-		query = query.Select(opts.Fields)
+	columns := c.selectedColumns(opts.Fields)
+	if len(columns) == 0 {
+		return nil, fmt.Errorf("model.CRUD.FindAll model=%s: no valid columns selected", c.meta.Name)
 	}
 
-	// Apply pagination
+	orderBy := strings.TrimSpace(opts.OrderBy)
+	if orderBy == "" {
+		orderBy = strings.TrimSpace(c.meta.Config.OrderBy)
+	}
+	if orderBy == "" {
+		orderBy = c.primaryColumn() + " desc"
+	}
+
 	offset := (opts.Page - 1) * opts.PageSize
-	query = query.Offset(offset).Limit(opts.PageSize)
+	querySQL := fmt.Sprintf("SELECT %s FROM %s", strings.Join(columns, ", "), c.meta.Table)
+	if whereExpr != "" {
+		querySQL += " WHERE " + whereExpr
+	}
+	querySQL += " ORDER BY " + orderBy + " LIMIT ? OFFSET ?"
 
-	if err := query.Find(slicePtr.Interface()).Error; err != nil {
-		return nil, fmt.Errorf("model.CRUD.FindAll model=%s: %w", c.meta.Name, err)
+	args := make([]interface{}, 0, len(whereArgs)+2)
+	args = append(args, whereArgs...)
+	args = append(args, opts.PageSize, offset)
+
+	rows, err := c.db.QueryContext(ctx, querySQL, args...)
+	if err != nil {
+		return nil, fmt.Errorf("model.CRUD.FindAll model=%s query: %w", c.meta.Name, err)
+	}
+	defer rows.Close()
+
+	items := reflect.MakeSlice(reflect.SliceOf(c.meta.Type), 0, opts.PageSize)
+	for rows.Next() {
+		entityPtr := reflect.New(c.meta.Type)
+		if err := c.scanRowIntoEntity(rows, columns, entityPtr.Elem()); err != nil {
+			return nil, fmt.Errorf("model.CRUD.FindAll model=%s scan: %w", c.meta.Name, err)
+		}
+		items = reflect.Append(items, entityPtr.Elem())
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("model.CRUD.FindAll model=%s rows: %w", c.meta.Name, err)
 	}
 
 	totalPages := int(math.Ceil(float64(total) / float64(opts.PageSize)))
-
 	return &PaginatedResult{
-		Items:      slicePtr.Elem().Interface(),
+		Items:      items.Interface(),
 		Total:      total,
 		Page:       opts.Page,
 		PageSize:   opts.PageSize,
@@ -136,21 +127,29 @@ func (c *CRUD) FindAll(ctx context.Context, opts QueryOpts) (*PaginatedResult, e
 
 // FindByID retrieves a single record by primary key.
 func (c *CRUD) FindByID(ctx context.Context, id interface{}) (interface{}, error) {
-	entity := reflect.New(c.meta.Type).Interface()
-	query := c.db.WithContext(ctx).Table(c.meta.Table)
-
+	columns := c.selectedColumns(nil)
+	querySQL := fmt.Sprintf("SELECT %s FROM %s WHERE %s = ?", strings.Join(columns, ", "), c.meta.Table, c.primaryColumn())
+	args := []interface{}{id}
 	if c.hasDeletedAt() {
-		query = query.Where("deleted_at IS NULL")
+		querySQL += " AND deleted_at IS NULL"
+	}
+	querySQL += " LIMIT 1"
+
+	rows, err := c.db.QueryContext(ctx, querySQL, args...)
+	if err != nil {
+		return nil, fmt.Errorf("model.CRUD.FindByID model=%s id=%v query: %w", c.meta.Name, id, err)
+	}
+	defer rows.Close()
+
+	if !rows.Next() {
+		return nil, gferrors.NotFound(c.meta.Name, fmt.Sprintf("%v", id))
 	}
 
-	if err := query.First(entity, id).Error; err != nil {
-		if err == gorm.ErrRecordNotFound {
-			return nil, gferrors.NotFound(c.meta.Name, fmt.Sprintf("%v", id))
-		}
-		return nil, fmt.Errorf("model.CRUD.FindByID model=%s id=%v: %w", c.meta.Name, id, err)
+	entityPtr := reflect.New(c.meta.Type)
+	if err := c.scanRowIntoEntity(rows, columns, entityPtr.Elem()); err != nil {
+		return nil, fmt.Errorf("model.CRUD.FindByID model=%s id=%v scan: %w", c.meta.Name, id, err)
 	}
-
-	return entity, nil
+	return entityPtr.Interface(), nil
 }
 
 // Create inserts a new record. Emits PreCreate and PostCreate signals.
@@ -164,17 +163,36 @@ func (c *CRUD) Create(ctx context.Context, entity interface{}) error {
 	}
 
 	if c.meta.Config.BeforeCreate != nil {
-		if err := c.meta.Config.BeforeCreate(newGORMHookContext(ctx, c.db), entity); err != nil {
+		if err := c.meta.Config.BeforeCreate(newSQLHookContext(ctx, c.db, nil), entity); err != nil {
 			return fmt.Errorf("model.CRUD.Create BeforeCreate model=%s: %w", c.meta.Name, err)
 		}
 	}
 
-	if err := c.db.WithContext(ctx).Table(c.meta.Table).Create(entity).Error; err != nil {
+	now := time.Now().UTC()
+	c.setTimeIfZero(entity, "CreatedAt", now)
+	c.setTime(entity, "UpdatedAt", now)
+
+	columns, args := c.insertColumnsAndArgs(entity)
+	if len(columns) == 0 {
+		return fmt.Errorf("model.CRUD.Create model=%s: no insertable columns", c.meta.Name)
+	}
+
+	querySQL := fmt.Sprintf(
+		"INSERT INTO %s (%s) VALUES (%s)",
+		c.meta.Table,
+		strings.Join(columns, ", "),
+		placeholders(len(columns)),
+	)
+
+	res, err := c.db.ExecContext(ctx, querySQL, args...)
+	if err != nil {
 		return fmt.Errorf("model.CRUD.Create model=%s: %w", c.meta.Name, err)
 	}
 
+	c.setLastInsertID(entity, res)
+
 	if c.meta.Config.AfterCreate != nil {
-		if err := c.meta.Config.AfterCreate(newGORMHookContext(ctx, c.db), entity); err != nil {
+		if err := c.meta.Config.AfterCreate(newSQLHookContext(ctx, c.db, nil), entity); err != nil {
 			return fmt.Errorf("model.CRUD.Create AfterCreate model=%s: %w", c.meta.Name, err)
 		}
 	}
@@ -199,21 +217,47 @@ func (c *CRUD) Update(ctx context.Context, id interface{}, updates map[string]in
 	}
 
 	if c.meta.Config.BeforeUpdate != nil {
-		if err := c.meta.Config.BeforeUpdate(newGORMHookContext(ctx, c.db), updates); err != nil {
+		if err := c.meta.Config.BeforeUpdate(newSQLHookContext(ctx, c.db, nil), updates); err != nil {
 			return fmt.Errorf("model.CRUD.Update BeforeUpdate model=%s: %w", c.meta.Name, err)
 		}
 	}
 
-	result := c.db.WithContext(ctx).Table(c.meta.Table).Where("id = ?", id).Updates(updates)
-	if result.Error != nil {
-		return fmt.Errorf("model.CRUD.Update model=%s id=%v: %w", c.meta.Name, id, result.Error)
+	setParts := make([]string, 0, len(updates)+1)
+	args := make([]interface{}, 0, len(updates)+2)
+	for key, val := range updates {
+		col := c.resolveColumn(key)
+		if col == "" || !c.isValidColumn(col) {
+			continue
+		}
+		setParts = append(setParts, fmt.Sprintf("%s = ?", col))
+		args = append(args, val)
 	}
-	if result.RowsAffected == 0 {
+	if len(setParts) == 0 {
+		return gferrors.BadRequest("no valid columns provided")
+	}
+
+	if c.hasColumn("updated_at") {
+		setParts = append(setParts, "updated_at = ?")
+		args = append(args, time.Now().UTC())
+	}
+
+	querySQL := fmt.Sprintf("UPDATE %s SET %s WHERE %s = ?", c.meta.Table, strings.Join(setParts, ", "), c.primaryColumn())
+	args = append(args, id)
+	if c.hasDeletedAt() {
+		querySQL += " AND deleted_at IS NULL"
+	}
+
+	res, err := c.db.ExecContext(ctx, querySQL, args...)
+	if err != nil {
+		return fmt.Errorf("model.CRUD.Update model=%s id=%v: %w", c.meta.Name, id, err)
+	}
+	affected, _ := res.RowsAffected()
+	if affected == 0 {
 		return gferrors.NotFound(c.meta.Name, fmt.Sprintf("%v", id))
 	}
 
 	if c.meta.Config.AfterUpdate != nil {
-		if err := c.meta.Config.AfterUpdate(newGORMHookContext(ctx, c.db), updates); err != nil {
+		if err := c.meta.Config.AfterUpdate(newSQLHookContext(ctx, c.db, nil), updates); err != nil {
 			return fmt.Errorf("model.CRUD.Update AfterUpdate model=%s: %w", c.meta.Name, err)
 		}
 	}
@@ -239,26 +283,30 @@ func (c *CRUD) Delete(ctx context.Context, id interface{}) error {
 	}
 
 	if c.meta.Config.BeforeDelete != nil {
-		if err := c.meta.Config.BeforeDelete(newGORMHookContext(ctx, c.db), id); err != nil {
+		if err := c.meta.Config.BeforeDelete(newSQLHookContext(ctx, c.db, nil), id); err != nil {
 			return fmt.Errorf("model.CRUD.Delete BeforeDelete model=%s: %w", c.meta.Name, err)
 		}
 	}
 
-	var result *gorm.DB
+	var (
+		querySQL string
+		args     []interface{}
+	)
+
 	if c.hasDeletedAt() {
-		result = c.db.WithContext(ctx).
-			Table(c.meta.Table).
-			Where("id = ?", id).
-			Where("deleted_at IS NULL").
-			Update("deleted_at", time.Now())
+		querySQL = fmt.Sprintf("UPDATE %s SET deleted_at = ? WHERE %s = ? AND deleted_at IS NULL", c.meta.Table, c.primaryColumn())
+		args = []interface{}{time.Now().UTC(), id}
 	} else {
-		entity := reflect.New(c.meta.Type).Interface()
-		result = c.db.WithContext(ctx).Table(c.meta.Table).Delete(entity, id)
+		querySQL = fmt.Sprintf("DELETE FROM %s WHERE %s = ?", c.meta.Table, c.primaryColumn())
+		args = []interface{}{id}
 	}
-	if result.Error != nil {
-		return fmt.Errorf("model.CRUD.Delete model=%s id=%v: %w", c.meta.Name, id, result.Error)
+
+	res, err := c.db.ExecContext(ctx, querySQL, args...)
+	if err != nil {
+		return fmt.Errorf("model.CRUD.Delete model=%s id=%v: %w", c.meta.Name, id, err)
 	}
-	if result.RowsAffected == 0 {
+	affected, _ := res.RowsAffected()
+	if affected == 0 {
 		return gferrors.NotFound(c.meta.Name, fmt.Sprintf("%v", id))
 	}
 
@@ -271,36 +319,535 @@ func (c *CRUD) Delete(ctx context.Context, id interface{}) error {
 	return nil
 }
 
-// searchFields returns the column names configured for search.
+func (c *CRUD) buildWhere(opts QueryOpts) (string, []interface{}) {
+	clauses := make([]string, 0, len(opts.Filters)+2)
+	args := make([]interface{}, 0, len(opts.Filters)+4)
+
+	if strings.TrimSpace(opts.Search) != "" {
+		searchFields := c.searchFields()
+		if len(searchFields) > 0 {
+			pattern := "%" + strings.ToLower(strings.TrimSpace(opts.Search)) + "%"
+			sub := make([]string, 0, len(searchFields))
+			for _, col := range searchFields {
+				sub = append(sub, fmt.Sprintf("LOWER(%s) LIKE ?", col))
+				args = append(args, pattern)
+			}
+			clauses = append(clauses, "("+strings.Join(sub, " OR ")+")")
+		}
+	}
+
+	for col, val := range opts.Filters {
+		resolved := c.resolveColumn(col)
+		if resolved == "" || !c.isValidColumn(resolved) {
+			continue
+		}
+		clauses = append(clauses, fmt.Sprintf("%s = ?", resolved))
+		args = append(args, c.normalizeFilterValue(resolved, val))
+	}
+
+	if c.hasDeletedAt() {
+		clauses = append(clauses, "deleted_at IS NULL")
+	}
+
+	return strings.Join(clauses, " AND "), args
+}
+
+func (c *CRUD) selectedColumns(requested []string) []string {
+	if len(requested) == 0 {
+		out := make([]string, 0, len(c.meta.Fields))
+		for _, f := range c.meta.Fields {
+			out = append(out, c.normalizeColumn(f.Column))
+		}
+		return dedupeStrings(out)
+	}
+
+	out := make([]string, 0, len(requested))
+	for _, raw := range requested {
+		col := c.resolveColumn(raw)
+		if col == "" || !c.isValidColumn(col) {
+			continue
+		}
+		out = append(out, col)
+	}
+	return dedupeStrings(out)
+}
+
+func (c *CRUD) scanRowIntoEntity(rows *sql.Rows, columns []string, entity reflect.Value) error {
+	values := make([]interface{}, len(columns))
+	dest := make([]interface{}, len(columns))
+	for i := range values {
+		dest[i] = &values[i]
+	}
+	if err := rows.Scan(dest...); err != nil {
+		return err
+	}
+
+	fieldMap := c.fieldByColumn()
+	for i, col := range columns {
+		meta, ok := fieldMap[c.normalizeColumn(col)]
+		if !ok {
+			continue
+		}
+		field := entity.FieldByName(meta.Name)
+		if !field.IsValid() || !field.CanSet() {
+			continue
+		}
+		if err := assignDBValue(field, values[i]); err != nil {
+			return fmt.Errorf("column %s: %w", col, err)
+		}
+	}
+	return nil
+}
+
+func (c *CRUD) insertColumnsAndArgs(entity interface{}) ([]string, []interface{}) {
+	entityVal := reflect.ValueOf(entity)
+	if entityVal.Kind() == reflect.Ptr {
+		entityVal = entityVal.Elem()
+	}
+
+	columns := make([]string, 0, len(c.meta.Fields))
+	args := make([]interface{}, 0, len(c.meta.Fields))
+	for _, f := range c.meta.Fields {
+		if f.IsPK {
+			continue
+		}
+		field := entityVal.FieldByName(f.Name)
+		if !field.IsValid() {
+			continue
+		}
+		columns = append(columns, c.normalizeColumn(f.Column))
+		args = append(args, valueForSQL(field))
+	}
+	return columns, args
+}
+
+func (c *CRUD) setLastInsertID(entity interface{}, res sql.Result) {
+	if res == nil {
+		return
+	}
+	id, err := res.LastInsertId()
+	if err != nil || id <= 0 {
+		return
+	}
+
+	entityVal := reflect.ValueOf(entity)
+	if entityVal.Kind() != reflect.Ptr || entityVal.IsNil() {
+		return
+	}
+	entityVal = entityVal.Elem()
+	pkName := c.meta.PrimaryKey
+	if pkName == "" {
+		pkName = "ID"
+	}
+	pk := entityVal.FieldByName(pkName)
+	if !pk.IsValid() || !pk.CanSet() {
+		return
+	}
+
+	switch pk.Kind() {
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		pk.SetInt(id)
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		pk.SetUint(uint64(id))
+	}
+}
+
+func (c *CRUD) normalizeFilterValue(column, raw string) interface{} {
+	fieldMap := c.fieldByColumn()
+	field, ok := fieldMap[c.normalizeColumn(column)]
+	if !ok {
+		return raw
+	}
+
+	switch field.GoType {
+	case "bool":
+		lower := strings.ToLower(strings.TrimSpace(raw))
+		return lower == "1" || lower == "true" || lower == "yes" || lower == "on"
+	case "int", "int8", "int16", "int32", "int64":
+		if v, err := strconv.ParseInt(strings.TrimSpace(raw), 10, 64); err == nil {
+			return v
+		}
+	case "uint", "uint8", "uint16", "uint32", "uint64":
+		if v, err := strconv.ParseUint(strings.TrimSpace(raw), 10, 64); err == nil {
+			return v
+		}
+	case "float32", "float64":
+		if v, err := strconv.ParseFloat(strings.TrimSpace(raw), 64); err == nil {
+			return v
+		}
+	}
+	return raw
+}
+
 func (c *CRUD) searchFields() []string {
 	var cols []string
 	for _, f := range c.meta.Fields {
 		if f.IsSearch {
-			cols = append(cols, f.Column)
+			cols = append(cols, c.normalizeColumn(f.Column))
 		}
 	}
-	return cols
+	return dedupeStrings(cols)
 }
 
-// isValidColumn checks if a column name corresponds to a real field.
+func (c *CRUD) primaryColumn() string {
+	for _, f := range c.meta.Fields {
+		if f.IsPK {
+			return c.normalizeColumn(f.Column)
+		}
+	}
+	if c.meta.PrimaryKey != "" {
+		if col := c.resolveColumn(c.meta.PrimaryKey); col != "" {
+			return col
+		}
+	}
+	return "id"
+}
+
+func (c *CRUD) resolveColumn(raw string) string {
+	key := strings.TrimSpace(raw)
+	if key == "" {
+		return ""
+	}
+	for _, f := range c.meta.Fields {
+		if strings.EqualFold(f.Column, key) || strings.EqualFold(f.Name, key) {
+			return c.normalizeColumn(f.Column)
+		}
+	}
+	if strings.EqualFold(key, "id") {
+		return "id"
+	}
+	return ""
+}
+
+func (c *CRUD) normalizeColumn(col string) string {
+	if strings.EqualFold(col, "i_d") {
+		return "id"
+	}
+	return col
+}
+
+func (c *CRUD) fieldByColumn() map[string]FieldMeta {
+	out := make(map[string]FieldMeta, len(c.meta.Fields))
+	for _, f := range c.meta.Fields {
+		out[c.normalizeColumn(f.Column)] = f
+		if strings.EqualFold(f.Name, "ID") {
+			out["id"] = f
+		}
+	}
+	return out
+}
+
 func (c *CRUD) isValidColumn(col string) bool {
+	return c.resolveColumn(col) != ""
+}
+
+func (c *CRUD) hasDeletedAt() bool {
+	return c.hasColumn("deleted_at")
+}
+
+func (c *CRUD) hasColumn(col string) bool {
 	for _, f := range c.meta.Fields {
-		if f.Column == col {
-			return true
-		}
-		if f.Column == "i_d" && col == "id" {
+		if c.normalizeColumn(f.Column) == col {
 			return true
 		}
 	}
 	return false
 }
 
-// hasDeletedAt checks if the model has a DeletedAt field for soft deletes.
-func (c *CRUD) hasDeletedAt() bool {
-	for _, f := range c.meta.Fields {
-		if f.Column == "deleted_at" {
-			return true
+func (c *CRUD) setTimeIfZero(entity interface{}, fieldName string, value time.Time) {
+	v := reflect.ValueOf(entity)
+	if v.Kind() != reflect.Ptr || v.IsNil() {
+		return
+	}
+	field := v.Elem().FieldByName(fieldName)
+	if !field.IsValid() || !field.CanSet() {
+		return
+	}
+	if field.Type().PkgPath() == "time" && field.Type().Name() == "Time" && field.IsZero() {
+		field.Set(reflect.ValueOf(value))
+	}
+}
+
+func (c *CRUD) setTime(entity interface{}, fieldName string, value time.Time) {
+	v := reflect.ValueOf(entity)
+	if v.Kind() != reflect.Ptr || v.IsNil() {
+		return
+	}
+	field := v.Elem().FieldByName(fieldName)
+	if !field.IsValid() || !field.CanSet() {
+		return
+	}
+	if field.Type().PkgPath() == "time" && field.Type().Name() == "Time" {
+		field.Set(reflect.ValueOf(value))
+	}
+}
+
+func placeholders(n int) string {
+	if n <= 0 {
+		return ""
+	}
+	parts := make([]string, n)
+	for i := range parts {
+		parts[i] = "?"
+	}
+	return strings.Join(parts, ", ")
+}
+
+func dedupeStrings(in []string) []string {
+	seen := make(map[string]struct{}, len(in))
+	out := make([]string, 0, len(in))
+	for _, v := range in {
+		key := strings.TrimSpace(v)
+		if key == "" {
+			continue
+		}
+		if _, exists := seen[key]; exists {
+			continue
+		}
+		seen[key] = struct{}{}
+		out = append(out, key)
+	}
+	return out
+}
+
+func valueForSQL(v reflect.Value) interface{} {
+	if v.Kind() == reflect.Ptr {
+		if v.IsNil() {
+			return nil
+		}
+		return valueForSQL(v.Elem())
+	}
+	return v.Interface()
+}
+
+func assignDBValue(field reflect.Value, raw interface{}) error {
+	if !field.CanSet() {
+		return nil
+	}
+
+	if raw == nil {
+		field.Set(reflect.Zero(field.Type()))
+		return nil
+	}
+
+	if field.Kind() == reflect.Ptr {
+		ptr := reflect.New(field.Type().Elem())
+		if err := assignDBValue(ptr.Elem(), raw); err != nil {
+			return err
+		}
+		field.Set(ptr)
+		return nil
+	}
+
+	if field.Type().PkgPath() == "time" && field.Type().Name() == "Time" {
+		ts, err := parseDBTime(raw)
+		if err != nil {
+			return err
+		}
+		field.Set(reflect.ValueOf(ts))
+		return nil
+	}
+
+	switch field.Kind() {
+	case reflect.String:
+		switch v := raw.(type) {
+		case string:
+			field.SetString(v)
+		case []byte:
+			field.SetString(string(v))
+		default:
+			field.SetString(fmt.Sprintf("%v", raw))
+		}
+		return nil
+
+	case reflect.Bool:
+		switch v := raw.(type) {
+		case bool:
+			field.SetBool(v)
+		case int64:
+			field.SetBool(v != 0)
+		case int:
+			field.SetBool(v != 0)
+		case uint64:
+			field.SetBool(v != 0)
+		case []byte:
+			s := strings.ToLower(strings.TrimSpace(string(v)))
+			field.SetBool(s == "1" || s == "true" || s == "yes" || s == "on")
+		case string:
+			s := strings.ToLower(strings.TrimSpace(v))
+			field.SetBool(s == "1" || s == "true" || s == "yes" || s == "on")
+		default:
+			s := strings.ToLower(strings.TrimSpace(fmt.Sprintf("%v", raw)))
+			field.SetBool(s == "1" || s == "true" || s == "yes" || s == "on")
+		}
+		return nil
+
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		v, err := toInt64(raw)
+		if err != nil {
+			return err
+		}
+		field.SetInt(v)
+		return nil
+
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		v, err := toUint64(raw)
+		if err != nil {
+			return err
+		}
+		field.SetUint(v)
+		return nil
+
+	case reflect.Float32, reflect.Float64:
+		v, err := toFloat64(raw)
+		if err != nil {
+			return err
+		}
+		field.SetFloat(v)
+		return nil
+	}
+
+	val := reflect.ValueOf(raw)
+	if val.Type().AssignableTo(field.Type()) {
+		field.Set(val)
+		return nil
+	}
+	if val.Type().ConvertibleTo(field.Type()) {
+		field.Set(val.Convert(field.Type()))
+		return nil
+	}
+	return fmt.Errorf("unsupported conversion from %T to %s", raw, field.Type())
+}
+
+func parseDBTime(raw interface{}) (time.Time, error) {
+	switch v := raw.(type) {
+	case time.Time:
+		return v, nil
+	case string:
+		return parseTimeString(v)
+	case []byte:
+		return parseTimeString(string(v))
+	default:
+		return time.Time{}, fmt.Errorf("unsupported time value type %T", raw)
+	}
+}
+
+func parseTimeString(raw string) (time.Time, error) {
+	value := strings.TrimSpace(raw)
+	if value == "" {
+		return time.Time{}, nil
+	}
+	layouts := []string{
+		time.RFC3339Nano,
+		time.RFC3339,
+		"2006-01-02 15:04:05.999999999Z07:00",
+		"2006-01-02 15:04:05.999999999",
+		"2006-01-02 15:04:05",
+		"2006-01-02",
+	}
+	for _, layout := range layouts {
+		if ts, err := time.Parse(layout, value); err == nil {
+			return ts, nil
 		}
 	}
-	return false
+	return time.Time{}, fmt.Errorf("invalid time value %q", raw)
+}
+
+func toInt64(raw interface{}) (int64, error) {
+	switch v := raw.(type) {
+	case int64:
+		return v, nil
+	case int:
+		return int64(v), nil
+	case int32:
+		return int64(v), nil
+	case int16:
+		return int64(v), nil
+	case int8:
+		return int64(v), nil
+	case uint64:
+		return int64(v), nil
+	case uint:
+		return int64(v), nil
+	case uint32:
+		return int64(v), nil
+	case uint16:
+		return int64(v), nil
+	case uint8:
+		return int64(v), nil
+	case float64:
+		return int64(v), nil
+	case float32:
+		return int64(v), nil
+	case []byte:
+		return strconv.ParseInt(strings.TrimSpace(string(v)), 10, 64)
+	case string:
+		return strconv.ParseInt(strings.TrimSpace(v), 10, 64)
+	default:
+		return 0, errors.New("invalid integer value")
+	}
+}
+
+func toUint64(raw interface{}) (uint64, error) {
+	switch v := raw.(type) {
+	case uint64:
+		return v, nil
+	case uint:
+		return uint64(v), nil
+	case uint32:
+		return uint64(v), nil
+	case uint16:
+		return uint64(v), nil
+	case uint8:
+		return uint64(v), nil
+	case int64:
+		if v < 0 {
+			return 0, errors.New("negative integer")
+		}
+		return uint64(v), nil
+	case int:
+		if v < 0 {
+			return 0, errors.New("negative integer")
+		}
+		return uint64(v), nil
+	case float64:
+		if v < 0 {
+			return 0, errors.New("negative float")
+		}
+		return uint64(v), nil
+	case float32:
+		if v < 0 {
+			return 0, errors.New("negative float")
+		}
+		return uint64(v), nil
+	case []byte:
+		return strconv.ParseUint(strings.TrimSpace(string(v)), 10, 64)
+	case string:
+		return strconv.ParseUint(strings.TrimSpace(v), 10, 64)
+	default:
+		return 0, errors.New("invalid unsigned integer value")
+	}
+}
+
+func toFloat64(raw interface{}) (float64, error) {
+	switch v := raw.(type) {
+	case float64:
+		return v, nil
+	case float32:
+		return float64(v), nil
+	case int64:
+		return float64(v), nil
+	case int:
+		return float64(v), nil
+	case uint64:
+		return float64(v), nil
+	case uint:
+		return float64(v), nil
+	case []byte:
+		return strconv.ParseFloat(strings.TrimSpace(string(v)), 64)
+	case string:
+		return strconv.ParseFloat(strings.TrimSpace(v), 64)
+	default:
+		return 0, errors.New("invalid float value")
+	}
 }

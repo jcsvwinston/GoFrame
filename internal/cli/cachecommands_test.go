@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	_ "github.com/glebarez/sqlite"
+	_ "modernc.org/sqlite"
 )
 
 func TestBuildCreateCacheTableStatementsSQLite(t *testing.T) {

@@ -8,14 +8,13 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/go-chi/chi/v5"
 	gferrors "github.com/jcsvwinston/GoFrame/pkg/errors"
 	"github.com/jcsvwinston/GoFrame/pkg/model"
 )
 
 // handleExportCSV exports all records of a model as CSV.
 func (p *Panel) handleExportCSV(w http.ResponseWriter, r *http.Request) {
-	name := chi.URLParam(r, "name")
+	name := r.PathValue("name")
 	meta, ok := p.registry.Get(name)
 	if !ok {
 		writeErr(w, gferrors.NotFound("model", name))

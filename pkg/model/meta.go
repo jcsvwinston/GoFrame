@@ -26,13 +26,13 @@ type ForeignKey struct {
 	ForeignTable string // The related table name (e.g. "users")
 }
 
-// tabler is the interface GORM uses to determine a custom table name.
+// tabler is the interface models can implement to define a custom table name.
 type tabler interface {
 	TableName() string
 }
 
 // ExtractMeta uses reflection to extract metadata from a model struct.
-// It reads storage tags (gorm/db), json, validate, and admin tags to populate FieldMeta.
+// It reads storage tags (db), json, validate, and admin tags to populate FieldMeta.
 // Embedded structs (like BaseModel) are flattened into the parent fields list.
 func ExtractMeta(model interface{}) (*ModelMeta, error) {
 	t := reflect.TypeOf(model)
@@ -159,11 +159,7 @@ func extractFieldMeta(sf reflect.StructField) FieldMeta {
 		GoType: typeName(sf.Type),
 	}
 
-	// Parse storage tags. Keep gorm compatibility and allow neutral db tags.
-	gormTag := sf.Tag.Get("gorm")
-	if gormTag != "" {
-		parseDBTag(gormTag, &f)
-	}
+	// Parse storage tags.
 	dbTag := sf.Tag.Get("db")
 	if dbTag != "" {
 		parseDBTag(dbTag, &f)
@@ -210,7 +206,7 @@ func extractFieldMeta(sf reflect.StructField) FieldMeta {
 }
 
 // parseDBTag extracts relevant settings from storage struct tags.
-// It supports both gorm-compatible and neutral db conventions.
+// It supports GoFrame's db conventions plus legacy aliases like primaryKey.
 func parseDBTag(tag string, f *FieldMeta) {
 	parts := strings.Split(tag, ";")
 	for _, p := range parts {

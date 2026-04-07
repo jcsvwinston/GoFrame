@@ -1,6 +1,6 @@
 # GoFrame CLI vs Django 6.0
 
-Reference date: 2026-04-05.
+Reference date: 2026-04-07.
 Status: Current.
 
 This document compares the current GoFrame CLI against the official Django 6.0 command list (`django-admin` / `manage.py`) and highlights:
@@ -123,5 +123,5 @@ Django contrib app commands with no direct equivalent today:
 
 This comparison focuses on built-in framework commands.
 
-- In GoFrame, some commands are intentionally more operational and SQL-first (Bun-first architecture decision).
+- In GoFrame, some commands are intentionally more operational and SQL-first (native `database/sql` architecture decision).
 - In Django, several commands depend on its Python runtime stack and contrib apps (`auth`, `staticfiles`, etc.).

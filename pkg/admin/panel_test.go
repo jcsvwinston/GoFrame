@@ -2,6 +2,7 @@ package admin
 
 import (
 	"bytes"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -12,18 +13,18 @@ import (
 	"testing"
 	"time"
 
-	"github.com/go-chi/chi/v5"
 	"github.com/jcsvwinston/GoFrame/pkg/auth"
 	"github.com/jcsvwinston/GoFrame/pkg/db"
 	"github.com/jcsvwinston/GoFrame/pkg/model"
 	"github.com/jcsvwinston/GoFrame/pkg/observe"
+	"github.com/jcsvwinston/GoFrame/pkg/router"
 )
 
 type AdminUser struct {
 	model.BaseModel
-	Email  string `gorm:"not null" json:"email" admin:"list,search"`
-	Name   string `gorm:"not null" json:"name" admin:"list,search"`
-	Active bool   `gorm:"default:true" json:"active" admin:"list,filter"`
+	Email  string `db:"column:email;required" json:"email" admin:"list,search"`
+	Name   string `db:"column:name;required" json:"name" admin:"list,search"`
+	Active bool   `db:"column:active" json:"active" admin:"list,filter"`
 }
 
 func (AdminUser) TableName() string {
@@ -31,7 +32,7 @@ func (AdminUser) TableName() string {
 }
 
 func TestPanel_CRUDWithDualEngine(t *testing.T) {
-	engines := []db.Engine{db.EngineGORM, db.EngineBun}
+	engines := []db.Engine{db.EngineSQL}
 
 	for _, engine := range engines {
 		t.Run(string(engine), func(t *testing.T) {
@@ -86,7 +87,7 @@ func TestPanel_CRUDWithDualEngine(t *testing.T) {
 }
 
 func TestPanel_ListFilterAndOrder(t *testing.T) {
-	engines := []db.Engine{db.EngineBun}
+	engines := []db.Engine{db.EngineSQL}
 
 	for _, engine := range engines {
 		t.Run(string(engine), func(t *testing.T) {
@@ -145,7 +146,7 @@ func TestPanel_ListFilterAndOrder(t *testing.T) {
 }
 
 func TestPanel_ListRejectsInvalidOrderBy(t *testing.T) {
-	panel, cleanup := setupPanelForTest(t, db.EngineBun)
+	panel, cleanup := setupPanelForTest(t, db.EngineSQL)
 	defer cleanup()
 
 	srv := httptest.NewServer(panel.Handler())
@@ -167,7 +168,7 @@ func TestPanel_ListRejectsInvalidOrderBy(t *testing.T) {
 }
 
 func TestPanel_BulkExportSelected(t *testing.T) {
-	panel, cleanup := setupPanelForTest(t, db.EngineBun)
+	panel, cleanup := setupPanelForTest(t, db.EngineSQL)
 	defer cleanup()
 
 	srv := httptest.NewServer(panel.Handler())
@@ -231,10 +232,10 @@ func TestPanel_BulkExportSelected(t *testing.T) {
 }
 
 func TestPanel_UIAssetsServedUnderPrefix(t *testing.T) {
-	panel, cleanup := setupPanelForTest(t, db.EngineBun)
+	panel, cleanup := setupPanelForTest(t, db.EngineSQL)
 	defer cleanup()
 
-	root := chi.NewRouter()
+	root := router.NewMux()
 	root.Mount("/admin", panel.Handler())
 	srv := httptest.NewServer(root)
 	defer srv.Close()
@@ -277,7 +278,7 @@ func TestPanel_UIAssetsServedUnderPrefix(t *testing.T) {
 }
 
 func TestPanel_ListSessions_WithoutSessionManager(t *testing.T) {
-	panel, cleanup := setupPanelForTest(t, db.EngineBun)
+	panel, cleanup := setupPanelForTest(t, db.EngineSQL)
 	defer cleanup()
 
 	srv := httptest.NewServer(panel.Handler())
@@ -293,7 +294,7 @@ func TestPanel_ListSessions_WithoutSessionManager(t *testing.T) {
 }
 
 func TestPanel_ListSessions_WithSessionManager(t *testing.T) {
-	panel, cleanup := setupPanelForTest(t, db.EngineBun)
+	panel, cleanup := setupPanelForTest(t, db.EngineSQL)
 	defer cleanup()
 
 	sessionManager := auth.NewSessionManager(auth.SessionConfig{
@@ -369,29 +370,12 @@ func setupPanelForTest(t *testing.T, engine db.Engine) (*Panel, func()) {
 		t.Fatalf("db.New failed: %v", err)
 	}
 
-	if engine == db.EngineBun {
-		sqlDB, err := database.SqlDB()
-		if err != nil {
-			t.Fatalf("database.SqlDB failed: %v", err)
-		}
-		_, err = sqlDB.Exec(`
-			CREATE TABLE admin_users (
-				id INTEGER PRIMARY KEY AUTOINCREMENT,
-				created_at DATETIME,
-				updated_at DATETIME,
-				deleted_at DATETIME,
-				email TEXT NOT NULL,
-				name TEXT NOT NULL,
-				active BOOLEAN
-			)
-		`)
-		if err != nil {
-			t.Fatalf("create schema failed: %v", err)
-		}
-	} else {
-		if err := database.GormDB().AutoMigrate(&AdminUser{}); err != nil {
-			t.Fatalf("automigrate failed: %v", err)
-		}
+	sqlDB, err := database.SqlDB()
+	if err != nil {
+		t.Fatalf("SqlDB failed: %v", err)
+	}
+	if err := ensureAdminUserSchema(sqlDB); err != nil {
+		t.Fatalf("schema setup failed: %v", err)
 	}
 
 	registry := model.NewRegistry()
@@ -408,6 +392,21 @@ func setupPanelForTest(t *testing.T, engine db.Engine) (*Panel, func()) {
 		_ = database.Close()
 	}
 	return panel, cleanup
+}
+
+func ensureAdminUserSchema(sqlDB *sql.DB) error {
+	_, err := sqlDB.Exec(`
+		CREATE TABLE IF NOT EXISTS admin_users (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			created_at DATETIME,
+			updated_at DATETIME,
+			deleted_at DATETIME,
+			email TEXT NOT NULL,
+			name TEXT NOT NULL,
+			active BOOLEAN NOT NULL DEFAULT 0
+		)
+	`)
+	return err
 }
 
 func createAdminUser(t *testing.T, baseURL string, payload map[string]interface{}) AdminUser {

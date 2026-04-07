@@ -12,10 +12,10 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/go-chi/chi/v5"
 	"github.com/jcsvwinston/GoFrame/pkg/auth"
 	"github.com/jcsvwinston/GoFrame/pkg/db"
 	"github.com/jcsvwinston/GoFrame/pkg/model"
+	"github.com/jcsvwinston/GoFrame/pkg/router"
 	"github.com/jcsvwinston/GoFrame/pkg/signals"
 )
 
@@ -82,36 +82,24 @@ func (p *Panel) getCRUD(meta *model.ModelMeta) (model.CRUDOperator, error) {
 		return nil, fmt.Errorf("admin.getCRUD model=%s: nil database", meta.Name)
 	}
 
-	var c model.CRUDOperator
-	switch p.db.Engine() {
-	case db.EngineBun:
-		bunDB := p.db.BunDB()
-		if bunDB == nil {
-			return nil, fmt.Errorf("admin.getCRUD model=%s: %w", meta.Name, db.ErrBunRequired)
-		}
-		c = model.NewCRUDBun(bunDB, meta, p.bus)
-	case db.EngineGORM:
-		gormDB := p.db.GormDB()
-		if gormDB == nil {
-			return nil, fmt.Errorf("admin.getCRUD model=%s: %w", meta.Name, db.ErrGORMRequired)
-		}
-		c = model.NewCRUD(gormDB, meta, p.bus)
-	default:
-		return nil, fmt.Errorf("admin.getCRUD model=%s: unsupported engine %s", meta.Name, p.db.Engine())
+	sqlDB, err := p.db.SqlDB()
+	if err != nil {
+		return nil, fmt.Errorf("admin.getCRUD model=%s: %w", meta.Name, err)
 	}
+	c := model.NewCRUD(sqlDB, meta, p.bus)
 
 	p.cruds[meta.Name] = c
 	return c, nil
 }
 
-// Handler returns a chi.Router that can be mounted on the application router.
-func (p *Panel) Handler() chi.Router {
-	r := chi.NewRouter()
+// Handler returns a *router.Mux that can be mounted on the application router.
+func (p *Panel) Handler() *router.Mux {
+	r := router.NewMux()
 
 	// Auth middleware if configured
 	if p.config.Auth != nil {
 		r.Handle("/login", p.config.Auth.LoginHandler())
-		r.Group(func(r chi.Router) {
+		r.Group(func(r *router.Mux) {
 			r.Use(p.authMiddleware)
 			p.mountRoutes(r)
 		})
@@ -122,7 +110,7 @@ func (p *Panel) Handler() chi.Router {
 	return r
 }
 
-func (p *Panel) mountRoutes(r chi.Router) {
+func (p *Panel) mountRoutes(r *router.Mux) {
 	// API routes
 	r.Get("/api/models", p.handleListModels)
 	r.Get("/api/models/{name}/schema", p.handleGetSchema)
@@ -138,8 +126,8 @@ func (p *Panel) mountRoutes(r chi.Router) {
 	// Serve embedded UI
 	uiContent, _ := fs.Sub(uiFS, "ui")
 	fileServer := http.FileServer(http.FS(uiContent))
-	r.Get("/static/*", http.StripPrefix(p.config.Prefix+"/static", fileServer).ServeHTTP)
-	r.Get("/*", p.handleSPA(uiContent))
+	r.Get("/static/{filepath...}", http.StripPrefix("/static", fileServer).ServeHTTP)
+	r.Get("/{path...}", p.handleSPA(uiContent))
 }
 
 func (p *Panel) handleSPA(fsys fs.FS) http.HandlerFunc {

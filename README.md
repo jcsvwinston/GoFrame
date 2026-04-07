@@ -7,12 +7,12 @@
 
 Enterprise-oriented web framework for Go, inspired by Django.
 
-GoFrame combines `chi` routing, Bun-first SQL access, auto-generated admin, background jobs with Asynq, and a Django-style CLI workflow (`manage.py`-like experience for Go teams).
+GoFrame combines a native router stack, SQL-first data access over `database/sql`, auto-generated admin, background jobs with Asynq, and a Django-style CLI workflow (`manage.py`-like experience for Go teams).
 
 ## Why GoFrame
 
 - Fast start, long-term structure: scaffold apps quickly and keep a clean architecture as teams grow.
-- SQL-first by design: Bun is the official runtime path, with practical CLI tools for migrations, fixtures, and schema introspection.
+- SQL-first by design: the framework runtime is built on `database/sql`, with practical CLI tools for migrations, fixtures, and schema introspection.
 - Built-in operations mindset: health checks, deploy checks, static handling, i18n flow, and release rehearsal are first-class.
 - Extensible platform: external CLI commands (`goframe-<name>`) and capability-based provider plugins (`goframe-plugin-<provider>`, legacy `goframe-mail-<driver>`).
 
@@ -140,7 +140,7 @@ GoFrame is actively developed and stable for pre-1.0 usage (`v0.x`).
 
 Current baseline includes:
 
-- Bun-first SQL runtime and migration flow
+- SQL-native runtime and migration flow
 - Admin UI v1 with strong CRUD ergonomics
 - OTel baseline (traces/metrics) and structured logging
 - Release automation with CI/rehearsal/smoke workflows
@@ -158,6 +158,7 @@ Start here:
 - [docs/QUICKSTART.md](docs/QUICKSTART.md)
 - [docs/DETAILED_TUTORIAL.md](docs/DETAILED_TUTORIAL.md)
 - [docs/DEVELOPER_MANUAL.md](docs/DEVELOPER_MANUAL.md)
+- [docs/MODELING_MULTI_DATABASE.md](docs/MODELING_MULTI_DATABASE.md)
 - [docs/PLUGIN_SDK.md](docs/PLUGIN_SDK.md)
 - [docs/PLUGIN_EXAMPLES.md](docs/PLUGIN_EXAMPLES.md)
 
@@ -178,7 +179,7 @@ Release and governance docs:
 
 ## Compatibility
 
-- Minimum supported Go: `1.23`
+- Minimum supported Go: `1.24`
 - Recommended for development/release: `1.26.x`
 - Core-supported SQL URLs: `sqlite://`, `postgres://`/`postgresql://`, `mysql://`
 - Planned expansion track: MS SQL Server and Oracle (currently exploratory, not first-class runtime support)

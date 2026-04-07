@@ -2,19 +2,18 @@ package db
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"testing"
 
 	"github.com/jcsvwinston/GoFrame/pkg/observe"
-	"github.com/uptrace/bun"
-	"gorm.io/gorm"
 )
 
 func newTestDB(t *testing.T) *DB {
 	t.Helper()
 	logger := observe.NewLogger("error", "text")
 	cfg := Config{
-		Engine:          EngineGORM,
+		Engine:          EngineSQL,
 		DatabaseURL:     "sqlite://:memory:",
 		DatabaseMaxOpen: 1,
 		DatabaseMaxIdle: 1,
@@ -23,28 +22,11 @@ func newTestDB(t *testing.T) *DB {
 	if err != nil {
 		t.Fatalf("failed to create test DB: %v", err)
 	}
-	t.Cleanup(func() { d.Close() })
-	return d
-}
-
-func newTestBunDB(t *testing.T) *DB {
-	t.Helper()
-	logger := observe.NewLogger("error", "text")
-	cfg := Config{
-		Engine:          EngineBun,
-		DatabaseURL:     "sqlite://:memory:",
-		DatabaseMaxOpen: 1,
-		DatabaseMaxIdle: 1,
-	}
-	d, err := New(cfg, logger)
-	if err != nil {
-		t.Fatalf("failed to create test Bun DB: %v", err)
-	}
 	t.Cleanup(func() { _ = d.Close() })
 	return d
 }
 
-func TestNew_DefaultEngineIsBun(t *testing.T) {
+func TestNew_DefaultEngineIsSQL(t *testing.T) {
 	logger := observe.NewLogger("error", "text")
 	d, err := New(Config{
 		DatabaseURL:     "sqlite://:memory:",
@@ -56,34 +38,19 @@ func TestNew_DefaultEngineIsBun(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = d.Close() })
 
-	if d.BunDB() == nil {
-		t.Fatal("BunDB() should not be nil")
-	}
-	if d.Engine() != EngineBun {
-		t.Fatalf("expected engine %s, got %s", EngineBun, d.Engine())
+	if d.Engine() != EngineSQL {
+		t.Fatalf("expected engine %s, got %s", EngineSQL, d.Engine())
 	}
 }
 
-func TestNew_Bun_SQLiteMemory(t *testing.T) {
-	d := newTestBunDB(t)
-	if d.BunDB() == nil {
-		t.Fatal("BunDB() should not be nil")
-	}
-	if d.GormDB() != nil {
-		t.Fatal("GormDB() should be nil for bun engine")
-	}
-	if d.Engine() != EngineBun {
-		t.Fatalf("expected engine %s, got %s", EngineBun, d.Engine())
-	}
-}
-
-func TestNew_GORM_SQLiteMemory(t *testing.T) {
-	d := newTestDB(t)
-	if d.GormDB() == nil {
-		t.Fatal("GormDB() should not be nil")
-	}
-	if d.Engine() != EngineGORM {
-		t.Fatalf("expected engine %s, got %s", EngineGORM, d.Engine())
+func TestNew_UnsupportedEngine(t *testing.T) {
+	logger := observe.NewLogger("error", "text")
+	_, err := New(Config{
+		Engine:      "bun",
+		DatabaseURL: "sqlite://:memory:",
+	}, logger)
+	if !errors.Is(err, ErrUnsupportedEngine) {
+		t.Fatalf("expected ErrUnsupportedEngine, got %v", err)
 	}
 }
 
@@ -96,12 +63,17 @@ func TestHealth(t *testing.T) {
 
 func TestTx_Commit(t *testing.T) {
 	d := newTestDB(t)
+	sqlDB, err := d.SqlDB()
+	if err != nil {
+		t.Fatalf("SqlDB failed: %v", err)
+	}
+	if _, err := sqlDB.Exec("CREATE TABLE tx_test (id INTEGER PRIMARY KEY, name TEXT)"); err != nil {
+		t.Fatalf("create table failed: %v", err)
+	}
 
-	// Create a test table
-	d.GormDB().Exec("CREATE TABLE tx_test (id INTEGER PRIMARY KEY, name TEXT)")
-
-	err := d.Tx(context.Background(), func(tx *gorm.DB) error {
-		return nil
+	err = d.Tx(context.Background(), func(tx *sql.Tx) error {
+		_, err := tx.Exec("INSERT INTO tx_test (name) VALUES (?)", "ok")
+		return err
 	})
 	if err != nil {
 		t.Fatalf("Tx should succeed: %v", err)
@@ -110,9 +82,18 @@ func TestTx_Commit(t *testing.T) {
 
 func TestTx_Rollback(t *testing.T) {
 	d := newTestDB(t)
-	d.GormDB().Exec("CREATE TABLE tx_test2 (id INTEGER PRIMARY KEY, name TEXT)")
+	sqlDB, err := d.SqlDB()
+	if err != nil {
+		t.Fatalf("SqlDB failed: %v", err)
+	}
+	if _, err := sqlDB.Exec("CREATE TABLE tx_test2 (id INTEGER PRIMARY KEY, name TEXT)"); err != nil {
+		t.Fatalf("create table failed: %v", err)
+	}
 
-	err := d.Tx(context.Background(), func(tx *gorm.DB) error {
+	err = d.Tx(context.Background(), func(tx *sql.Tx) error {
+		if _, err := tx.Exec("INSERT INTO tx_test2 (name) VALUES (?)", "rollback"); err != nil {
+			return err
+		}
 		return errors.New("force rollback")
 	})
 	if err == nil {
@@ -120,48 +101,35 @@ func TestTx_Rollback(t *testing.T) {
 	}
 }
 
-func TestTx_OnBunEngine_ReturnsErrGORMRequired(t *testing.T) {
-	d := newTestBunDB(t)
-	err := d.Tx(context.Background(), func(tx *gorm.DB) error { return nil })
-	if !errors.Is(err, ErrGORMRequired) {
-		t.Fatalf("expected ErrGORMRequired, got %v", err)
+func TestTx_WithNilReceiver(t *testing.T) {
+	var d *DB
+	err := d.Tx(context.Background(), func(tx *sql.Tx) error { return nil })
+	if !errors.Is(err, ErrSQLRequired) {
+		t.Fatalf("expected ErrSQLRequired, got %v", err)
 	}
 }
 
-func TestTxBun_OnGORMEngine_ReturnsErrBunRequired(t *testing.T) {
-	d := newTestDB(t)
-	err := d.TxBun(context.Background(), func(tx bun.Tx) error { return nil })
-	if !errors.Is(err, ErrBunRequired) {
-		t.Fatalf("expected ErrBunRequired, got %v", err)
-	}
-}
-
-func TestTxBun_Success(t *testing.T) {
-	d := newTestBunDB(t)
-	if err := d.TxBun(context.Background(), func(tx bun.Tx) error { return nil }); err != nil {
-		t.Fatalf("expected TxBun success, got %v", err)
-	}
-}
-
-func TestDialectorFromURL_Unsupported(t *testing.T) {
-	_, err := dialectorFromURL("ftp://something")
+func TestOpenSQLDB_Unsupported(t *testing.T) {
+	_, err := openSQLDB("ftp://something")
 	if err == nil {
 		t.Fatal("expected error for unsupported scheme")
 	}
 }
 
-func TestDialectorFromURL_Sqlite(t *testing.T) {
-	d, err := dialectorFromURL("sqlite://:memory:")
+func TestOpenSQLDB_Sqlite(t *testing.T) {
+	d, err := openSQLDB("sqlite://:memory:")
 	if err != nil || d == nil {
-		t.Fatalf("expected valid dialector, got err=%v", err)
+		t.Fatalf("expected valid SQL DB, got err=%v", err)
 	}
+	_ = d.Close()
 }
 
-func TestDialectorFromURL_DbFile(t *testing.T) {
-	d, err := dialectorFromURL("test.db")
+func TestOpenSQLDB_DbFile(t *testing.T) {
+	d, err := openSQLDB("test.db")
 	if err != nil || d == nil {
-		t.Fatalf("expected valid dialector for .db file, got err=%v", err)
+		t.Fatalf("expected valid SQL DB for .db file, got err=%v", err)
 	}
+	_ = d.Close()
 }
 
 func TestMySQLURLToDSN(t *testing.T) {

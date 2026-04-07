@@ -13,6 +13,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/jcsvwinston/GoFrame/pkg/plugins"
 )
 
 type senderFunc func(context.Context, Message) error
@@ -229,19 +231,7 @@ func TestNewSender_UsesCapabilityPluginForMailSend(t *testing.T) {
 
 	dir := t.TempDir()
 	pluginPath := filepath.Join(dir, "goframe-plugin-mailgun")
-	writeMailExecutable(t, pluginPath, `#!/bin/sh
-if [ "$1" = "capabilities" ] && [ "$2" = "--json" ]; then
-  echo '{"capabilities":["mail.send"]}'
-  exit 0
-fi
-if [ "$1" = "capabilities" ]; then
-  echo "mail.send"
-  exit 0
-fi
-cat >/dev/null
-echo '{"version":"v1","ok":true,"output":{"accepted":true}}'
-exit 0
-`)
+	writeMailExecutable(t, pluginPath, "#!/bin/sh\nexit 0\n")
 
 	previousPath := os.Getenv("PATH")
 	if err := os.Setenv("PATH", dir+string(os.PathListSeparator)+previousPath); err != nil {
@@ -250,6 +240,9 @@ exit 0
 	defer func() {
 		_ = os.Setenv("PATH", previousPath)
 	}()
+	host := &fakePluginHost{}
+	SetPluginHost(host)
+	defer SetPluginHost(nil)
 
 	sender, err := NewSender(Config{Driver: "mailgun", Timeout: time.Second})
 	if err != nil {
@@ -263,6 +256,12 @@ exit 0
 		Body:    "world",
 	}); err != nil {
 		t.Fatalf("capability plugin send failed: %v", err)
+	}
+	if host.probeCalls == 0 {
+		t.Fatal("expected ProbeCapabilities to be called")
+	}
+	if host.execCalls == 0 {
+		t.Fatal("expected ExecuteRequest to be called")
 	}
 }
 
@@ -308,6 +307,71 @@ exit 42
 		Body:    "world",
 	}); err != nil {
 		t.Fatalf("legacy fallback send failed: %v", err)
+	}
+}
+
+type fakePluginHost struct {
+	probeCalls int
+	execCalls  int
+}
+
+func (f *fakePluginHost) CollectInventory(string, []string, time.Duration) []plugins.Descriptor {
+	return nil
+}
+
+func (f *fakePluginHost) ProbeCapabilities(context.Context, string, time.Duration) ([]string, error) {
+	f.probeCalls++
+	return []string{plugins.CapabilityMailSend}, nil
+}
+
+func (f *fakePluginHost) ExecuteRequest(context.Context, string, plugins.RequestEnvelope, time.Duration) (plugins.ResponseEnvelope, error) {
+	f.execCalls++
+	return plugins.ResponseEnvelope{
+		Version: plugins.EnvelopeVersionV1,
+		OK:      true,
+		Output:  json.RawMessage(`{"accepted":true}`),
+	}, nil
+}
+
+func TestSetPluginHost_AllowsRuntimeOverride(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("shell-based executable test is unix-only")
+	}
+
+	dir := t.TempDir()
+	pluginPath := filepath.Join(dir, "goframe-plugin-mailgun")
+	writeMailExecutable(t, pluginPath, "#!/bin/sh\nexit 0\n")
+
+	previousPath := os.Getenv("PATH")
+	if err := os.Setenv("PATH", dir+string(os.PathListSeparator)+previousPath); err != nil {
+		t.Fatalf("set PATH failed: %v", err)
+	}
+	defer func() {
+		_ = os.Setenv("PATH", previousPath)
+	}()
+
+	host := &fakePluginHost{}
+	SetPluginHost(host)
+	defer SetPluginHost(nil)
+
+	sender, err := NewSender(Config{Driver: "mailgun", Timeout: time.Second})
+	if err != nil {
+		t.Fatalf("NewSender failed: %v", err)
+	}
+
+	if err := sender.Send(context.Background(), Message{
+		From:    "noreply@example.com",
+		To:      []string{"dev@example.com"},
+		Subject: "hello",
+		Body:    "world",
+	}); err != nil {
+		t.Fatalf("send failed: %v", err)
+	}
+	if host.probeCalls == 0 {
+		t.Fatal("expected ProbeCapabilities to be called on overridden plugin host")
+	}
+	if host.execCalls == 0 {
+		t.Fatal("expected ExecuteRequest to be called on overridden plugin host")
 	}
 }
 

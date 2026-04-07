@@ -12,7 +12,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/go-chi/chi/v5"
 	"github.com/jcsvwinston/GoFrame/pkg/app"
 )
 
@@ -56,7 +55,7 @@ func runRoutes(args []string, _ io.Reader, stdout, stderr io.Writer) error {
 	}()
 
 	routes := make([]routeEntry, 0, 16)
-	if err := chi.Walk(a.Router, func(method string, route string, _ http.Handler, middlewares ...func(http.Handler) http.Handler) error {
+	if err := a.Router.Walk(func(method string, route string, _ http.Handler, middlewares ...func(http.Handler) http.Handler) error {
 		if *pathPrefix != "" && !strings.HasPrefix(route, *pathPrefix) {
 			return nil
 		}

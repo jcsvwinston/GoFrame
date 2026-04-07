@@ -1,6 +1,6 @@
 # Detailed Tutorial: Build an App with GoFrame (MVC + API)
 
-Reference date: 2026-04-05.
+Reference date: 2026-04-07.
 Status: Current.
 
 This tutorial walks through the full flow to build a real app with GoFrame:
@@ -37,7 +37,7 @@ myapp/
 `goframe.yaml`:
 
 ```yaml
-database_engine: bun
+database_engine: sql
 database_url: sqlite://app.db
 host: 0.0.0.0
 port: 8080
@@ -80,9 +80,9 @@ import "github.com/jcsvwinston/GoFrame/pkg/model"
 
 type Project struct {
 	model.BaseModel
-	Name        string `db:"name" validate:"required" admin:"list,search"`
-	Description string `db:"description" admin:"list"`
-	Active      bool   `db:"active" admin:"list,filter"`
+	Name        string `db:"column:name;required" validate:"required" admin:"list,search"`
+	Description string `db:"column:description" admin:"list"`
+	Active      bool   `db:"column:active" admin:"list,filter"`
 }
 ```
 
@@ -141,7 +141,6 @@ import (
 	"log"
 	"net/http"
 
-	"github.com/go-chi/chi/v5"
 	"github.com/jcsvwinston/GoFrame/pkg/app"
 	"github.com/jcsvwinston/GoFrame/pkg/model"
 	"myapp/models"
@@ -167,24 +166,24 @@ func main() {
 		log.Fatal(err)
 	}
 
-	registerAPIRoutes(a.Router)
-	registerMVCRoutes(a.Router)
+	registerAPIRoutes(a)
+	registerMVCRoutes(a)
 
 	log.Println("server: http://localhost:8080")
 	log.Println("admin:  http://localhost:8080/admin")
 	log.Fatal(a.Run(context.Background()))
 }
 
-func registerAPIRoutes(r chi.Router) {
-	r.Get("/api/health", func(w http.ResponseWriter, _ *http.Request) {
+func registerAPIRoutes(a *app.App) {
+	a.Router.Get("/api/health", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"status":"ok"}`))
 	})
 }
 
-func registerMVCRoutes(r chi.Router) {
+func registerMVCRoutes(a *app.App) {
 	tpl := template.Must(template.ParseFiles("templates/home.html"))
-	r.Get("/", func(w http.ResponseWriter, _ *http.Request) {
+	a.Router.Get("/", func(w http.ResponseWriter, _ *http.Request) {
 		_ = tpl.Execute(w, map[string]any{
 			"Title": "MyApp",
 		})

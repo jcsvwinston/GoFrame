@@ -1,13 +1,13 @@
 # Quickstart
 
-Reference date: 2026-04-05.
+Reference date: 2026-04-07.
 Status: Current.
 
 This guide gets you from zero to a running GoFrame app quickly.
 
 ## Prerequisites
 
-- Go `1.23+`
+- Go `1.24+`
 - Optional Redis (only if running worker/task features)
 
 ## 1. Install CLI

@@ -2,7 +2,9 @@ package admin
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -11,8 +13,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/go-chi/chi/v5"
-	"github.com/jcsvwinston/GoFrame/pkg/db"
 	gferrors "github.com/jcsvwinston/GoFrame/pkg/errors"
 	"github.com/jcsvwinston/GoFrame/pkg/model"
 )
@@ -52,7 +52,7 @@ func (p *Panel) handleListModels(w http.ResponseWriter, r *http.Request) {
 
 // handleGetSchema returns metadata for a specific model.
 func (p *Panel) handleGetSchema(w http.ResponseWriter, r *http.Request) {
-	name := chi.URLParam(r, "name")
+	name := r.PathValue("name")
 	meta, ok := p.registry.Get(name)
 	if !ok {
 		writeErr(w, gferrors.NotFound("model", name))
@@ -106,7 +106,7 @@ func (p *Panel) handleGetSchema(w http.ResponseWriter, r *http.Request) {
 
 // handleListRecords returns a paginated list of records for a model.
 func (p *Panel) handleListRecords(w http.ResponseWriter, r *http.Request) {
-	name := chi.URLParam(r, "name")
+	name := r.PathValue("name")
 	meta, ok := p.registry.Get(name)
 	if !ok {
 		writeErr(w, gferrors.NotFound("model", name))
@@ -156,8 +156,8 @@ func (p *Panel) handleListRecords(w http.ResponseWriter, r *http.Request) {
 
 // handleGetRecord returns a single record by ID.
 func (p *Panel) handleGetRecord(w http.ResponseWriter, r *http.Request) {
-	name := chi.URLParam(r, "name")
-	idStr := chi.URLParam(r, "id")
+	name := r.PathValue("name")
+	idStr := r.PathValue("id")
 
 	meta, ok := p.registry.Get(name)
 	if !ok {
@@ -187,7 +187,7 @@ func (p *Panel) handleGetRecord(w http.ResponseWriter, r *http.Request) {
 
 // handleCreateRecord creates a new record.
 func (p *Panel) handleCreateRecord(w http.ResponseWriter, r *http.Request) {
-	name := chi.URLParam(r, "name")
+	name := r.PathValue("name")
 	meta, ok := p.registry.Get(name)
 	if !ok {
 		writeErr(w, gferrors.NotFound("model", name))
@@ -226,8 +226,8 @@ func (p *Panel) handleCreateRecord(w http.ResponseWriter, r *http.Request) {
 
 // handleUpdateRecord updates an existing record.
 func (p *Panel) handleUpdateRecord(w http.ResponseWriter, r *http.Request) {
-	name := chi.URLParam(r, "name")
-	idStr := chi.URLParam(r, "id")
+	name := r.PathValue("name")
+	idStr := r.PathValue("id")
 
 	meta, ok := p.registry.Get(name)
 	if !ok {
@@ -266,8 +266,8 @@ func (p *Panel) handleUpdateRecord(w http.ResponseWriter, r *http.Request) {
 
 // handleDeleteRecord deletes a record by ID.
 func (p *Panel) handleDeleteRecord(w http.ResponseWriter, r *http.Request) {
-	name := chi.URLParam(r, "name")
-	idStr := chi.URLParam(r, "id")
+	name := r.PathValue("name")
+	idStr := r.PathValue("id")
 
 	meta, ok := p.registry.Get(name)
 	if !ok {
@@ -300,7 +300,7 @@ func (p *Panel) handleDeleteRecord(w http.ResponseWriter, r *http.Request) {
 
 // handleBulkAction processes bulk operations (delete, export).
 func (p *Panel) handleBulkAction(w http.ResponseWriter, r *http.Request) {
-	name := chi.URLParam(r, "name")
+	name := r.PathValue("name")
 	meta, ok := p.registry.Get(name)
 	if !ok {
 		writeErr(w, gferrors.NotFound("model", name))
@@ -365,39 +365,24 @@ func (p *Panel) modelCount(ctx context.Context, meta *model.ModelMeta) (int64, e
 		return 0, fmt.Errorf("nil database")
 	}
 
-	switch p.db.Engine() {
-	case db.EngineBun:
-		bunDB := p.db.BunDB()
-		if bunDB == nil {
-			return 0, db.ErrBunRequired
-		}
-		query := bunDB.NewSelect().Table(meta.Table)
-		if hasDeletedAt(meta) {
-			query = query.Where("deleted_at IS NULL")
-		}
-		count, err := query.Count(ctx)
-		if err != nil {
-			return 0, err
-		}
-		return int64(count), nil
-
-	case db.EngineGORM:
-		gormDB := p.db.GormDB()
-		if gormDB == nil {
-			return 0, db.ErrGORMRequired
-		}
-		query := gormDB.Table(meta.Table)
-		if hasDeletedAt(meta) {
-			query = query.Where("deleted_at IS NULL")
-		}
-		var count int64
-		if err := query.Count(&count).Error; err != nil {
-			return 0, err
-		}
-		return count, nil
-	default:
-		return 0, fmt.Errorf("unsupported engine %s", p.db.Engine())
+	sqlDB, err := p.db.SqlDB()
+	if err != nil {
+		return 0, err
 	}
+
+	query := fmt.Sprintf("SELECT COUNT(*) FROM %s", meta.Table)
+	if hasDeletedAt(meta) {
+		query += " WHERE deleted_at IS NULL"
+	}
+
+	var count int64
+	if err := sqlDB.QueryRowContext(ctx, query).Scan(&count); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return 0, nil
+		}
+		return 0, err
+	}
+	return count, nil
 }
 
 func hasDeletedAt(meta *model.ModelMeta) bool {

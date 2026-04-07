@@ -9,7 +9,7 @@ import (
 	"github.com/jcsvwinston/GoFrame/pkg/observe"
 )
 
-func TestSQLMatrix_BunConnectAndPing(t *testing.T) {
+func TestSQLMatrix_ConnectAndPing(t *testing.T) {
 	rawURL := strings.TrimSpace(os.Getenv("GOFRAME_SQL_MATRIX_URL"))
 	if rawURL == "" {
 		t.Skip("GOFRAME_SQL_MATRIX_URL is not set; skipping SQL matrix integration test")
@@ -22,7 +22,7 @@ func TestSQLMatrix_BunConnectAndPing(t *testing.T) {
 
 	logger := observe.NewLogger("error", "text")
 	database, err := New(Config{
-		Engine:      EngineBun,
+		Engine:      EngineSQL,
 		DatabaseURL: rawURL,
 	}, logger)
 	if err != nil {
@@ -56,7 +56,7 @@ func TestSQLMatrix_UnsupportedExploratoryURL(t *testing.T) {
 
 	logger := observe.NewLogger("error", "text")
 	_, err := New(Config{
-		Engine:      EngineBun,
+		Engine:      EngineSQL,
 		DatabaseURL: rawURL,
 	}, logger)
 	if err == nil {
@@ -64,23 +64,6 @@ func TestSQLMatrix_UnsupportedExploratoryURL(t *testing.T) {
 	}
 	if !strings.Contains(strings.ToLower(err.Error()), "unsupported database url scheme") {
 		t.Fatalf("unexpected exploratory URL error for %q: %v", rawURL, err)
-	}
-}
-
-func TestDialectorFromURL_UnsupportedEnterpriseCandidates(t *testing.T) {
-	candidates := []string{
-		"sqlserver://sa:Password123!@localhost:1433/master",
-		"mssql://sa:Password123!@localhost:1433/master",
-		"oracle://system:oracle@localhost:1521/FREEPDB1",
-	}
-
-	for _, rawURL := range candidates {
-		t.Run(rawURL, func(t *testing.T) {
-			_, err := dialectorFromURL(rawURL)
-			if err == nil {
-				t.Fatalf("expected unsupported dialector URL error for %q", rawURL)
-			}
-		})
 	}
 }
 
@@ -96,23 +79,6 @@ func TestOpenSQLDB_UnsupportedEnterpriseCandidates(t *testing.T) {
 			_, err := openSQLDB(rawURL)
 			if err == nil {
 				t.Fatalf("expected unsupported sql DB URL error for %q", rawURL)
-			}
-		})
-	}
-}
-
-func TestBunDialectFromURL_UnsupportedEnterpriseCandidates(t *testing.T) {
-	candidates := []string{
-		"sqlserver://sa:Password123!@localhost:1433/master",
-		"mssql://sa:Password123!@localhost:1433/master",
-		"oracle://system:oracle@localhost:1521/FREEPDB1",
-	}
-
-	for _, rawURL := range candidates {
-		t.Run(rawURL, func(t *testing.T) {
-			_, err := bunDialectFromURL(rawURL)
-			if err == nil {
-				t.Fatalf("expected unsupported bun dialect URL error for %q", rawURL)
 			}
 		})
 	}

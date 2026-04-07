@@ -17,8 +17,8 @@ func TestLoadConfig_Defaults(t *testing.T) {
 	if cfg.DatabaseURL != "sqlite://goframe.db" {
 		t.Errorf("expected sqlite://goframe.db, got %s", cfg.DatabaseURL)
 	}
-	if cfg.DatabaseEngine != "bun" {
-		t.Errorf("expected database engine bun, got %s", cfg.DatabaseEngine)
+	if cfg.DatabaseEngine != "sql" {
+		t.Errorf("expected database engine sql, got %s", cfg.DatabaseEngine)
 	}
 	if cfg.LogLevel != "info" {
 		t.Errorf("expected log level info, got %s", cfg.LogLevel)

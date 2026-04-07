@@ -20,24 +20,29 @@ const (
 )
 
 type externalSender struct {
-	driver  string
-	binary  string
-	timeout time.Duration
-	mode    externalSenderMode
+	driver     string
+	binary     string
+	timeout    time.Duration
+	mode       externalSenderMode
+	pluginHost plugins.Host
 }
 
-func newExternalSender(driver, binary string, timeout time.Duration, mode externalSenderMode) Sender {
+func newExternalSender(driver, binary string, timeout time.Duration, mode externalSenderMode, host plugins.Host) Sender {
 	if timeout <= 0 {
 		timeout = 10 * time.Second
 	}
 	if mode == "" {
 		mode = externalSenderModeLegacy
 	}
+	if host == nil {
+		host = plugins.LocalHost{}
+	}
 	return &externalSender{
-		driver:  driver,
-		binary:  binary,
-		timeout: timeout,
-		mode:    mode,
+		driver:     driver,
+		binary:     binary,
+		timeout:    timeout,
+		mode:       mode,
+		pluginHost: host,
 	}
 }
 
@@ -73,7 +78,7 @@ func (s *externalSender) sendCapability(ctx context.Context, msg Message) error 
 		return fmt.Errorf("build plugin request envelope: %w", err)
 	}
 
-	response, err := plugins.ExecuteRequest(ctx, s.binary, request, s.timeout)
+	response, err := s.pluginHost.ExecuteRequest(ctx, s.binary, request, s.timeout)
 	if err != nil {
 		return fmt.Errorf("capability plugin %s failed: %w", s.binary, err)
 	}

@@ -49,6 +49,9 @@ type Config struct {
 var (
 	providersMu sync.RWMutex
 	providers   = map[string]ProviderFactory{}
+
+	pluginHostMu sync.RWMutex
+	pluginHost   plugins.Host = plugins.LocalHost{}
 )
 
 func init() {
@@ -90,6 +93,27 @@ func RegisteredProviders() []string {
 	return out
 }
 
+// SetPluginHost overrides the plugin runtime host used for external providers.
+// Passing nil resets the default local executable host.
+func SetPluginHost(host plugins.Host) {
+	if host == nil {
+		host = plugins.LocalHost{}
+	}
+	pluginHostMu.Lock()
+	pluginHost = host
+	pluginHostMu.Unlock()
+}
+
+func currentPluginHost() plugins.Host {
+	pluginHostMu.RLock()
+	host := pluginHost
+	pluginHostMu.RUnlock()
+	if host == nil {
+		return plugins.LocalHost{}
+	}
+	return host
+}
+
 // NewSender resolves and constructs a mail sender for the given configuration.
 //
 // Resolution order:
@@ -112,19 +136,20 @@ func NewSender(cfg Config) (Sender, error) {
 	if factory != nil {
 		return factory(cfg)
 	}
+	host := currentPluginHost()
 
 	genericBinary := plugins.GenericBinaryPrefix + normalized
 	if path, err := exec.LookPath(genericBinary); err == nil {
-		if capabilities, capErr := plugins.ProbeCapabilities(context.Background(), path, cfg.Timeout); capErr == nil {
+		if capabilities, capErr := host.ProbeCapabilities(context.Background(), path, cfg.Timeout); capErr == nil {
 			if containsCapability(capabilities, plugins.CapabilityMailSend) {
-				return newExternalSender(normalized, path, cfg.Timeout, externalSenderModeCapability), nil
+				return newExternalSender(normalized, path, cfg.Timeout, externalSenderModeCapability, host), nil
 			}
 		}
 	}
 
 	legacyBinary := plugins.LegacyMailBinaryPrefix + normalized
 	if path, err := exec.LookPath(legacyBinary); err == nil {
-		return newExternalSender(normalized, path, cfg.Timeout, externalSenderModeLegacy), nil
+		return newExternalSender(normalized, path, cfg.Timeout, externalSenderModeLegacy, host), nil
 	}
 
 	return nil, fmt.Errorf(

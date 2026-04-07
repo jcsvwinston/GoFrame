@@ -112,7 +112,7 @@ func writeSQLMatrixConfig(t *testing.T, dir, rawURL string) string {
 	t.Helper()
 	path := filepath.Join(dir, "goframe.yaml")
 	body := fmt.Sprintf(
-		"database_engine: bun\n"+
+		"database_engine: sql\n"+
 			"database_url: %s\n"+
 			"log_level: error\n"+
 			"log_format: text\n",

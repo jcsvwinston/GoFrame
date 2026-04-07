@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	_ "github.com/glebarez/sqlite"
+	_ "modernc.org/sqlite"
 )
 
 func newTestSQLSessionStore(t *testing.T) (*SQLSessionStore, *sql.DB) {

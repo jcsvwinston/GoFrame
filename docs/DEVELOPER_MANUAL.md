@@ -1,6 +1,6 @@
 # GoFrame Developer Manual
 
-Reference date: 2026-04-05.
+Reference date: 2026-04-07.
 Status: Current.
 
 This is the main guide to build, operate, and deploy applications with GoFrame.
@@ -12,14 +12,14 @@ GoFrame is a Go web framework inspired by Django, focused on:
 - MVC + REST API applications
 - integrated admin panel
 - operational lifecycle CLI (scaffold, migrations, seed, inspection)
-- Bun-first SQL foundation with a stable model contract
+- SQL-native foundation with a stable model contract
 
 ## 2. Current Scope
 
 Current GoFrame scope includes:
 
 - `pkg/app`: application container (config, logger, router, DB, admin, lifecycle)
-- `pkg/db`: SQL connectivity (Bun-first, GORM-compatible), health checks, file-based SQL migrations
+- `pkg/db`: SQL connectivity (`database/sql` runtime), health checks, file-based SQL migrations
 - `pkg/model`: model registry, reflection-based metadata, generic CRUD, hooks
 - `pkg/admin`: embedded admin panel (SPA + CRUD API)
 - `pkg/tasks`: async task base layer with Asynq
@@ -33,13 +33,14 @@ Related documents:
 - `docs/QUICKSTART.md`
 - `docs/DETAILED_TUTORIAL.md`
 - `docs/PROJECT_LAYOUT.md`
+- `docs/MODELING_MULTI_DATABASE.md`
 - `docs/RELEASE_CHECKLIST.md`
 
 ## 3. Requirements
 
 ## 3.1 Runtime and toolchain
 
-- Minimum supported Go version: `1.23`
+- Minimum supported Go version: `1.24`
 - Recommended Go for development/release: `1.26.x`
 - Node.js: required for admin UI syntax checks in CI/rehearsal
 
@@ -176,7 +177,7 @@ Key methods:
 
 ## 6.2 Router and lifecycle
 
-- `chi`-based router
+- native GoFrame router stack over `net/http`
 - `Run` starts HTTP server
 - clean shutdown by context cancel or `SIGINT/SIGTERM`
 
@@ -189,7 +190,7 @@ Key methods:
 Minimum example:
 
 ```yaml
-database_engine: bun
+database_engine: sql
 database_url: sqlite://app.db
 redis_url: redis://127.0.0.1:6379/0
 session_store: memory
@@ -259,7 +260,7 @@ type Project struct {
 
 ## 8.2 Supported tags
 
-`db` / `gorm` (storage metadata):
+`db` (storage metadata):
 
 - `column:<name>`
 - `primaryKey` / `pk`

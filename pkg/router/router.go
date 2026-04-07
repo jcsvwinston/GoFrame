@@ -1,18 +1,17 @@
 // Package router provides an HTTP router for the GoFrame framework, built on
-// top of chi/v5. It includes a default middleware stack, response helpers,
-// CSRF protection, and request binding with validation.
+// top of Go's standard net/http.ServeMux (Go 1.22+). It includes a default
+// middleware stack, response helpers, CSRF protection, and request binding
+// with validation.
 package router
 
 import (
 	"log/slog"
 	"time"
-
-	"github.com/go-chi/chi/v5"
 )
 
-// Router wraps a chi.Router with GoFrame conventions and a default middleware stack.
+// Router wraps a Mux with GoFrame conventions and a default middleware stack.
 type Router struct {
-	chi.Router
+	*Mux
 	logger *slog.Logger
 }
 
@@ -95,7 +94,7 @@ func New(logger *slog.Logger, opts ...Option) *Router {
 		fn(o)
 	}
 
-	mux := chi.NewRouter()
+	mux := NewMux()
 
 	// Apply default middleware stack
 	for _, mw := range DefaultStack(logger, o) {
@@ -103,7 +102,7 @@ func New(logger *slog.Logger, opts ...Option) *Router {
 	}
 
 	return &Router{
-		Router: mux,
+		Mux:    mux,
 		logger: logger,
 	}
 }

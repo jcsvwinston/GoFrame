@@ -12,8 +12,8 @@ import (
 	"strings"
 	"testing"
 
-	_ "github.com/glebarez/sqlite"
 	"github.com/jcsvwinston/GoFrame/pkg/auth"
+	_ "modernc.org/sqlite"
 )
 
 func TestRun_MigrateCreate(t *testing.T) {
@@ -2004,7 +2004,7 @@ func TestRun_DiffSettings(t *testing.T) {
 	dbPath := filepath.Join(dir, "app.db")
 	cfgPath := filepath.Join(dir, "goframe.yaml")
 	writeFile(t, cfgPath, fmt.Sprintf(
-		"database_engine: bun\n"+
+		"database_engine: sql\n"+
 			"database_url: sqlite://%s\n"+
 			"port: 9090\n"+
 			"log_format: text\n"+
@@ -2043,7 +2043,7 @@ func TestRun_CheckDeploy(t *testing.T) {
 	dbPath := filepath.Join(dir, "app.db")
 	cfgPath := filepath.Join(dir, "goframe.yaml")
 	writeFile(t, cfgPath, fmt.Sprintf(
-		"database_engine: bun\n"+
+		"database_engine: sql\n"+
 			"database_url: sqlite://%s\n"+
 			"env: production\n"+
 			"debug: true\n"+
@@ -2064,7 +2064,7 @@ func TestRun_CheckDeploy(t *testing.T) {
 
 	secureCfgPath := filepath.Join(dir, "goframe_secure.yaml")
 	writeFile(t, secureCfgPath, fmt.Sprintf(
-		"database_engine: bun\n"+
+		"database_engine: sql\n"+
 			"database_url: sqlite://%s\n"+
 			"env: production\n"+
 			"debug: false\n"+
@@ -2099,7 +2099,7 @@ func TestRun_CheckDeployWarnsOnNoopMailDriver(t *testing.T) {
 	dbPath := filepath.Join(dir, "app.db")
 	cfgPath := filepath.Join(dir, "goframe.yaml")
 	writeFile(t, cfgPath, fmt.Sprintf(
-		"database_engine: bun\n"+
+		"database_engine: sql\n"+
 			"database_url: sqlite://%s\n"+
 			"env: production\n"+
 			"debug: false\n"+
@@ -2126,7 +2126,7 @@ func TestRun_CheckDeployFlagsSessionHardeningGaps(t *testing.T) {
 	dbPath := filepath.Join(dir, "app.db")
 	cfgPath := filepath.Join(dir, "goframe.yaml")
 	writeFile(t, cfgPath, fmt.Sprintf(
-		"database_engine: bun\n"+
+		"database_engine: sql\n"+
 			"database_url: sqlite://%s\n"+
 			"env: production\n"+
 			"debug: false\n"+
@@ -2159,7 +2159,7 @@ func TestRun_CheckDeployFlagsRedisSessionStoreWithoutRedisURL(t *testing.T) {
 	dbPath := filepath.Join(dir, "app.db")
 	cfgPath := filepath.Join(dir, "goframe.yaml")
 	writeFile(t, cfgPath, fmt.Sprintf(
-		"database_engine: bun\n"+
+		"database_engine: sql\n"+
 			"database_url: sqlite://%s\n"+
 			"env: production\n"+
 			"debug: false\n"+
@@ -2229,7 +2229,7 @@ func TestRun_ExternalCommandPlugin(t *testing.T) {
 func writeCLIConfig(t *testing.T, dir, dbPath string) string {
 	t.Helper()
 	cfgPath := filepath.Join(dir, "goframe.yaml")
-	cfg := fmt.Sprintf("database_engine: bun\ndatabase_url: sqlite://%s\nlog_level: error\nlog_format: text\n", dbPath)
+	cfg := fmt.Sprintf("database_engine: sql\ndatabase_url: sqlite://%s\nlog_level: error\nlog_format: text\n", dbPath)
 	writeFile(t, cfgPath, cfg)
 	return cfgPath
 }
@@ -2237,7 +2237,7 @@ func writeCLIConfig(t *testing.T, dir, dbPath string) string {
 func writeCLIConfigWithEnv(t *testing.T, dir, dbPath, env string) string {
 	t.Helper()
 	cfgPath := filepath.Join(dir, "goframe.yaml")
-	cfg := fmt.Sprintf("database_engine: bun\ndatabase_url: sqlite://%s\nlog_level: error\nlog_format: text\nenv: %s\n", dbPath, env)
+	cfg := fmt.Sprintf("database_engine: sql\ndatabase_url: sqlite://%s\nlog_level: error\nlog_format: text\nenv: %s\n", dbPath, env)
 	writeFile(t, cfgPath, cfg)
 	return cfgPath
 }

@@ -256,8 +256,8 @@ func TestNewRouter(t *testing.T) {
 	if r == nil {
 		t.Fatal("New() returned nil")
 	}
-	if r.Router == nil {
-		t.Fatal("Router.Router is nil")
+	if r.Mux == nil {
+		t.Fatal("Router.Mux is nil")
 	}
 }
 

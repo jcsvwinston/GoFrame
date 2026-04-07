@@ -2,6 +2,7 @@ package model
 
 import (
 	"context"
+	"database/sql"
 	"testing"
 	"time"
 
@@ -13,24 +14,24 @@ import (
 
 type TestUser struct {
 	BaseModel
-	Email  string `gorm:"uniqueIndex;not null" json:"email" validate:"required,email" admin:"list,search"`
-	Name   string `gorm:"not null" json:"name" validate:"required" admin:"list,search"`
-	Role   string `gorm:"default:'user'" json:"role" admin:"list,filter,choices:admin|Admin;user|User;moderator|Moderator"`
-	Active bool   `gorm:"default:true" json:"active" admin:"list,filter"`
+	Email  string `db:"column:email;required" json:"email" validate:"required,email" admin:"list,search"`
+	Name   string `db:"column:name;required" json:"name" validate:"required" admin:"list,search"`
+	Role   string `db:"column:role" json:"role" admin:"list,filter,choices:admin|Admin;user|User;moderator|Moderator"`
+	Active bool   `db:"column:active" json:"active" admin:"list,filter"`
 }
 
 type TestProduct struct {
 	BaseModel
-	Name        string  `gorm:"not null" json:"name" admin:"list,search"`
-	Description string  `json:"description" admin:"list"`
-	Price       float64 `gorm:"not null" json:"price" admin:"list"`
-	CategoryID  uint    `json:"category_id"`
+	Name        string  `db:"column:name;required" json:"name" admin:"list,search"`
+	Description string  `db:"column:description" json:"description" admin:"list"`
+	Price       float64 `db:"column:price;required" json:"price" admin:"list"`
+	CategoryID  uint    `db:"column:category_id" json:"category_id"`
 	Category    *TestCategory
 }
 
 type TestCategory struct {
 	BaseModel
-	Name string `gorm:"not null" json:"name" admin:"list,search"`
+	Name string `db:"column:name;required" json:"name" admin:"list,search"`
 }
 
 type TestDBTagModel struct {
@@ -93,8 +94,8 @@ func TestParseAdminTag_Choices(t *testing.T) {
 func TestToSnakeCase(t *testing.T) {
 	tests := []struct{ in, out string }{
 		{"CreatedAt", "created_at"},
-		{"ID", "i_d"},
-		{"UserID", "user_i_d"},
+		{"ID", "id"},
+		{"UserID", "user_id"},
 		{"Name", "name"},
 	}
 	for _, tt := range tests {
@@ -249,11 +250,11 @@ func TestRegistry_All(t *testing.T) {
 
 // --- CRUD tests (integration with SQLite) ---
 
-func setupTestDB(t *testing.T) *db.DB {
+func setupTestDB(t *testing.T) *sql.DB {
 	t.Helper()
 	logger := observe.NewLogger("error", "text")
 	cfg := db.Config{
-		Engine:          db.EngineGORM,
+		Engine:          db.EngineSQL,
 		DatabaseURL:     "sqlite://:memory:",
 		DatabaseMaxOpen: 1,
 		DatabaseMaxIdle: 1,
@@ -262,57 +263,62 @@ func setupTestDB(t *testing.T) *db.DB {
 	if err != nil {
 		t.Fatalf("failed to create DB: %v", err)
 	}
-	t.Cleanup(func() { d.Close() })
-
-	// Auto-migrate test models
-	d.GormDB().AutoMigrate(&TestUser{}, &TestProduct{}, &TestCategory{})
-	return d
-}
-
-func setupTestBunDB(t *testing.T) *db.DB {
-	t.Helper()
-	logger := observe.NewLogger("error", "text")
-	cfg := db.Config{
-		Engine:          db.EngineBun,
-		DatabaseURL:     "sqlite://:memory:",
-		DatabaseMaxOpen: 1,
-		DatabaseMaxIdle: 1,
-	}
-	d, err := db.New(cfg, logger)
-	if err != nil {
-		t.Fatalf("failed to create Bun DB: %v", err)
-	}
 	t.Cleanup(func() { _ = d.Close() })
 
 	sqlDB, err := d.SqlDB()
 	if err != nil {
-		t.Fatalf("failed to access sql DB: %v", err)
+		t.Fatalf("failed to access SQL DB: %v", err)
 	}
 
-	_, err = sqlDB.Exec(`
-		CREATE TABLE test_users (
+	if err := createModelTestSchema(sqlDB); err != nil {
+		t.Fatalf("failed to create test schema: %v", err)
+	}
+	return sqlDB
+}
+
+func createModelTestSchema(sqlDB *sql.DB) error {
+	statements := []string{
+		`CREATE TABLE IF NOT EXISTS test_users (
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
 			created_at DATETIME,
 			updated_at DATETIME,
 			deleted_at DATETIME,
-			email TEXT,
-			name TEXT,
+			email TEXT NOT NULL,
+			name TEXT NOT NULL,
 			role TEXT,
-			active BOOLEAN
-		)
-	`)
-	if err != nil {
-		t.Fatalf("failed to create test_users table: %v", err)
+			active BOOLEAN NOT NULL DEFAULT 0
+		)`,
+		`CREATE TABLE IF NOT EXISTS test_categories (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			created_at DATETIME,
+			updated_at DATETIME,
+			deleted_at DATETIME,
+			name TEXT NOT NULL
+		)`,
+		`CREATE TABLE IF NOT EXISTS test_products (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			created_at DATETIME,
+			updated_at DATETIME,
+			deleted_at DATETIME,
+			name TEXT NOT NULL,
+			description TEXT,
+			price REAL NOT NULL,
+			category_id INTEGER
+		)`,
 	}
-
-	return d
+	for _, statement := range statements {
+		if _, err := sqlDB.Exec(statement); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func TestCRUD_CreateAndFindByID(t *testing.T) {
-	d := setupTestDB(t)
+	sqlDB := setupTestDB(t)
 	meta, _ := ExtractMeta(&TestUser{})
 	meta.Config = ModelConfig{PageSize: 25}
-	crud := NewCRUD(d.GormDB(), meta, nil)
+	crud := NewCRUD(sqlDB, meta, nil)
 
 	user := &TestUser{
 		Email:  "test@example.com",
@@ -338,7 +344,7 @@ func TestCRUD_CreateAndFindByID(t *testing.T) {
 }
 
 func TestCRUD_FindAll_Pagination(t *testing.T) {
-	d := setupTestDB(t)
+	sqlDB := setupTestDB(t)
 	meta, _ := ExtractMeta(&TestUser{})
 	meta.Config = ModelConfig{PageSize: 2, SearchFields: []string{"Email", "Name"}}
 	// Re-apply search fields to meta.Fields
@@ -348,7 +354,7 @@ func TestCRUD_FindAll_Pagination(t *testing.T) {
 		}
 	}
 
-	crud := NewCRUD(d.GormDB(), meta, nil)
+	crud := NewCRUD(sqlDB, meta, nil)
 
 	// Create 5 test users
 	for i := 0; i < 5; i++ {
@@ -373,10 +379,10 @@ func TestCRUD_FindAll_Pagination(t *testing.T) {
 }
 
 func TestCRUD_Update(t *testing.T) {
-	d := setupTestDB(t)
+	sqlDB := setupTestDB(t)
 	meta, _ := ExtractMeta(&TestUser{})
 	meta.Config = ModelConfig{PageSize: 25}
-	crud := NewCRUD(d.GormDB(), meta, nil)
+	crud := NewCRUD(sqlDB, meta, nil)
 
 	user := &TestUser{Email: "update@test.com", Name: "Original"}
 	crud.Create(context.Background(), user)
@@ -393,10 +399,10 @@ func TestCRUD_Update(t *testing.T) {
 }
 
 func TestCRUD_Delete(t *testing.T) {
-	d := setupTestDB(t)
+	sqlDB := setupTestDB(t)
 	meta, _ := ExtractMeta(&TestUser{})
 	meta.Config = ModelConfig{PageSize: 25}
-	crud := NewCRUD(d.GormDB(), meta, nil)
+	crud := NewCRUD(sqlDB, meta, nil)
 
 	user := &TestUser{Email: "delete@test.com", Name: "ToDelete"}
 	crud.Create(context.Background(), user)
@@ -414,10 +420,10 @@ func TestCRUD_Delete(t *testing.T) {
 }
 
 func TestCRUD_FindByID_NotFound(t *testing.T) {
-	d := setupTestDB(t)
+	sqlDB := setupTestDB(t)
 	meta, _ := ExtractMeta(&TestUser{})
 	meta.Config = ModelConfig{PageSize: 25}
-	crud := NewCRUD(d.GormDB(), meta, nil)
+	crud := NewCRUD(sqlDB, meta, nil)
 
 	_, err := crud.FindByID(context.Background(), 999)
 	if err == nil {
@@ -427,10 +433,10 @@ func TestCRUD_FindByID_NotFound(t *testing.T) {
 
 // Ensure time fields are set
 func TestBaseModel_Timestamps(t *testing.T) {
-	d := setupTestDB(t)
+	sqlDB := setupTestDB(t)
 	meta, _ := ExtractMeta(&TestUser{})
 	meta.Config = ModelConfig{PageSize: 25}
-	crud := NewCRUD(d.GormDB(), meta, nil)
+	crud := NewCRUD(sqlDB, meta, nil)
 
 	user := &TestUser{Email: "ts@test.com", Name: "Timestamps"}
 	crud.Create(context.Background(), user)
@@ -443,8 +449,8 @@ func TestBaseModel_Timestamps(t *testing.T) {
 	}
 }
 
-func TestCRUD_Hooks_ReceiveGORMContext(t *testing.T) {
-	d := setupTestDB(t)
+func TestCRUD_Hooks_ReceiveSQLContext(t *testing.T) {
+	sqlDB := setupTestDB(t)
 	meta, _ := ExtractMeta(&TestUser{})
 
 	beforeCalled := false
@@ -453,160 +459,14 @@ func TestCRUD_Hooks_ReceiveGORMContext(t *testing.T) {
 		PageSize: 25,
 		BeforeCreate: func(hookCtx HookContext, entity interface{}) error {
 			beforeCalled = true
-			if hookCtx.Engine != HookEngineGORM {
-				t.Fatalf("expected engine %s, got %s", HookEngineGORM, hookCtx.Engine)
+			if hookCtx.Engine != HookEngineSQL {
+				t.Fatalf("expected engine %s, got %s", HookEngineSQL, hookCtx.Engine)
 			}
-			if hookCtx.GORM == nil {
-				t.Fatal("expected non-nil GORM handle in hook context")
+			if hookCtx.DB == nil {
+				t.Fatal("expected non-nil SQL DB handle in hook context")
 			}
-			if hookCtx.Bun != nil {
-				t.Fatal("expected nil Bun handle in GORM hook context")
-			}
-			if hookCtx.Context == nil {
-				t.Fatal("expected non-nil context in hook context")
-			}
-			return nil
-		},
-		AfterCreate: func(hookCtx HookContext, entity interface{}) error {
-			afterCalled = true
-			if hookCtx.Engine != HookEngineGORM {
-				t.Fatalf("expected engine %s, got %s", HookEngineGORM, hookCtx.Engine)
-			}
-			if hookCtx.GORM == nil {
-				t.Fatal("expected non-nil GORM handle in hook context")
-			}
-			return nil
-		},
-	}
-
-	crud := NewCRUD(d.GormDB(), meta, nil)
-	if err := crud.Create(context.Background(), &TestUser{
-		Email: "hook-gorm@test.com",
-		Name:  "Hook GORM",
-	}); err != nil {
-		t.Fatalf("Create failed: %v", err)
-	}
-
-	if !beforeCalled {
-		t.Fatal("expected BeforeCreate hook to be called")
-	}
-	if !afterCalled {
-		t.Fatal("expected AfterCreate hook to be called")
-	}
-}
-
-func TestCRUDBun_CreateAndFindByID(t *testing.T) {
-	d := setupTestBunDB(t)
-	meta, _ := ExtractMeta(&TestUser{})
-	meta.Config = ModelConfig{PageSize: 25}
-	crud := NewCRUDBun(d.BunDB(), meta, nil)
-
-	user := &TestUser{
-		Email:  "bun@example.com",
-		Name:   "Bun User",
-		Role:   "admin",
-		Active: true,
-	}
-	if err := crud.Create(context.Background(), user); err != nil {
-		t.Fatalf("Create failed: %v", err)
-	}
-	if user.ID == 0 {
-		t.Error("ID should be set after create")
-	}
-
-	found, err := crud.FindByID(context.Background(), user.ID)
-	if err != nil {
-		t.Fatalf("FindByID failed: %v", err)
-	}
-	foundUser := found.(*TestUser)
-	if foundUser.Email != "bun@example.com" {
-		t.Errorf("expected bun@example.com, got %s", foundUser.Email)
-	}
-}
-
-func TestCRUDBun_FindAll_Pagination(t *testing.T) {
-	d := setupTestBunDB(t)
-	meta, _ := ExtractMeta(&TestUser{})
-	meta.Config = ModelConfig{PageSize: 2, SearchFields: []string{"Email", "Name"}}
-	for i := range meta.Fields {
-		if meta.Fields[i].Name == "Email" || meta.Fields[i].Name == "Name" {
-			meta.Fields[i].IsSearch = true
-		}
-	}
-
-	crud := NewCRUDBun(d.BunDB(), meta, nil)
-
-	for i := 0; i < 5; i++ {
-		if err := crud.Create(context.Background(), &TestUser{
-			Email:  "bun" + string(rune('0'+i)) + "@test.com",
-			Name:   "Bun " + string(rune('0'+i)),
-			Active: true,
-		}); err != nil {
-			t.Fatalf("Create[%d] failed: %v", i, err)
-		}
-	}
-
-	result, err := crud.FindAll(context.Background(), QueryOpts{Page: 1, PageSize: 2})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if result.Total != 5 {
-		t.Errorf("expected total 5, got %d", result.Total)
-	}
-	if result.TotalPages != 3 {
-		t.Errorf("expected 3 pages, got %d", result.TotalPages)
-	}
-}
-
-func TestCRUDBun_UpdateDelete(t *testing.T) {
-	d := setupTestBunDB(t)
-	meta, _ := ExtractMeta(&TestUser{})
-	meta.Config = ModelConfig{PageSize: 25}
-	crud := NewCRUDBun(d.BunDB(), meta, nil)
-
-	user := &TestUser{Email: "bun-update@test.com", Name: "Original", Active: true}
-	if err := crud.Create(context.Background(), user); err != nil {
-		t.Fatalf("Create failed: %v", err)
-	}
-
-	if err := crud.Update(context.Background(), user.ID, map[string]interface{}{"name": "Updated"}); err != nil {
-		t.Fatalf("Update failed: %v", err)
-	}
-
-	found, err := crud.FindByID(context.Background(), user.ID)
-	if err != nil {
-		t.Fatalf("FindByID failed: %v", err)
-	}
-	if found.(*TestUser).Name != "Updated" {
-		t.Errorf("expected Updated, got %s", found.(*TestUser).Name)
-	}
-
-	if err := crud.Delete(context.Background(), user.ID); err != nil {
-		t.Fatalf("Delete failed: %v", err)
-	}
-	if _, err := crud.FindByID(context.Background(), user.ID); err == nil {
-		t.Error("expected not found after delete")
-	}
-}
-
-func TestCRUDBun_Hooks_ReceiveBunContext(t *testing.T) {
-	d := setupTestBunDB(t)
-	meta, _ := ExtractMeta(&TestUser{})
-
-	beforeCalled := false
-	afterCalled := false
-	meta.Config = ModelConfig{
-		PageSize: 25,
-		BeforeCreate: func(hookCtx HookContext, entity interface{}) error {
-			beforeCalled = true
-			if hookCtx.Engine != HookEngineBun {
-				t.Fatalf("expected engine %s, got %s", HookEngineBun, hookCtx.Engine)
-			}
-			if hookCtx.Bun == nil {
-				t.Fatal("expected non-nil Bun handle in hook context")
-			}
-			if hookCtx.GORM != nil {
-				t.Fatal("expected nil GORM handle in Bun hook context")
+			if hookCtx.Tx != nil {
+				t.Fatal("expected nil Tx in default CRUD hook context")
 			}
 			if hookCtx.Context == nil {
 				t.Fatal("expected non-nil context in hook context")
@@ -615,20 +475,20 @@ func TestCRUDBun_Hooks_ReceiveBunContext(t *testing.T) {
 		},
 		AfterCreate: func(hookCtx HookContext, entity interface{}) error {
 			afterCalled = true
-			if hookCtx.Engine != HookEngineBun {
-				t.Fatalf("expected engine %s, got %s", HookEngineBun, hookCtx.Engine)
+			if hookCtx.Engine != HookEngineSQL {
+				t.Fatalf("expected engine %s, got %s", HookEngineSQL, hookCtx.Engine)
 			}
-			if hookCtx.Bun == nil {
-				t.Fatal("expected non-nil Bun handle in hook context")
+			if hookCtx.DB == nil {
+				t.Fatal("expected non-nil SQL DB handle in hook context")
 			}
 			return nil
 		},
 	}
 
-	crud := NewCRUDBun(d.BunDB(), meta, nil)
+	crud := NewCRUD(sqlDB, meta, nil)
 	if err := crud.Create(context.Background(), &TestUser{
-		Email: "hook-bun@test.com",
-		Name:  "Hook Bun",
+		Email: "hook-sql@test.com",
+		Name:  "Hook SQL",
 	}); err != nil {
 		t.Fatalf("Create failed: %v", err)
 	}

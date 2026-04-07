@@ -22,17 +22,10 @@ type MigrationStatus struct {
 	HasDown   bool       `json:"has_down"`
 }
 
-// AutoMigrate runs GORM's AutoMigrate for the given models.
-// Intended for development only — it creates tables and adds missing columns
-// but does not drop columns or change column types.
+// AutoMigrate is intentionally unsupported in the SQL-native runtime.
+// Use explicit SQL migration files through Migrator instead.
 func (d *DB) AutoMigrate(models ...interface{}) error {
-	if d == nil || d.db == nil {
-		return fmt.Errorf("db.AutoMigrate: %w", ErrGORMRequired)
-	}
-	if err := d.db.AutoMigrate(models...); err != nil {
-		return fmt.Errorf("db.AutoMigrate: %w", err)
-	}
-	return nil
+	return fmt.Errorf("db.AutoMigrate: %w", ErrAutoMigrate)
 }
 
 // Migrator manages SQL-based database migrations using timestamped .up.sql

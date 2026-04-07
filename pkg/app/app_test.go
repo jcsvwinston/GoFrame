@@ -63,9 +63,9 @@ func TestAppNew_InitializesCoreComponents(t *testing.T) {
 	}
 }
 
-func TestAppNew_BunEngine_InitializesAdmin(t *testing.T) {
+func TestAppNew_SQLEngine_InitializesAdmin(t *testing.T) {
 	cfg := testAppConfig()
-	cfg.DatabaseEngine = "bun"
+	cfg.DatabaseEngine = "sql"
 
 	a, err := New(cfg)
 	if err != nil {
@@ -76,11 +76,11 @@ func TestAppNew_BunEngine_InitializesAdmin(t *testing.T) {
 	if a.DB == nil {
 		t.Fatal("expected DB to be initialized")
 	}
-	if a.DB.Engine() != "bun" {
-		t.Fatalf("expected db engine bun, got %s", a.DB.Engine())
+	if a.DB.Engine() != "sql" {
+		t.Fatalf("expected db engine sql, got %s", a.DB.Engine())
 	}
 	if a.Admin == nil {
-		t.Fatal("expected admin to be initialized when bun engine is selected")
+		t.Fatal("expected admin to be initialized when sql engine is selected")
 	}
 }
 

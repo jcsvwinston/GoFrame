@@ -60,7 +60,7 @@ func TestRegisterDBPoolTelemetry(t *testing.T) {
 	defer sqlDB.Close()
 
 	before := len(dbPools)
-	cleanup := registerDBPoolTelemetry(sqlDB, "sqlite", "bun")
+	cleanup := registerDBPoolTelemetry(sqlDB, "sqlite", "sql")
 	if cleanup == nil {
 		t.Fatal("expected telemetry cleanup function")
 	}

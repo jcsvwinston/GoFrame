@@ -125,7 +125,7 @@ const newGoModTemplate = `module %s
 go 1.23
 `
 
-const newConfigTemplate = `database_engine: bun
+const newConfigTemplate = `database_engine: sql
 database_url: sqlite://app.db
 redis_url: redis://127.0.0.1:6379/0
 host: 0.0.0.0

@@ -1,6 +1,6 @@
 # Documentation Map
 
-Reference date: 2026-04-05.
+Reference date: 2026-04-07.
 Status: Current.
 
 This file is the canonical entrypoint for GoFrame documentation.
@@ -14,6 +14,7 @@ This file is the canonical entrypoint for GoFrame documentation.
 ## Core References (Current)
 
 - [PROJECT_LAYOUT.md](PROJECT_LAYOUT.md)
+- [MODELING_MULTI_DATABASE.md](MODELING_MULTI_DATABASE.md)
 - [CLI_BEST_PRACTICES.md](CLI_BEST_PRACTICES.md)
 - [CLI_DJANGO_PARITY.md](CLI_DJANGO_PARITY.md)
 - [MAIL_PROVIDERS.md](MAIL_PROVIDERS.md)

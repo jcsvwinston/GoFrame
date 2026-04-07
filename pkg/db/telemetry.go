@@ -7,7 +7,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/uptrace/bun"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
@@ -191,34 +190,4 @@ func classifySQLOperation(sqlText string) string {
 	default:
 		return "other"
 	}
-}
-
-type bunTelemetryHook struct {
-	dbSystem string
-	dbEngine string
-}
-
-func newBunTelemetryHook(rawURL, dbEngine string) *bunTelemetryHook {
-	return &bunTelemetryHook{
-		dbSystem: dbSystemFromURL(rawURL),
-		dbEngine: dbEngine,
-	}
-}
-
-func (h *bunTelemetryHook) BeforeQuery(ctx context.Context, _ *bun.QueryEvent) context.Context {
-	return ctx
-}
-
-func (h *bunTelemetryHook) AfterQuery(ctx context.Context, event *bun.QueryEvent) {
-	if event == nil {
-		return
-	}
-	recordDBQueryTelemetry(
-		ctx,
-		h.dbSystem,
-		h.dbEngine,
-		event.Operation(),
-		time.Since(event.StartTime),
-		event.Err,
-	)
 }

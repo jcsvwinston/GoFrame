@@ -2,6 +2,7 @@ package model
 
 import (
 	"strings"
+	"unicode"
 )
 
 // FieldMeta holds all metadata extracted from a single struct field.
@@ -156,14 +157,29 @@ func toTitle(name string) string {
 
 // toSnakeCase converts CamelCase to snake_case.
 func toSnakeCase(s string) string {
-	var result strings.Builder
-	for i, r := range s {
-		if i > 0 && r >= 'A' && r <= 'Z' {
-			result.WriteByte('_')
-		}
-		result.WriteRune(r)
+	if s == "" {
+		return s
 	}
-	return strings.ToLower(result.String())
+
+	runes := []rune(s)
+	var out strings.Builder
+	out.Grow(len(runes) + 4)
+
+	for i, r := range runes {
+		if i > 0 && unicode.IsUpper(r) {
+			prev := runes[i-1]
+			var next rune
+			if i+1 < len(runes) {
+				next = runes[i+1]
+			}
+			if unicode.IsLower(prev) || (next != 0 && unicode.IsLower(next)) {
+				out.WriteByte('_')
+			}
+		}
+		out.WriteRune(unicode.ToLower(r))
+	}
+
+	return out.String()
 }
 
 // toPlural applies simple English pluralization rules.

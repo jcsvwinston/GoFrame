@@ -5,7 +5,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/go-chi/chi/v5/middleware"
 	"github.com/jcsvwinston/GoFrame/pkg/observe"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
@@ -34,7 +33,7 @@ func TelemetryMiddleware(next http.Handler) http.Handler {
 		}
 		defer span.End()
 
-		ww := middleware.NewWrapResponseWriter(w, r.ProtoMajor)
+		ww := NewWrapResponseWriter(w, r.ProtoMajor)
 		routeAttrs := []attribute.KeyValue{
 			attribute.String("http.method", r.Method),
 			attribute.String("http.route", r.URL.Path),

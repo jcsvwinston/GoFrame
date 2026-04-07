@@ -106,7 +106,7 @@ func defaults() Config {
 		WriteTimeout: 60 * time.Second,
 		IdleTimeout:  120 * time.Second,
 
-		DatabaseEngine:      "bun",
+		DatabaseEngine:      "sql",
 		DatabaseURL:         "sqlite://goframe.db",
 		DatabaseMaxOpen:     25,
 		DatabaseMaxIdle:     5,

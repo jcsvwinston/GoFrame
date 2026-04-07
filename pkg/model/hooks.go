@@ -2,14 +2,11 @@ package model
 
 import (
 	"context"
-
-	"github.com/uptrace/bun"
-	"gorm.io/gorm"
+	"database/sql"
 )
 
 const (
-	HookEngineGORM = "gorm"
-	HookEngineBun  = "bun"
+	HookEngineSQL = "sql"
 )
 
 // HookContext exposes runtime information to lifecycle hooks in an
@@ -17,25 +14,18 @@ const (
 type HookContext struct {
 	Context context.Context
 	Engine  string
-	GORM    *gorm.DB
-	Bun     bun.IDB
+	DB      *sql.DB
+	Tx      *sql.Tx
 }
 
 // HookFunc is the signature for model lifecycle hooks.
 type HookFunc func(ctx HookContext, entity interface{}) error
 
-func newGORMHookContext(ctx context.Context, db *gorm.DB) HookContext {
+func newSQLHookContext(ctx context.Context, db *sql.DB, tx *sql.Tx) HookContext {
 	return HookContext{
 		Context: ctx,
-		Engine:  HookEngineGORM,
-		GORM:    db,
-	}
-}
-
-func newBunHookContext(ctx context.Context, db bun.IDB) HookContext {
-	return HookContext{
-		Context: ctx,
-		Engine:  HookEngineBun,
-		Bun:     db,
+		Engine:  HookEngineSQL,
+		DB:      db,
+		Tx:      tx,
 	}
 }

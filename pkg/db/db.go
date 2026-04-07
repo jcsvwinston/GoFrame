@@ -1,5 +1,5 @@
 // Package db provides database connectivity for the GoFrame framework.
-// GoFrame is Bun-first at runtime and keeps a temporary GORM compatibility path.
+// The runtime is implemented directly on top of database/sql.
 package db
 
 import (
@@ -12,37 +12,23 @@ import (
 	"strings"
 	"time"
 
-	gormsqlite "github.com/glebarez/sqlite"
 	_ "github.com/go-sql-driver/mysql"
 	_ "github.com/jackc/pgx/v5/stdlib"
-	"github.com/uptrace/bun"
-	"github.com/uptrace/bun/dialect/mysqldialect"
-	"github.com/uptrace/bun/dialect/pgdialect"
-	"github.com/uptrace/bun/dialect/sqlitedialect"
-	"github.com/uptrace/bun/schema"
-	"gorm.io/driver/mysql"
-	"gorm.io/driver/postgres"
-	"gorm.io/gorm"
-	gormlogger "gorm.io/gorm/logger"
+	_ "modernc.org/sqlite"
 )
 
 // Engine identifies the SQL runtime used by DB.
 type Engine string
 
 const (
-	// EngineGORM keeps backwards-compatible behavior.
-	EngineGORM Engine = "gorm"
-	// EngineBun enables the Bun-based SQL runtime.
-	EngineBun Engine = "bun"
+	// EngineSQL is the native database/sql runtime.
+	EngineSQL Engine = "sql"
 )
 
 var (
-	// ErrGORMRequired indicates a GORM-specific operation was requested while
-	// the current DB runtime is not GORM.
-	ErrGORMRequired = errors.New("gorm engine is required")
-	// ErrBunRequired indicates a Bun-specific operation was requested while the
-	// current DB runtime is not Bun.
-	ErrBunRequired = errors.New("bun engine is required")
+	ErrUnsupportedEngine = errors.New("unsupported database engine")
+	ErrSQLRequired       = errors.New("sql runtime is required")
+	ErrAutoMigrate       = errors.New("automigrate is not supported; use SQL migrations")
 )
 
 // Config contains the database-specific settings needed to open a connection.
@@ -55,11 +41,9 @@ type Config struct {
 	DatabaseMaxLifetime time.Duration
 }
 
-// DB wraps the SQL runtime and exposes compatibility helpers for both engines.
+// DB wraps the SQL runtime.
 type DB struct {
 	engine Engine
-	db     *gorm.DB
-	bun    *bun.DB
 	sql    *sql.DB
 	logger *slog.Logger
 
@@ -69,91 +53,44 @@ type DB struct {
 // New opens a database connection based on config.
 // Supported URL schemes: postgres://, postgresql://, mysql://, sqlite://.
 // A plain file path ending in .db or .sqlite is treated as SQLite.
-// Default engine is Bun.
+// Default engine is EngineSQL.
 func New(cfg Config, logger *slog.Logger) (*DB, error) {
-	engine := cfg.Engine
+	engine := normalizeEngine(cfg.Engine)
 	if engine == "" {
-		engine = EngineBun
+		return nil, fmt.Errorf("db.New: %w: %s", ErrUnsupportedEngine, cfg.Engine)
 	}
 
-	switch engine {
-	case EngineGORM:
-		return newGORM(cfg, logger)
-	case EngineBun:
-		return newBun(cfg, logger)
-	default:
-		return nil, fmt.Errorf("db.New: unsupported engine: %s", engine)
-	}
-}
-
-func newGORM(cfg Config, logger *slog.Logger) (*DB, error) {
-	dialector, err := dialectorFromURL(cfg.DatabaseURL)
-	if err != nil {
-		return nil, fmt.Errorf("db.New gorm dialector: %w", err)
-	}
-
-	gormCfg := &gorm.Config{
-		Logger: newSlogAdapter(logger, cfg.DatabaseURL, string(EngineGORM)),
-	}
-
-	gormDB, err := gorm.Open(dialector, gormCfg)
-	if err != nil {
-		return nil, fmt.Errorf("db.New gorm open: %w", err)
-	}
-
-	sqlDB, err := gormDB.DB()
-	if err != nil {
-		return nil, fmt.Errorf("db.New gorm sql.DB: %w", err)
-	}
-
-	applyPoolConfig(sqlDB, cfg)
-	if err := sqlDB.Ping(); err != nil {
-		return nil, fmt.Errorf("db.New gorm ping: %w", err)
-	}
-
-	dbSystem := dbSystemFromURL(cfg.DatabaseURL)
-	telemetryCleanup := registerDBPoolTelemetry(sqlDB, dbSystem, string(EngineGORM))
-
-	return &DB{
-		engine:           EngineGORM,
-		db:               gormDB,
-		sql:              sqlDB,
-		logger:           logger,
-		telemetryCleanup: telemetryCleanup,
-	}, nil
-}
-
-func newBun(cfg Config, logger *slog.Logger) (*DB, error) {
 	sqlDB, err := openSQLDB(cfg.DatabaseURL)
 	if err != nil {
-		return nil, fmt.Errorf("db.New bun sql open: %w", err)
+		return nil, fmt.Errorf("db.New sql open: %w", err)
 	}
 
 	applyPoolConfig(sqlDB, cfg)
 	if err := sqlDB.Ping(); err != nil {
 		_ = sqlDB.Close()
-		return nil, fmt.Errorf("db.New bun ping: %w", err)
+		return nil, fmt.Errorf("db.New sql ping: %w", err)
 	}
-
-	dialect, err := bunDialectFromURL(cfg.DatabaseURL)
-	if err != nil {
-		_ = sqlDB.Close()
-		return nil, fmt.Errorf("db.New bun dialect: %w", err)
-	}
-
-	bunDB := bun.NewDB(sqlDB, dialect)
-	bunDB.AddQueryHook(newBunTelemetryHook(cfg.DatabaseURL, string(EngineBun)))
 
 	dbSystem := dbSystemFromURL(cfg.DatabaseURL)
-	telemetryCleanup := registerDBPoolTelemetry(sqlDB, dbSystem, string(EngineBun))
+	telemetryCleanup := registerDBPoolTelemetry(sqlDB, dbSystem, string(engine))
 
 	return &DB{
-		engine:           EngineBun,
-		bun:              bunDB,
+		engine:           engine,
 		sql:              sqlDB,
 		logger:           logger,
 		telemetryCleanup: telemetryCleanup,
 	}, nil
+}
+
+func normalizeEngine(engine Engine) Engine {
+	switch Engine(strings.ToLower(strings.TrimSpace(string(engine)))) {
+	case "":
+		return EngineSQL
+	case EngineSQL:
+		return EngineSQL
+	default:
+		return ""
+	}
 }
 
 func applyPoolConfig(sqlDB *sql.DB, cfg Config) {
@@ -176,16 +113,6 @@ func (d *DB) Engine() Engine {
 	return d.engine
 }
 
-// GormDB returns the underlying *gorm.DB when running with EngineGORM.
-func (d *DB) GormDB() *gorm.DB {
-	return d.db
-}
-
-// BunDB returns the underlying *bun.DB when running with EngineBun.
-func (d *DB) BunDB() *bun.DB {
-	return d.bun
-}
-
 // Health verifies the database is reachable.
 func (d *DB) Health(ctx context.Context) error {
 	sqlDB, err := d.SqlDB()
@@ -195,24 +122,28 @@ func (d *DB) Health(ctx context.Context) error {
 	return sqlDB.PingContext(ctx)
 }
 
-// Tx runs fn inside a GORM transaction.
-// If the current runtime is not GORM, ErrGORMRequired is returned.
-func (d *DB) Tx(ctx context.Context, fn func(tx *gorm.DB) error) error {
-	if d.db == nil {
-		return fmt.Errorf("db.Tx: %w", ErrGORMRequired)
+// Tx runs fn inside a SQL transaction.
+func (d *DB) Tx(ctx context.Context, fn func(tx *sql.Tx) error) error {
+	if d == nil || d.sql == nil {
+		return fmt.Errorf("db.Tx: %w", ErrSQLRequired)
 	}
-	return d.db.WithContext(ctx).Transaction(fn)
-}
+	if ctx == nil {
+		ctx = context.Background()
+	}
 
-// TxBun runs fn inside a Bun transaction.
-// If the current runtime is not Bun, ErrBunRequired is returned.
-func (d *DB) TxBun(ctx context.Context, fn func(tx bun.Tx) error) error {
-	if d.bun == nil {
-		return fmt.Errorf("db.TxBun: %w", ErrBunRequired)
+	tx, err := d.sql.BeginTx(ctx, &sql.TxOptions{})
+	if err != nil {
+		return fmt.Errorf("db.Tx begin: %w", err)
 	}
-	return d.bun.RunInTx(ctx, &sql.TxOptions{}, func(ctx context.Context, tx bun.Tx) error {
-		return fn(tx)
-	})
+	defer tx.Rollback()
+
+	if err := fn(tx); err != nil {
+		return err
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("db.Tx commit: %w", err)
+	}
+	return nil
 }
 
 // Close closes the underlying sql.DB connection.
@@ -233,43 +164,10 @@ func (d *DB) SqlDB() (*sql.DB, error) {
 	if d == nil {
 		return nil, errors.New("db.SqlDB: nil receiver")
 	}
-	if d.sql != nil {
-		return d.sql, nil
+	if d.sql == nil {
+		return nil, errors.New("db.SqlDB: no sql handle available")
 	}
-	if d.db != nil {
-		return d.db.DB()
-	}
-	return nil, errors.New("db.SqlDB: no sql handle available")
-}
-
-// dialectorFromURL parses a database URL and returns the appropriate GORM dialector.
-func dialectorFromURL(rawURL string) (gorm.Dialector, error) {
-	lower := strings.ToLower(rawURL)
-
-	switch {
-	case strings.HasPrefix(lower, "postgres://") || strings.HasPrefix(lower, "postgresql://"):
-		return postgres.Open(rawURL), nil
-
-	case strings.HasPrefix(lower, "mysql://"):
-		dsn, err := mysqlURLToDSN(rawURL)
-		if err != nil {
-			return nil, err
-		}
-		return mysql.Open(dsn), nil
-
-	case strings.HasPrefix(lower, "sqlite://"):
-		path := strings.TrimPrefix(rawURL, "sqlite://")
-		if path == "" {
-			path = ":memory:"
-		}
-		return gormsqlite.Open(path), nil
-
-	case strings.HasSuffix(lower, ".db") || strings.HasSuffix(lower, ".sqlite") || rawURL == ":memory:":
-		return gormsqlite.Open(rawURL), nil
-
-	default:
-		return nil, fmt.Errorf("unsupported database URL scheme: %s", rawURL)
-	}
+	return d.sql, nil
 }
 
 func openSQLDB(rawURL string) (*sql.DB, error) {
@@ -296,21 +194,6 @@ func openSQLDB(rawURL string) (*sql.DB, error) {
 	case strings.HasSuffix(lower, ".db") || strings.HasSuffix(lower, ".sqlite") || rawURL == ":memory:":
 		return sql.Open("sqlite", rawURL)
 
-	default:
-		return nil, fmt.Errorf("unsupported database URL scheme: %s", rawURL)
-	}
-}
-
-func bunDialectFromURL(rawURL string) (schema.Dialect, error) {
-	lower := strings.ToLower(rawURL)
-
-	switch {
-	case strings.HasPrefix(lower, "postgres://") || strings.HasPrefix(lower, "postgresql://"):
-		return pgdialect.New(), nil
-	case strings.HasPrefix(lower, "mysql://"):
-		return mysqldialect.New(), nil
-	case strings.HasPrefix(lower, "sqlite://"), strings.HasSuffix(lower, ".db"), strings.HasSuffix(lower, ".sqlite"), rawURL == ":memory:":
-		return sqlitedialect.New(), nil
 	default:
 		return nil, fmt.Errorf("unsupported database URL scheme: %s", rawURL)
 	}
@@ -344,75 +227,4 @@ func mysqlURLToDSN(rawURL string) (string, error) {
 	}
 
 	return dsn, nil
-}
-
-// slogAdapter bridges GORM's logger interface to slog.
-type slogAdapter struct {
-	logger   *slog.Logger
-	dbSystem string
-	dbEngine string
-}
-
-func newSlogAdapter(logger *slog.Logger, rawURL, dbEngine string) gormlogger.Interface {
-	return &slogAdapter{
-		logger:   logger,
-		dbSystem: dbSystemFromURL(rawURL),
-		dbEngine: dbEngine,
-	}
-}
-
-func (a *slogAdapter) LogMode(gormlogger.LogLevel) gormlogger.Interface {
-	return a
-}
-
-func (a *slogAdapter) Info(_ context.Context, msg string, data ...interface{}) {
-	if a.logger == nil {
-		return
-	}
-	a.logger.Info(fmt.Sprintf(msg, data...))
-}
-
-func (a *slogAdapter) Warn(_ context.Context, msg string, data ...interface{}) {
-	if a.logger == nil {
-		return
-	}
-	a.logger.Warn(fmt.Sprintf(msg, data...))
-}
-
-func (a *slogAdapter) Error(_ context.Context, msg string, data ...interface{}) {
-	if a.logger == nil {
-		return
-	}
-	a.logger.Error(fmt.Sprintf(msg, data...))
-}
-
-func (a *slogAdapter) Trace(ctx context.Context, begin time.Time, fc func() (sql string, rowsAffected int64), err error) {
-	elapsed := time.Since(begin)
-	sqlStr, rows := fc()
-
-	if a.logger != nil {
-		switch {
-		case err != nil:
-			a.logger.Error("gorm query error",
-				"error", err.Error(),
-				"duration_ms", float64(elapsed.Nanoseconds())/1e6,
-				"rows", rows,
-				"sql", sqlStr,
-			)
-		case elapsed > 200*time.Millisecond:
-			a.logger.Warn("gorm slow query",
-				"duration_ms", float64(elapsed.Nanoseconds())/1e6,
-				"rows", rows,
-				"sql", sqlStr,
-			)
-		default:
-			a.logger.Debug("gorm query",
-				"duration_ms", float64(elapsed.Nanoseconds())/1e6,
-				"rows", rows,
-				"sql", sqlStr,
-			)
-		}
-	}
-
-	recordDBQueryTelemetry(ctx, a.dbSystem, a.dbEngine, classifySQLOperation(sqlStr), elapsed, err)
 }

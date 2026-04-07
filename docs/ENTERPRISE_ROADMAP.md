@@ -1,6 +1,6 @@
 # Enterprise Roadmap (Current Status)
 
-Reference date: 2026-04-05.
+Reference date: 2026-04-07.
 Status: Current.
 
 This roadmap summarizes the enterprise-alignment track for GoFrame.
@@ -20,7 +20,7 @@ Deliver a Django-inspired framework baseline for Go teams that is:
 
 ## Completed Baseline
 
-- Bun-first SQL runtime and migration lifecycle
+- SQL-native runtime and migration lifecycle
 - Asynq-based background job layer (`pkg/tasks`) and worker scaffold
 - OpenTelemetry bootstrap and HTTP telemetry middleware
 - configurable rate limiting and deploy checks

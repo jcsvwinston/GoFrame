@@ -5,23 +5,21 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/go-chi/chi/v5/middleware"
-	"github.com/go-chi/cors"
 	"github.com/jcsvwinston/GoFrame/pkg/observe"
 )
 
 // DefaultStack returns the standard middleware chain for GoFrame applications.
 func DefaultStack(logger *slog.Logger, opts *routerOpts) []func(http.Handler) http.Handler {
 	stack := []func(http.Handler) http.Handler{
-		middleware.RequestID,
-		middleware.RealIP,
+		RequestID,
+		RealIP,
 		TelemetryMiddleware,
 		rateLimitMiddleware(opts),
 		RequestLogger(logger),
-		middleware.Recoverer,
-		middleware.Timeout(time.Duration(opts.timeoutSeconds) * time.Second),
+		Recoverer,
+		TimeoutMiddleware(time.Duration(opts.timeoutSeconds) * time.Second),
 		corsMiddleware(opts),
-		middleware.Compress(5),
+		Compress(5),
 		SecurityHeaders,
 	}
 
@@ -59,11 +57,11 @@ func RequestLogger(logger *slog.Logger) func(http.Handler) http.Handler {
 			start := time.Now()
 
 			// Inject request ID into context for downstream use
-			reqID := middleware.GetReqID(r.Context())
+			reqID := GetReqID(r.Context())
 			ctx := observe.CtxWithRequestID(r.Context(), reqID)
 			r = r.WithContext(ctx)
 
-			ww := middleware.NewWrapResponseWriter(w, r.ProtoMajor)
+			ww := NewWrapResponseWriter(w, r.ProtoMajor)
 			next.ServeHTTP(ww, r)
 
 			logger.Info("http_request",
@@ -98,7 +96,7 @@ func corsMiddleware(opts *routerOpts) func(http.Handler) http.Handler {
 		allowedOrigins = []string{"*"}
 	}
 
-	return cors.Handler(cors.Options{
+	return CORSMiddleware(CORSOptions{
 		AllowedOrigins:   allowedOrigins,
 		AllowedMethods:   []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
 		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-CSRF-Token"},

@@ -61,7 +61,7 @@ func defaultExampleConfig() *app.Config {
 	return &app.Config{
 		Host:            "0.0.0.0",
 		Port:            8090,
-		DatabaseEngine:  "bun",
+		DatabaseEngine:  "sql",
 		DatabaseURL:     "sqlite://examples_mvc_api.db",
 		DatabaseMaxOpen: 10,
 		DatabaseMaxIdle: 5,

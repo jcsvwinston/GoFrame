@@ -12,27 +12,19 @@ import (
 )
 
 type migrateTestModel struct {
-	ID   uint   `gorm:"primaryKey"`
-	Name string `gorm:"not null"`
+	ID   uint   `db:"pk"`
+	Name string `db:"required"`
 }
 
-func TestAutoMigrate_OnBunEngine_ReturnsErrGORMRequired(t *testing.T) {
-	d := newTestBunDB(t)
-	err := d.AutoMigrate(&migrateTestModel{})
-	if !errors.Is(err, ErrGORMRequired) {
-		t.Fatalf("expected ErrGORMRequired, got %v", err)
-	}
-}
-
-func TestAutoMigrate_OnGORMEngine_Succeeds(t *testing.T) {
+func TestAutoMigrate_ReturnsUnsupportedError(t *testing.T) {
 	d := newTestDB(t)
-	if err := d.AutoMigrate(&migrateTestModel{}); err != nil {
-		t.Fatalf("expected AutoMigrate success, got %v", err)
+	if err := d.AutoMigrate(&migrateTestModel{}); !errors.Is(err, ErrAutoMigrate) {
+		t.Fatalf("expected ErrAutoMigrate, got %v", err)
 	}
 }
 
 func TestMigratorCreate_WritesUpAndDownFiles(t *testing.T) {
-	d := newTestBunDB(t)
+	d := newTestDB(t)
 	dir := t.TempDir()
 
 	m := NewMigrator(d, dir, observe.NewLogger("error", "text"))
@@ -64,7 +56,7 @@ func TestMigratorCreate_WritesUpAndDownFiles(t *testing.T) {
 }
 
 func TestMigrator_UpStatusDown(t *testing.T) {
-	d := newTestBunDB(t)
+	d := newTestDB(t)
 	dir := t.TempDir()
 	writeMigrationPair(t, dir, "000001_create_items",
 		"CREATE TABLE items (id INTEGER PRIMARY KEY, name TEXT NOT NULL);",
@@ -136,7 +128,7 @@ func TestMigrator_UpStatusDown(t *testing.T) {
 }
 
 func TestMigrator_Steps(t *testing.T) {
-	d := newTestBunDB(t)
+	d := newTestDB(t)
 	dir := t.TempDir()
 	writeMigrationPair(t, dir, "000001_create_items",
 		"CREATE TABLE items (id INTEGER PRIMARY KEY, name TEXT NOT NULL);",
@@ -185,7 +177,7 @@ func TestMigrator_Steps(t *testing.T) {
 }
 
 func TestMigrator_DownMissingFile_ReturnsError(t *testing.T) {
-	d := newTestBunDB(t)
+	d := newTestDB(t)
 	dir := t.TempDir()
 
 	writeMigrationUpOnly(t, dir, "000001_create_items", "CREATE TABLE items (id INTEGER PRIMARY KEY);")

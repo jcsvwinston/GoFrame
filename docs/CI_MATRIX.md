@@ -1,6 +1,6 @@
 # CI SQL Matrix Profiles
 
-Reference date: 2026-04-05.
+Reference date: 2026-04-07.
 Status: Current.
 
 This document defines GoFrame CI SQL matrix profiles, required vs exploratory lanes, and local reproduction commands.
@@ -49,7 +49,7 @@ docker run --rm --name goframe-pg \
   -p 5432:5432 -d postgres:16
 
 export GOFRAME_SQL_MATRIX_URL='postgres://postgres:postgres@127.0.0.1:5432/goframe?sslmode=disable'
-go test ./pkg/db -run '^TestSQLMatrix_BunConnectAndPing$' -v
+go test ./pkg/db -run '^TestSQLMatrix_ConnectAndPing$' -v
 go test ./internal/cli -run '^TestSQLMatrix_CriticalCommands$' -v
 ```
 
@@ -62,7 +62,7 @@ docker run --rm --name goframe-mysql \
   -p 3306:3306 -d mysql:8.4
 
 export GOFRAME_SQL_MATRIX_URL='mysql://root:root@127.0.0.1:3306/goframe'
-go test ./pkg/db -run '^TestSQLMatrix_BunConnectAndPing$' -v
+go test ./pkg/db -run '^TestSQLMatrix_ConnectAndPing$' -v
 go test ./internal/cli -run '^TestSQLMatrix_CriticalCommands$' -v
 ```
 
@@ -81,14 +81,14 @@ go test ./pkg/db -run 'UnsupportedEnterpriseCandidates' -v
 ## Known Gaps (Current)
 
 - `pkg/db` supports SQL URLs for `sqlite://`, `postgres://`/`postgresql://`, and `mysql://`.
-- Bun dialect and SQL open path do not support `sqlserver://`/`mssql://` or `oracle://` yet.
+- SQL open path does not support `sqlserver://`/`mssql://` or `oracle://` yet.
 - CLI SQL helper paths (`flush`, fixture SQL builders, inspect helpers, cache/session SQL helpers) are implemented for SQLite/PostgreSQL/MySQL only.
 
 ## Promotion Criteria (Exploratory -> Required)
 
 - Add runtime adapter support for MS SQL Server and Oracle in `pkg/db`:
   - DSN conversion/open path
-  - Bun dialect integration
+  - driver wiring and health checks
 - Add SQL helper parity for affected CLI commands (flush/fixtures/inspect/cache/session helpers).
 - Replace compatibility-only exploratory tests with live connectivity + critical-command integration smoke.
 - Promote the lane to required only after stable green results and documented local reproduction.
