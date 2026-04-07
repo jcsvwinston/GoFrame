@@ -5,6 +5,8 @@ Status: Current.
 
 This document defines GoFrame CI SQL matrix profiles, required vs exploratory lanes, and local reproduction commands.
 
+Manual CI dispatch is available via `workflow_dispatch` for stability drills.
+
 ## Profile Status
 
 - `sqlite-smoke` (required): fast default path via `go test ./...`
@@ -85,6 +87,24 @@ docker run --rm --name goframe-oracle \
 export GOFRAME_SQL_EXPLORATORY_URL='oracle://system:oracle@127.0.0.1:1521/FREEPDB1'
 go test ./pkg/db -run '^TestSQLMatrix_ExploratoryLiveConnectAndPing$' -v
 go test ./internal/cli -run '^TestSQLMatrix_ExploratoryCriticalCommands$' -v
+```
+
+## Repeated Stability Drill (GitHub Actions)
+
+Trigger and analyze repeated exploratory lanes from your current branch:
+
+```bash
+gh auth login
+bash scripts/ci/run_exploratory_stability.sh --runs 10 --output docs/reports/exploratory_stability.md
+```
+
+Optional explicit repo/branch:
+
+```bash
+bash scripts/ci/run_exploratory_stability.sh \
+  --repo jcsvwinston/GoFrame \
+  --branch codex/v0.6.0-roadmap \
+  --runs 10
 ```
 
 ## Known Gaps (Current)

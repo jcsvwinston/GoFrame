@@ -66,6 +66,7 @@ Current exploratory note:
 CI matrix profiles and local reproduction:
 
 - `docs/CI_MATRIX.md`
+- repeated exploratory stability drill helper: `scripts/ci/run_exploratory_stability.sh`
 
 ## 4. CLI Installation
 
@@ -900,4 +901,5 @@ go run ./cmd/worker
 - CLI parity with Django: `docs/CLI_DJANGO_PARITY.md`
 - email providers and plugins: `docs/MAIL_PROVIDERS.md`
 - enterprise roadmap: `docs/ENTERPRISE_ROADMAP.md`
+- long-term compatibility roadmap: `docs/LONG_TERM_COMPATIBILITY_ROADMAP.md`
 - release checklist: `docs/RELEASE_CHECKLIST.md`

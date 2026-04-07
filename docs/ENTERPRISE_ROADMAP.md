@@ -8,6 +8,7 @@ This roadmap summarizes the enterprise-alignment track for GoFrame.
 Execution plan for the next major iteration:
 
 - `docs/V0.6.0_ROADMAP.md`
+- `docs/LONG_TERM_COMPATIBILITY_ROADMAP.md` (v1.x no-rewrite strategic contract)
 
 ## Strategic Goal
 

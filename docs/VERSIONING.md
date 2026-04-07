@@ -16,6 +16,18 @@ Interpretation in pre-1.0:
 - `x` (minor): may include significant feature additions and limited breaking changes
 - `y` (patch): bug fixes, hardening, and non-breaking improvements
 
+Pre-1.0 note:
+
+- While breaking changes are still technically possible before `v1.0`, they should be treated as exceptions and require explicit migration notes.
+- Strategic direction for the `v1.x` era is defined in `docs/LONG_TERM_COMPATIBILITY_ROADMAP.md`.
+
+## v1.x Compatibility Commitment (Target)
+
+From `v1.0` onward:
+
+- no breaking changes in `v1.x` for stable public contracts
+- deprecations must provide migration path and tooling before any major-version removal
+
 ## Release Types
 
 1. Release candidates

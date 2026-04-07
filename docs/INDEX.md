@@ -25,6 +25,7 @@ This file is the canonical entrypoint for GoFrame documentation.
 ## Roadmaps and Status (Current)
 
 - [ENTERPRISE_ROADMAP.md](ENTERPRISE_ROADMAP.md)
+- [LONG_TERM_COMPATIBILITY_ROADMAP.md](LONG_TERM_COMPATIBILITY_ROADMAP.md)
 - [V0.6.0_ROADMAP.md](V0.6.0_ROADMAP.md)
 
 ## Release and Governance (Current)
