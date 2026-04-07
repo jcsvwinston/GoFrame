@@ -1,7 +1,7 @@
 # Roadmap To Surpass Django
 
 Reference date: 2026-04-07.
-Status: Proposed execution roadmap (6 weeks).
+Status: Active execution roadmap (6 weeks).
 
 This roadmap is focused on surpassing Django in practical enterprise value without losing GoFrame identity.
 
@@ -27,6 +27,18 @@ By 2026-05-19, GoFrame should provide:
   - model contract depth (custom PK, FK declaration, simple/composite indexes),
   - admin maturity and output consistency across commands,
   - stale spec alignment with current implementation.
+
+## Execution Snapshot (as of 2026-04-07)
+
+- Week 1 completed: canonical scaffold contract aligned across `new`/`startapp`/`generate`.
+- Week 2 completed: CLI multi-DB alias parity shipped in critical DB-dependent commands.
+- Week 3 completed: model metadata contract includes PK/FK/index declarations with validation.
+- Week 4 completed: migration scaffolding and `inspectdb` enriched from metadata contract.
+- Week 5 completed: admin action-level authorization and bulk/error behavior hardening; CLI output homogeneity advanced.
+- Week 6 in progress:
+  - compatibility report and harness artifacts generated,
+  - stable contract freeze gate active in CI,
+  - `SPEC.md` synchronized to current architecture/dependency reality.
 
 ## Success Metrics
 

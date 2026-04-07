@@ -169,6 +169,13 @@ while in pre-1.0 mode (`v0.x.y`).
   - `createuser`, `changepassword`, `createcachetable`, `clearsessions`, `remove_stale_contenttypes`
   - default `plain` remains backward-compatible in message wording
   - `pretty` uses status-tag rendering and `json` emits structured command status payloads for automation
+- `SPEC.md` is now synchronized with current architecture and dependency reality:
+  - SQL-first runtime over `database/sql`
+  - alias-only DB config contract and multisite/multitenant guardrails
+  - current dependency set without stale Chi/Bun/GORM/Mongo references
+- Week 6 release-readiness docs now include:
+  - latest compatibility harness snapshot (`docs/reports/compatibility_harness_latest.md`)
+  - release-readiness execution snapshot (`docs/reports/release_readiness_2026-04-07.md`)
 
 ## [0.5.5] - 2026-04-05
 

@@ -10,6 +10,7 @@ This file is the canonical entrypoint for GoFrame documentation.
 - [QUICKSTART.md](QUICKSTART.md)
 - [DEVELOPER_MANUAL.md](DEVELOPER_MANUAL.md)
 - [PROJECT_LAYOUT.md](PROJECT_LAYOUT.md)
+- [../SPEC.md](../SPEC.md)
 
 ## Core Engineering References
 
@@ -41,6 +42,8 @@ This file is the canonical entrypoint for GoFrame documentation.
 - [reports/exploratory_stability.md](reports/exploratory_stability.md)
 - [reports/exploratory_stability_postfix.md](reports/exploratory_stability_postfix.md)
 - [reports/exploratory_stability_postfix_10runs.md](reports/exploratory_stability_postfix_10runs.md)
+- [reports/compatibility_harness_latest.md](reports/compatibility_harness_latest.md)
+- [reports/release_readiness_2026-04-07.md](reports/release_readiness_2026-04-07.md)
 
 ## Precedence Rule
 

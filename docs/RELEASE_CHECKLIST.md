@@ -9,6 +9,7 @@ Use this checklist before creating a GoFrame release tag.
 
 ```bash
 go test ./...
+bash scripts/ci/check_contract_freeze.sh
 bash scripts/release/rehearse_rc.sh
 ```
 
@@ -55,6 +56,7 @@ Policy reference:
 Local generation commands:
 
 ```bash
+bash scripts/ci/run_compatibility_harness.sh --output docs/reports/compatibility_harness_latest.md --enforce-threshold
 bash scripts/release/generate_compatibility_report.sh --output dist/reports/compatibility_report.md --enforce-threshold
 bash scripts/release/generate_dependency_impact_report.sh --output dist/reports/dependency_impact_report.md
 ```
