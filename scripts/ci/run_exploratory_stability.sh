@@ -14,11 +14,14 @@ Options:
   --repo <owner/name>    GitHub repository (default: inferred from origin remote)
   --workflow-file <file> Workflow file to dispatch (default: ci.yml)
   --interval <seconds>   Poll interval for run watch (default: 10)
+  --min-rate-mssql <n>   Minimum MSSQL success rate percentage (default: 80)
+  --min-rate-oracle <n>  Minimum Oracle success rate percentage (default: 80)
+  --enforce-threshold    Exit non-zero if promotion threshold is not met
   --output <path>        Optional markdown output file
   -h, --help             Show this help
 
 Prerequisites:
-  - gh CLI authenticated (`gh auth login`)
+  - gh CLI authenticated (`gh auth login`) or GH_TOKEN env set
   - CI workflow supports `workflow_dispatch`
 EOF
 }
@@ -77,6 +80,9 @@ repo=""
 workflow_file="ci.yml"
 interval=10
 output_path=""
+min_rate_mssql=80
+min_rate_oracle=80
+enforce_threshold=0
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -99,6 +105,18 @@ while [[ $# -gt 0 ]]; do
     --interval)
       interval="${2:-}"
       shift 2
+      ;;
+    --min-rate-mssql)
+      min_rate_mssql="${2:-}"
+      shift 2
+      ;;
+    --min-rate-oracle)
+      min_rate_oracle="${2:-}"
+      shift 2
+      ;;
+    --enforce-threshold)
+      enforce_threshold=1
+      shift
       ;;
     --output)
       output_path="${2:-}"
@@ -124,11 +142,19 @@ if ! [[ "$interval" =~ ^[0-9]+$ ]] || [[ "$interval" -lt 1 ]]; then
   echo "--interval must be a positive integer" >&2
   exit 1
 fi
+if ! [[ "$min_rate_mssql" =~ ^[0-9]+$ ]] || [[ "$min_rate_mssql" -lt 0 || "$min_rate_mssql" -gt 100 ]]; then
+  echo "--min-rate-mssql must be an integer between 0 and 100" >&2
+  exit 1
+fi
+if ! [[ "$min_rate_oracle" =~ ^[0-9]+$ ]] || [[ "$min_rate_oracle" -lt 0 || "$min_rate_oracle" -gt 100 ]]; then
+  echo "--min-rate-oracle must be an integer between 0 and 100" >&2
+  exit 1
+fi
 
 require_command gh
 
 if ! gh auth status >/dev/null 2>&1; then
-  echo "GitHub auth missing. Run: gh auth login" >&2
+  echo "GitHub auth missing. Run: gh auth login (or set GH_TOKEN)." >&2
   exit 1
 fi
 
@@ -143,6 +169,7 @@ echo "Repository: $repo"
 echo "Branch: $branch"
 echo "Workflow file: $workflow_file"
 echo "Runs: $runs"
+echo "Promotion thresholds: MSSQL >= ${min_rate_mssql}% | Oracle >= ${min_rate_oracle}%"
 echo
 
 started_at="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
@@ -156,7 +183,7 @@ for i in $(seq 1 "$runs"); do
   for _ in $(seq 1 120); do
     while IFS= read -r candidate; do
       [[ -z "$candidate" ]] && continue
-      if ! contains_id "$candidate" "${run_ids[@]}"; then
+      if ! contains_id "$candidate" "${run_ids[@]+"${run_ids[@]}"}"; then
         new_id="$candidate"
         break
       fi
@@ -246,6 +273,10 @@ done
 
 mssql_rate=$((mssql_success * 100 / total_runs))
 oracle_rate=$((oracle_success * 100 / total_runs))
+promotion_ready=1
+if [[ "$mssql_rate" -lt "$min_rate_mssql" || "$oracle_rate" -lt "$min_rate_oracle" ]]; then
+  promotion_ready=0
+fi
 
 {
   echo
@@ -257,6 +288,16 @@ oracle_rate=$((oracle_success * 100 / total_runs))
   echo "- Oracle success: $oracle_success/$total_runs (${oracle_rate}%)"
   echo "- Oracle failed: $oracle_fail/$total_runs"
   echo "- Oracle other/missing: $oracle_other/$total_runs"
+  echo
+  echo "## Promotion Readiness"
+  echo
+  echo "- Threshold MSSQL: >= ${min_rate_mssql}%"
+  echo "- Threshold Oracle: >= ${min_rate_oracle}%"
+  if [[ "$promotion_ready" -eq 1 ]]; then
+    echo "- Decision: READY (threshold met)"
+  else
+    echo "- Decision: NOT READY (threshold not met)"
+  fi
 } >>"$report_file"
 
 if [[ -n "$output_path" ]]; then
@@ -265,4 +306,9 @@ if [[ -n "$output_path" ]]; then
 else
   cat "$report_file"
   rm -f "$report_file"
+fi
+
+if [[ "$enforce_threshold" -eq 1 && "$promotion_ready" -eq 0 ]]; then
+  echo "Promotion threshold not met." >&2
+  exit 2
 fi

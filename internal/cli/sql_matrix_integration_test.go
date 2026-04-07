@@ -160,7 +160,8 @@ func TestSQLMatrix_ExploratoryCriticalCommands(t *testing.T) {
 	if err := runShell([]string{"--config", cfgPath, "-c", query}, strings.NewReader(""), &out, &errOut); err != nil {
 		t.Fatalf("shell failed: err=%v stderr=%s", err, errOut.String())
 	}
-	if !strings.Contains(out.String(), "total") || !strings.Contains(out.String(), "1") {
+	lowerShellOut := strings.ToLower(out.String())
+	if !strings.Contains(lowerShellOut, "total") || !strings.Contains(out.String(), "1") {
 		t.Fatalf("unexpected shell output: %s", out.String())
 	}
 }
