@@ -400,6 +400,13 @@ Main routes:
 - `GET /admin/api/models/{name}/export`
 - `GET /admin/api/sessions`
 
+List query validation contract (`GET /admin/api/models/{name}`):
+
+- `page` and `page_size` must be positive integers.
+- `page_size` maximum is `200`.
+- `search` is trimmed and limited to `256` characters.
+- filter parameters must target fields declared with `admin:"...,filter"` and use valid values (for boolean filters: `1/0`, `true/false`, `yes/no`, `on/off`).
+
 ## 11. SQL Migrations
 
 Root command:

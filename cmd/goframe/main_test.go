@@ -1701,6 +1701,109 @@ func TestRun_RemoveStaleContentTypes(t *testing.T) {
 	}
 }
 
+func TestRun_AdminMaintenanceCommands_JSONOutputContract(t *testing.T) {
+	dir := t.TempDir()
+	dbPath := filepath.Join(dir, "app.db")
+	cfgPath := writeCLIConfig(t, dir, dbPath)
+
+	dbConn, err := sql.Open("sqlite", dbPath)
+	if err != nil {
+		t.Fatalf("open sqlite failed: %v", err)
+	}
+	defer dbConn.Close()
+
+	var out bytes.Buffer
+	var errOut bytes.Buffer
+
+	code := run([]string{
+		"--output", "json",
+		"createuser",
+		"--config", cfgPath,
+		"--no-input",
+		"--username", "admin_json",
+		"--email", "admin_json@example.com",
+		"--password", "supersecret123",
+	}, &out, &errOut)
+	if code != 0 {
+		t.Fatalf("createuser json failed: code=%d stderr=%s", code, errOut.String())
+	}
+	createPayload := decodeCommandStatusJSON(t, out.Bytes())
+	if createPayload["command"] != "createuser" || createPayload["status"] != "ok" {
+		t.Fatalf("unexpected createuser json payload: %s", out.String())
+	}
+
+	out.Reset()
+	errOut.Reset()
+	code = run([]string{
+		"--output", "json",
+		"changepassword",
+		"--config", cfgPath,
+		"--no-input",
+		"--password", "newsecret456",
+		"admin_json",
+	}, &out, &errOut)
+	if code != 0 {
+		t.Fatalf("changepassword json failed: code=%d stderr=%s", code, errOut.String())
+	}
+	passwordPayload := decodeCommandStatusJSON(t, out.Bytes())
+	if passwordPayload["command"] != "changepassword" || passwordPayload["status"] != "ok" {
+		t.Fatalf("unexpected changepassword json payload: %s", out.String())
+	}
+
+	out.Reset()
+	errOut.Reset()
+	code = run([]string{"--output", "json", "createcachetable", "--config", cfgPath}, &out, &errOut)
+	if code != 0 {
+		t.Fatalf("createcachetable json failed: code=%d stderr=%s", code, errOut.String())
+	}
+	cachePayload := decodeCommandStatusJSON(t, out.Bytes())
+	if cachePayload["command"] != "createcachetable" || cachePayload["status"] != "ok" {
+		t.Fatalf("unexpected createcachetable json payload: %s", out.String())
+	}
+
+	if _, err := dbConn.Exec("CREATE TABLE goframe_sessions (id TEXT PRIMARY KEY, payload TEXT NOT NULL, expires_at TEXT NOT NULL);"); err != nil {
+		t.Fatalf("create sessions table failed: %v", err)
+	}
+	if _, err := dbConn.Exec("INSERT INTO goframe_sessions (id, payload, expires_at) VALUES ('old', '{}', datetime('now','-1 day'));"); err != nil {
+		t.Fatalf("seed expired session failed: %v", err)
+	}
+	if _, err := dbConn.Exec("INSERT INTO goframe_sessions (id, payload, expires_at) VALUES ('new', '{}', datetime('now','+1 day'));"); err != nil {
+		t.Fatalf("seed active session failed: %v", err)
+	}
+
+	out.Reset()
+	errOut.Reset()
+	code = run([]string{"--output", "json", "clearsessions", "--config", cfgPath}, &out, &errOut)
+	if code != 0 {
+		t.Fatalf("clearsessions json failed: code=%d stderr=%s", code, errOut.String())
+	}
+	sessionsPayload := decodeCommandStatusJSON(t, out.Bytes())
+	if sessionsPayload["command"] != "clearsessions" || sessionsPayload["status"] != "ok" {
+		t.Fatalf("unexpected clearsessions json payload: %s", out.String())
+	}
+
+	if _, err := dbConn.Exec("CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT);"); err != nil {
+		t.Fatalf("create users table failed: %v", err)
+	}
+	if _, err := dbConn.Exec("CREATE TABLE goframe_content_types (id INTEGER PRIMARY KEY, model TEXT NOT NULL);"); err != nil {
+		t.Fatalf("create content types table failed: %v", err)
+	}
+	if _, err := dbConn.Exec("INSERT INTO goframe_content_types(model) VALUES ('users'), ('ghost_model');"); err != nil {
+		t.Fatalf("seed content types failed: %v", err)
+	}
+
+	out.Reset()
+	errOut.Reset()
+	code = run([]string{"--output", "json", "remove_stale_contenttypes", "--config", cfgPath}, &out, &errOut)
+	if code != 0 {
+		t.Fatalf("remove_stale_contenttypes json failed: code=%d stderr=%s", code, errOut.String())
+	}
+	contentTypesPayload := decodeCommandStatusJSON(t, out.Bytes())
+	if contentTypesPayload["command"] != "remove_stale_contenttypes" || contentTypesPayload["status"] != "ok" {
+		t.Fatalf("unexpected remove_stale_contenttypes json payload: %s", out.String())
+	}
+}
+
 func TestRun_RemoveStaleContentTypesProductionGuardrail(t *testing.T) {
 	dir := t.TempDir()
 	dbPath := filepath.Join(dir, "app.db")
@@ -2501,4 +2604,14 @@ func tableExists(t *testing.T, dbPath, table string) bool {
 		t.Fatalf("scan failed: %v", err)
 	}
 	return cnt > 0
+}
+
+func decodeCommandStatusJSON(t *testing.T, raw []byte) map[string]interface{} {
+	t.Helper()
+
+	payload := make(map[string]interface{})
+	if err := json.Unmarshal(raw, &payload); err != nil {
+		t.Fatalf("decode command status json failed: %v raw=%s", err, string(raw))
+	}
+	return payload
 }

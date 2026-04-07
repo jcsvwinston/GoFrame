@@ -66,8 +66,10 @@ func runRemoveStaleContentTypes(args []string, stdin io.Reader, stdout, stderr i
 		return err
 	}
 	if !exists {
-		fmt.Fprintf(stdout, "Content types table %s not found; nothing to remove\n", targetTable)
-		return nil
+		return writeCommandStatus(stdout, "remove_stale_contenttypes", "warning", fmt.Sprintf("Content types table %s not found; nothing to remove", targetTable), map[string]interface{}{
+			"table":   targetTable,
+			"removed": 0,
+		})
 	}
 
 	userTables, err := listUserTables(sqlDB, flavor)
@@ -80,12 +82,23 @@ func runRemoveStaleContentTypes(args []string, stdin io.Reader, stdout, stderr i
 		return err
 	}
 	if len(stale) == 0 {
-		fmt.Fprintf(stdout, "No stale content types found in %s\n", targetTable)
-		return nil
+		return writeCommandStatus(stdout, "remove_stale_contenttypes", "ok", fmt.Sprintf("No stale content types found in %s", targetTable), map[string]interface{}{
+			"table":   targetTable,
+			"removed": 0,
+		})
 	}
 
 	statements := buildRemoveStaleContentTypeStatements(flavor, targetTable, targetColumn, stale)
 	if *dryRun {
+		if outputWantsJSON(false) {
+			return writeCommandStatus(stdout, "remove_stale_contenttypes", "ok", "Remove stale content types dry-run", map[string]interface{}{
+				"dry_run":    true,
+				"table":      targetTable,
+				"column":     targetColumn,
+				"stale":      stale,
+				"statements": statements,
+			})
+		}
 		fmt.Fprint(stdout, renderSQLStatements(statements))
 		fmt.Fprintf(stdout, "DRY-RUN\tREMOVE_STALE_CONTENTTYPES\tstale=%s\n", strings.Join(stale, ","))
 		return nil
@@ -105,8 +118,14 @@ func runRemoveStaleContentTypes(args []string, stdin io.Reader, stdout, stderr i
 		affected += rows
 	}
 
-	fmt.Fprintf(stdout, "Removed stale content types: table=%s entries=%d rows=%d\n", targetTable, len(stale), affected)
-	return nil
+	return writeCommandStatus(stdout, "remove_stale_contenttypes", "ok", fmt.Sprintf("Removed stale content types: table=%s entries=%d rows=%d", targetTable, len(stale), affected), map[string]interface{}{
+		"dry_run": false,
+		"table":   targetTable,
+		"column":  targetColumn,
+		"stale":   stale,
+		"entries": len(stale),
+		"rows":    affected,
+	})
 }
 
 func findStaleContentTypes(

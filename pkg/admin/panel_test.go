@@ -31,6 +31,37 @@ func (AdminUser) TableName() string {
 	return "admin_users"
 }
 
+type testAdminAuth struct {
+	user  *auth.User
+	allow map[string]bool
+}
+
+func (a *testAdminAuth) Authenticate(_ *http.Request) (*auth.User, error) {
+	if a.user == nil {
+		return nil, fmt.Errorf("missing auth user")
+	}
+	return a.user, nil
+}
+
+func (a *testAdminAuth) Authorize(_ *auth.User, modelName string, action string) bool {
+	if a == nil {
+		return true
+	}
+	key := modelName + ":" + action
+	allowed, ok := a.allow[key]
+	if !ok {
+		return true
+	}
+	return allowed
+}
+
+func (a *testAdminAuth) LoginHandler() http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("login"))
+	})
+}
+
 func TestPanel_CRUDWithDualEngine(t *testing.T) {
 	engines := []db.Engine{db.EngineSQL}
 
@@ -167,6 +198,61 @@ func TestPanel_ListRejectsInvalidOrderBy(t *testing.T) {
 	}
 }
 
+func TestPanel_ListValidationRejectsInvalidQueryParams(t *testing.T) {
+	panel, cleanup := setupPanelForTest(t, db.EngineSQL)
+	defer cleanup()
+
+	srv := httptest.NewServer(panel.Handler())
+	defer srv.Close()
+
+	cases := []struct {
+		name string
+		url  string
+	}{
+		{
+			name: "invalid_page",
+			url:  srv.URL + "/api/models/AdminUser?page=0",
+		},
+		{
+			name: "invalid_page_size",
+			url:  srv.URL + "/api/models/AdminUser?page_size=abc",
+		},
+		{
+			name: "page_size_too_large",
+			url:  srv.URL + "/api/models/AdminUser?page_size=201",
+		},
+		{
+			name: "unknown_filter_field",
+			url:  srv.URL + "/api/models/AdminUser?nope=value",
+		},
+		{
+			name: "non_filterable_field",
+			url:  srv.URL + "/api/models/AdminUser?name=Alpha",
+		},
+		{
+			name: "invalid_boolean_filter_value",
+			url:  srv.URL + "/api/models/AdminUser?active=maybe",
+		},
+		{
+			name: "search_too_long",
+			url:  srv.URL + "/api/models/AdminUser?search=" + strings.Repeat("x", 257),
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			resp, status := doJSON(t, http.MethodGet, tc.url, nil)
+			if status != http.StatusBadRequest {
+				t.Fatalf("expected status=400, got=%d body=%s", status, mustJSON(resp))
+			}
+			errMap, _ := resp["error"].(map[string]interface{})
+			if errMap["code"] != "BAD_REQUEST" {
+				t.Fatalf("expected BAD_REQUEST code, got %#v", resp)
+			}
+		})
+	}
+}
+
 func TestPanel_BulkExportSelected(t *testing.T) {
 	panel, cleanup := setupPanelForTest(t, db.EngineSQL)
 	defer cleanup()
@@ -228,6 +314,101 @@ func TestPanel_BulkExportSelected(t *testing.T) {
 	}
 	if strings.Contains(bodyStr, "other@example.com") {
 		t.Fatalf("did not expect unselected record in csv: %s", bodyStr)
+	}
+}
+
+func TestPanel_BulkDelete_ErrorReport(t *testing.T) {
+	panel, cleanup := setupPanelForTest(t, db.EngineSQL)
+	defer cleanup()
+
+	srv := httptest.NewServer(panel.Handler())
+	defer srv.Close()
+
+	created := createAdminUser(t, srv.URL, map[string]interface{}{
+		"email":  "bulk-delete@example.com",
+		"name":   "BulkDelete",
+		"active": true,
+	})
+
+	reqPayload := map[string]interface{}{
+		"action": "delete",
+		"ids":    []uint{created.ID, 999999},
+	}
+	resp, status := doJSON(t, http.MethodPost, srv.URL+"/api/models/AdminUser/bulk", reqPayload)
+	if status != http.StatusOK {
+		t.Fatalf("bulk delete status=%d body=%s", status, mustJSON(resp))
+	}
+	if int(resp["requested"].(float64)) != 2 {
+		t.Fatalf("expected requested=2, got %#v", resp["requested"])
+	}
+	if int(resp["deleted"].(float64)) != 1 {
+		t.Fatalf("expected deleted=1, got %#v", resp["deleted"])
+	}
+	if int(resp["failed"].(float64)) != 1 {
+		t.Fatalf("expected failed=1, got %#v", resp["failed"])
+	}
+	errorsRaw, ok := resp["errors"].([]interface{})
+	if !ok || len(errorsRaw) != 1 {
+		t.Fatalf("expected one bulk delete error entry, got %#v", resp["errors"])
+	}
+	errRow, _ := errorsRaw[0].(map[string]interface{})
+	if int(errRow["id"].(float64)) != 999999 {
+		t.Fatalf("unexpected failed id row: %#v", errRow)
+	}
+}
+
+func TestPanel_Authorization_ActionLevelCreateDenied(t *testing.T) {
+	adminAuth := &testAdminAuth{
+		user: &auth.User{ID: "1", Username: "admin"},
+		allow: map[string]bool{
+			"AdminUser:create": false,
+		},
+	}
+
+	panel, cleanup := setupPanelForTestWithAuth(t, db.EngineSQL, adminAuth)
+	defer cleanup()
+
+	srv := httptest.NewServer(panel.Handler())
+	defer srv.Close()
+
+	payload := map[string]interface{}{
+		"email":  "denied@example.com",
+		"name":   "Denied",
+		"active": true,
+	}
+	resp, status := doJSON(t, http.MethodPost, srv.URL+"/api/models/AdminUser", payload)
+	if status != http.StatusForbidden {
+		t.Fatalf("expected forbidden create status, got %d body=%s", status, mustJSON(resp))
+	}
+	errMap, _ := resp["error"].(map[string]interface{})
+	if errMap["code"] != "FORBIDDEN" {
+		t.Fatalf("expected FORBIDDEN error code, got %#v", resp)
+	}
+}
+
+func TestPanel_Authorization_ActionLevelExportDenied(t *testing.T) {
+	adminAuth := &testAdminAuth{
+		user: &auth.User{ID: "1", Username: "admin"},
+		allow: map[string]bool{
+			"AdminUser:export_csv": false,
+		},
+	}
+
+	panel, cleanup := setupPanelForTestWithAuth(t, db.EngineSQL, adminAuth)
+	defer cleanup()
+
+	srv := httptest.NewServer(panel.Handler())
+	defer srv.Close()
+
+	res, err := http.Get(srv.URL + "/api/models/AdminUser/export?ids=1")
+	if err != nil {
+		t.Fatalf("export request failed: %v", err)
+	}
+	defer res.Body.Close()
+
+	if res.StatusCode != http.StatusForbidden {
+		body, _ := io.ReadAll(res.Body)
+		t.Fatalf("expected forbidden export status, got %d body=%s", res.StatusCode, string(body))
 	}
 }
 
@@ -357,6 +538,10 @@ func TestPanel_ListSessions_WithSessionManager(t *testing.T) {
 }
 
 func setupPanelForTest(t *testing.T, engine db.Engine) (*Panel, func()) {
+	return setupPanelForTestWithAuth(t, engine, nil)
+}
+
+func setupPanelForTestWithAuth(t *testing.T, engine db.Engine, adminAuth AdminAuth) (*Panel, func()) {
 	t.Helper()
 
 	logger := observe.NewLogger("error", "text")
@@ -386,6 +571,7 @@ func setupPanelForTest(t *testing.T, engine db.Engine) (*Panel, func()) {
 	panel := NewPanel(database, registry, logger, PanelConfig{
 		Prefix: "/admin",
 		Title:  "Test Admin",
+		Auth:   adminAuth,
 	})
 
 	cleanup := func() {

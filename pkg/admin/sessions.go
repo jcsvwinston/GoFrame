@@ -86,6 +86,10 @@ type iterableSessionStoreCtx interface {
 }
 
 func (p *Panel) handleListSessions(w http.ResponseWriter, r *http.Request) {
+	if !p.authorizeAction(w, r, "*", "list_sessions") {
+		return
+	}
+
 	now := time.Now().UTC()
 	limit := parseSessionListLimit(r, defaultSessionListLimit)
 

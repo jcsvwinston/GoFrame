@@ -19,6 +19,10 @@ import (
 
 // handleListModels returns all registered models with their record counts.
 func (p *Panel) handleListModels(w http.ResponseWriter, r *http.Request) {
+	if !p.authorizeAction(w, r, "*", "list_models") {
+		return
+	}
+
 	type modelInfo struct {
 		Name   string `json:"name"`
 		Plural string `json:"plural"`
@@ -56,6 +60,9 @@ func (p *Panel) handleGetSchema(w http.ResponseWriter, r *http.Request) {
 	meta, ok := p.registry.Get(name)
 	if !ok {
 		writeErr(w, gferrors.NotFound("model", name))
+		return
+	}
+	if !p.authorizeAction(w, r, meta.Name, "get_schema") {
 		return
 	}
 
@@ -112,34 +119,53 @@ func (p *Panel) handleListRecords(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, gferrors.NotFound("model", name))
 		return
 	}
+	if !p.authorizeAction(w, r, meta.Name, "list") {
+		return
+	}
 
 	crud, err := p.getCRUD(meta)
 	if err != nil {
 		writeErr(w, err)
 		return
 	}
-	page, _ := strconv.Atoi(r.URL.Query().Get("page"))
-	pageSize, _ := strconv.Atoi(r.URL.Query().Get("page_size"))
-	search := r.URL.Query().Get("search")
+	page, pageSet, err := parsePositiveQueryInt(r.URL.Query(), "page")
+	if err != nil {
+		writeErr(w, err)
+		return
+	}
+	pageSize, pageSizeSet, err := parsePositiveQueryInt(r.URL.Query(), "page_size")
+	if err != nil {
+		writeErr(w, err)
+		return
+	}
+	if pageSizeSet && pageSize > 200 {
+		writeErr(w, gferrors.BadRequest("page_size must be <= 200"))
+		return
+	}
+
+	search, err := sanitizeSearchQuery(r.URL.Query().Get("search"))
+	if err != nil {
+		writeErr(w, err)
+		return
+	}
+
 	orderBy, err := sanitizeOrderBy(meta, r.URL.Query().Get("order_by"))
 	if err != nil {
 		writeErr(w, err)
 		return
 	}
 
-	filters := make(map[string]string)
-	for key, vals := range r.URL.Query() {
-		if key != "page" && key != "page_size" && key != "search" && key != "order_by" {
-			raw := strings.TrimSpace(vals[0])
-			if raw == "" {
-				continue
-			}
-			col, normalized, ok := normalizeFilter(meta, key, raw)
-			if !ok {
-				continue
-			}
-			filters[col] = normalized
-		}
+	filters, err := collectFilters(meta, r.URL.Query())
+	if err != nil {
+		writeErr(w, err)
+		return
+	}
+
+	if !pageSet {
+		page = 0
+	}
+	if !pageSizeSet {
+		pageSize = 0
 	}
 
 	result, err := crud.FindAll(r.Context(), model.QueryOpts{
@@ -162,6 +188,9 @@ func (p *Panel) handleGetRecord(w http.ResponseWriter, r *http.Request) {
 	meta, ok := p.registry.Get(name)
 	if !ok {
 		writeErr(w, gferrors.NotFound("model", name))
+		return
+	}
+	if !p.authorizeAction(w, r, meta.Name, "retrieve") {
 		return
 	}
 
@@ -191,6 +220,9 @@ func (p *Panel) handleCreateRecord(w http.ResponseWriter, r *http.Request) {
 	meta, ok := p.registry.Get(name)
 	if !ok {
 		writeErr(w, gferrors.NotFound("model", name))
+		return
+	}
+	if !p.authorizeAction(w, r, meta.Name, "create") {
 		return
 	}
 	if meta.Config.ReadOnly {
@@ -234,6 +266,9 @@ func (p *Panel) handleUpdateRecord(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, gferrors.NotFound("model", name))
 		return
 	}
+	if !p.authorizeAction(w, r, meta.Name, "update") {
+		return
+	}
 	if meta.Config.ReadOnly {
 		writeErr(w, gferrors.Forbidden("model is read-only"))
 		return
@@ -272,6 +307,9 @@ func (p *Panel) handleDeleteRecord(w http.ResponseWriter, r *http.Request) {
 	meta, ok := p.registry.Get(name)
 	if !ok {
 		writeErr(w, gferrors.NotFound("model", name))
+		return
+	}
+	if !p.authorizeAction(w, r, meta.Name, "delete") {
 		return
 	}
 	if meta.Config.ReadOnly {
@@ -316,10 +354,18 @@ func (p *Panel) handleBulkAction(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	switch strings.ToLower(req.Action) {
+	action := strings.ToLower(strings.TrimSpace(req.Action))
+	switch action {
 	case "delete":
+		if !p.authorizeAction(w, r, meta.Name, "bulk_delete") {
+			return
+		}
 		if meta.Config.ReadOnly {
 			writeErr(w, gferrors.Forbidden("model is read-only"))
+			return
+		}
+		if len(req.IDs) == 0 {
+			writeErr(w, gferrors.BadRequest("ids are required for delete action"))
 			return
 		}
 		crud, err := p.getCRUD(meta)
@@ -327,15 +373,37 @@ func (p *Panel) handleBulkAction(w http.ResponseWriter, r *http.Request) {
 			writeErr(w, err)
 			return
 		}
-		deleted := 0
-		for _, id := range req.IDs {
-			if err := crud.Delete(r.Context(), id); err == nil {
-				deleted++
-			}
+
+		type bulkDeleteError struct {
+			ID    uint   `json:"id"`
+			Error string `json:"error"`
 		}
-		writeJSON(w, http.StatusOK, map[string]interface{}{"deleted": deleted})
+
+		deleted := 0
+		failures := make([]bulkDeleteError, 0)
+		for _, id := range req.IDs {
+			deleteErr := crud.Delete(r.Context(), id)
+			if deleteErr == nil {
+				deleted++
+				continue
+			}
+			failures = append(failures, bulkDeleteError{
+				ID:    id,
+				Error: deleteErr.Error(),
+			})
+		}
+		writeJSON(w, http.StatusOK, map[string]interface{}{
+			"action":    "delete",
+			"requested": len(req.IDs),
+			"deleted":   deleted,
+			"failed":    len(failures),
+			"errors":    failures,
+		})
 
 	case "export":
+		if !p.authorizeAction(w, r, meta.Name, "bulk_export") {
+			return
+		}
 		if len(req.IDs) == 0 {
 			writeErr(w, gferrors.BadRequest("ids are required for export action"))
 			return
@@ -358,6 +426,25 @@ func writeJSON(w http.ResponseWriter, status int, data interface{}) {
 
 func writeErr(w http.ResponseWriter, err error) {
 	gferrors.WriteError(w, err, nil)
+}
+
+func authErrorToDomain(err error) error {
+	if err == nil {
+		return gferrors.Unauthorized("authentication required")
+	}
+	return gferrors.Unauthorized(err.Error())
+}
+
+func authDeniedDomain(modelName, action string) error {
+	modelName = strings.TrimSpace(modelName)
+	if modelName == "" {
+		modelName = "*"
+	}
+	action = strings.TrimSpace(action)
+	if action == "" {
+		action = "unknown"
+	}
+	return gferrors.Forbidden(fmt.Sprintf("not authorized to %s on %s", action, modelName))
 }
 
 func (p *Panel) modelCount(ctx context.Context, meta *model.ModelMeta) (int64, error) {
@@ -657,10 +744,61 @@ func sanitizeOrderBy(meta *model.ModelMeta, raw string) (string, error) {
 	return fmt.Sprintf("%s %s", col, dir), nil
 }
 
-func normalizeFilter(meta *model.ModelMeta, key, value string) (column, normalized string, ok bool) {
+func parsePositiveQueryInt(values url.Values, key string) (value int, provided bool, err error) {
+	raw := strings.TrimSpace(values.Get(key))
+	if raw == "" {
+		return 0, false, nil
+	}
+
+	n, convErr := strconv.Atoi(raw)
+	if convErr != nil {
+		return 0, true, gferrors.BadRequest(fmt.Sprintf("%s must be a positive integer", key))
+	}
+	if n <= 0 {
+		return 0, true, gferrors.BadRequest(fmt.Sprintf("%s must be >= 1", key))
+	}
+	return n, true, nil
+}
+
+func sanitizeSearchQuery(raw string) (string, error) {
+	search := strings.TrimSpace(raw)
+	if len(search) > 256 {
+		return "", gferrors.BadRequest("search is too long (max 256 characters)")
+	}
+	return search, nil
+}
+
+func collectFilters(meta *model.ModelMeta, values url.Values) (map[string]string, error) {
+	filters := make(map[string]string)
+	for key, vals := range values {
+		if key == "page" || key == "page_size" || key == "search" || key == "order_by" {
+			continue
+		}
+		if len(vals) == 0 {
+			continue
+		}
+
+		raw := strings.TrimSpace(vals[0])
+		if raw == "" {
+			continue
+		}
+
+		col, normalized, err := normalizeFilter(meta, key, raw)
+		if err != nil {
+			return nil, err
+		}
+		filters[col] = normalized
+	}
+	return filters, nil
+}
+
+func normalizeFilter(meta *model.ModelMeta, key, value string) (column, normalized string, err error) {
 	col, field, found := resolveField(meta, key)
 	if !found {
-		return "", "", false
+		return "", "", gferrors.BadRequest(fmt.Sprintf("invalid filter field %q", key))
+	}
+	if !field.IsFilter {
+		return "", "", gferrors.BadRequest(fmt.Sprintf("filter is not enabled for %q", key))
 	}
 
 	normalized = value
@@ -671,11 +809,11 @@ func normalizeFilter(meta *model.ModelMeta, key, value string) (column, normaliz
 		case "0", "false", "no", "off":
 			normalized = "0"
 		default:
-			return "", "", false
+			return "", "", gferrors.BadRequest(fmt.Sprintf("invalid boolean value %q for filter %q", value, key))
 		}
 	}
 
-	return col, normalized, true
+	return col, normalized, nil
 }
 
 func resolveField(meta *model.ModelMeta, key string) (column string, field model.FieldMeta, ok bool) {

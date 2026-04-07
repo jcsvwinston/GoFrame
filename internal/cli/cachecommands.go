@@ -57,6 +57,14 @@ func runCreateCacheTable(args []string, _ io.Reader, stdout, stderr io.Writer) e
 	sqlScript := renderSQLStatements(statements)
 
 	if *dryRun {
+		if outputWantsJSON(false) {
+			return writeCommandStatus(stdout, "createcachetable", "ok", "Create cache table dry-run", map[string]interface{}{
+				"dry_run":    true,
+				"table":      targetTable,
+				"alias":      resolvedAlias,
+				"statements": statements,
+			})
+		}
 		fmt.Fprint(stdout, sqlScript)
 		return nil
 	}
@@ -64,8 +72,11 @@ func runCreateCacheTable(args []string, _ io.Reader, stdout, stderr io.Writer) e
 	if err := executeSQLStatements(sqlDB, statements); err != nil {
 		return fmt.Errorf("create cache table: %w", err)
 	}
-	fmt.Fprintf(stdout, "Cache table ready: %s\n", targetTable)
-	return nil
+	return writeCommandStatus(stdout, "createcachetable", "ok", fmt.Sprintf("Cache table ready: %s", targetTable), map[string]interface{}{
+		"dry_run": false,
+		"table":   targetTable,
+		"alias":   resolvedAlias,
+	})
 }
 
 func runClearSessions(args []string, _ io.Reader, stdout, stderr io.Writer) error {
@@ -110,8 +121,11 @@ func runClearSessions(args []string, _ io.Reader, stdout, stderr io.Writer) erro
 		return err
 	}
 	if !exists {
-		fmt.Fprintf(stdout, "Session table %s not found; nothing to clear\n", targetTable)
-		return nil
+		return writeCommandStatus(stdout, "clearsessions", "warning", fmt.Sprintf("Session table %s not found; nothing to clear", targetTable), map[string]interface{}{
+			"table": targetTable,
+			"mode":  "none",
+			"rows":  0,
+		})
 	}
 
 	statement, mode, err := buildClearSessionsStatement(sqlDB, flavor, targetTable, *all)
@@ -120,6 +134,14 @@ func runClearSessions(args []string, _ io.Reader, stdout, stderr io.Writer) erro
 	}
 
 	if *dryRun {
+		if outputWantsJSON(false) {
+			return writeCommandStatus(stdout, "clearsessions", "ok", "Clear sessions dry-run", map[string]interface{}{
+				"dry_run":   true,
+				"table":     targetTable,
+				"mode":      mode,
+				"statement": statement,
+			})
+		}
 		fmt.Fprint(stdout, renderSQLStatements([]string{statement}))
 		return nil
 	}
@@ -129,8 +151,12 @@ func runClearSessions(args []string, _ io.Reader, stdout, stderr io.Writer) erro
 		return fmt.Errorf("clear sessions: %w", err)
 	}
 	affected, _ := res.RowsAffected()
-	fmt.Fprintf(stdout, "Sessions cleared (%s): table=%s rows=%d\n", mode, targetTable, affected)
-	return nil
+	return writeCommandStatus(stdout, "clearsessions", "ok", fmt.Sprintf("Sessions cleared (%s): table=%s rows=%d", mode, targetTable, affected), map[string]interface{}{
+		"dry_run": false,
+		"table":   targetTable,
+		"mode":    mode,
+		"rows":    affected,
+	})
 }
 
 func buildCreateCacheTableStatements(flavor dbFlavor, table string) ([]string, error) {

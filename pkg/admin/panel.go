@@ -5,6 +5,7 @@ package admin
 
 import (
 	"bytes"
+	"context"
 	"embed"
 	"fmt"
 	"io/fs"
@@ -21,6 +22,8 @@ import (
 
 //go:embed ui/*
 var uiFS embed.FS
+
+type adminAuthContextKey struct{}
 
 // AdminAuth is the interface for admin panel authentication and authorization.
 type AdminAuth interface {
@@ -98,7 +101,9 @@ func (p *Panel) Handler() *router.Mux {
 
 	// Auth middleware if configured
 	if p.config.Auth != nil {
-		r.Handle("/login", p.config.Auth.LoginHandler())
+		loginHandler := p.config.Auth.LoginHandler()
+		r.Get("/login", loginHandler.ServeHTTP)
+		r.Post("/login", loginHandler.ServeHTTP)
 		r.Group(func(r *router.Mux) {
 			r.Use(p.authMiddleware)
 			p.mountRoutes(r)
@@ -144,11 +149,38 @@ func (p *Panel) handleSPA(fsys fs.FS) http.HandlerFunc {
 
 func (p *Panel) authMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_, err := p.config.Auth.Authenticate(r)
+		user, err := p.config.Auth.Authenticate(r)
 		if err != nil {
 			http.Redirect(w, r, p.config.Prefix+"/login", http.StatusFound)
 			return
 		}
-		next.ServeHTTP(w, r)
+		ctx := context.WithValue(r.Context(), adminAuthContextKey{}, user)
+		next.ServeHTTP(w, r.WithContext(ctx))
 	})
+}
+
+func (p *Panel) authorizeAction(w http.ResponseWriter, r *http.Request, modelName, action string) bool {
+	if p.config.Auth == nil {
+		return true
+	}
+
+	user, err := p.authenticatedUser(r)
+	if err != nil {
+		writeErr(w, authErrorToDomain(err))
+		return false
+	}
+	if !p.config.Auth.Authorize(user, modelName, action) {
+		writeErr(w, authDeniedDomain(modelName, action))
+		return false
+	}
+	return true
+}
+
+func (p *Panel) authenticatedUser(r *http.Request) (*auth.User, error) {
+	if r != nil {
+		if user, ok := r.Context().Value(adminAuthContextKey{}).(*auth.User); ok && user != nil {
+			return user, nil
+		}
+	}
+	return p.config.Auth.Authenticate(r)
 }

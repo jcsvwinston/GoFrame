@@ -161,6 +161,14 @@ while in pre-1.0 mode (`v0.x.y`).
   - baseline files under `contracts/baseline/` for CLI primary command names and config key patterns
   - automated no-removal checks in `contracts/freeze_test.go`
   - CI/release integration via `scripts/ci/check_contract_freeze.sh` and required `contract-freeze` job.
+- Admin API hardening:
+  - action-level authorization checks now cover CSV export and session inventory endpoints
+  - bulk delete responses now report per-id failure details (`requested`, `deleted`, `failed`, `errors[]`)
+  - list endpoint now validates pagination/search/filter inputs explicitly (`page`, `page_size`, `search`, and filter fields/values)
+- Critical maintenance CLI commands now honor a homogeneous output contract across global modes:
+  - `createuser`, `changepassword`, `createcachetable`, `clearsessions`, `remove_stale_contenttypes`
+  - default `plain` remains backward-compatible in message wording
+  - `pretty` uses status-tag rendering and `json` emits structured command status payloads for automation
 
 ## [0.5.5] - 2026-04-05
 

@@ -104,8 +104,12 @@ func runCreateUser(args []string, stdin io.Reader, stdout, stderr io.Writer) err
 		if _, err := sqlDB.Exec(insert); err != nil {
 			return fmt.Errorf("insert admin user: %w", err)
 		}
-		fmt.Fprintf(stdout, "Admin user created: %s\n", *username)
-		return nil
+		return writeCommandStatus(stdout, "createuser", "ok", fmt.Sprintf("Admin user created: %s", *username), map[string]interface{}{
+			"action":    "created",
+			"username":  *username,
+			"email":     *email,
+			"superuser": *superuser,
+		})
 	}
 
 	update := fmt.Sprintf(
@@ -121,8 +125,12 @@ func runCreateUser(args []string, stdin io.Reader, stdout, stderr io.Writer) err
 	if _, err := sqlDB.Exec(update); err != nil {
 		return fmt.Errorf("update admin user: %w", err)
 	}
-	fmt.Fprintf(stdout, "Admin user updated: %s\n", *username)
-	return nil
+	return writeCommandStatus(stdout, "createuser", "ok", fmt.Sprintf("Admin user updated: %s", *username), map[string]interface{}{
+		"action":    "updated",
+		"username":  *username,
+		"email":     *email,
+		"superuser": *superuser,
+	})
 }
 
 func promptMissingUserFields(stdin io.Reader, stdout io.Writer, username, email, password *string) error {

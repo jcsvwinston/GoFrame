@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -271,4 +272,46 @@ func statusTag(w io.Writer, status string) string {
 	default:
 		return colorizeText(w, "36", label)
 	}
+}
+
+type commandStatusMessage struct {
+	Command string                 `json:"command"`
+	Status  string                 `json:"status"`
+	Message string                 `json:"message"`
+	Data    map[string]interface{} `json:"data,omitempty"`
+}
+
+func writeCommandStatus(stdout io.Writer, command, status, message string, data map[string]interface{}) error {
+	command = strings.TrimSpace(command)
+	if command == "" {
+		command = "command"
+	}
+
+	normalizedStatus := strings.ToLower(strings.TrimSpace(status))
+	if normalizedStatus == "" {
+		normalizedStatus = "info"
+	}
+
+	if outputWantsJSON(false) {
+		payload := commandStatusMessage{
+			Command: command,
+			Status:  normalizedStatus,
+			Message: message,
+		}
+		if len(data) > 0 {
+			payload.Data = data
+		}
+
+		enc := json.NewEncoder(stdout)
+		enc.SetIndent("", "  ")
+		return enc.Encode(payload)
+	}
+
+	if outputIsPretty() {
+		fmt.Fprintf(stdout, "%s  %s\n", statusTag(stdout, normalizedStatus), message)
+		return nil
+	}
+
+	fmt.Fprintln(stdout, message)
+	return nil
 }

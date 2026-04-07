@@ -39,6 +39,8 @@ Implemented areas in `cmd/goframe` + `internal/cli`:
   - `optimizemigration`, `squashmigrations`
 - Data and schema operations: `dumpdata`, `loaddata`, `inspectdb`, `ogrinspect`
 - Security/admin operations: `createuser`, `changepassword`, `clearsessions`, `remove_stale_contenttypes`
+  - these commands follow the global output contract (`--output plain|pretty|json`)
+  - `json` mode is automation-safe and emits structured status payloads
 - Asset and localization workflows: `collectstatic`, `findstatic`, `makemessages`, `compilemessages`
 - Mail and provider diagnostics: `sendtestemail`, `mailproviders`
 - Plugin diagnostics: `plugin list`, `plugin doctor`, `plugin test`

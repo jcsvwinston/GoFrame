@@ -20,6 +20,9 @@ func (p *Panel) handleExportCSV(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, gferrors.NotFound("model", name))
 		return
 	}
+	if !p.authorizeAction(w, r, meta.Name, "export_csv") {
+		return
+	}
 
 	crud, err := p.getCRUD(meta)
 	if err != nil {

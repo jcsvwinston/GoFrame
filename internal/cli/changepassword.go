@@ -91,8 +91,9 @@ func runChangePassword(args []string, stdin io.Reader, stdout, stderr io.Writer)
 		return fmt.Errorf("update admin password: %w", err)
 	}
 
-	fmt.Fprintf(stdout, "Password updated: %s\n", username)
-	return nil
+	return writeCommandStatus(stdout, "changepassword", "ok", fmt.Sprintf("Password updated: %s", username), map[string]interface{}{
+		"username": username,
+	})
 }
 
 func resolveChangePasswordUsername(usernameFlag string, positional []string) (string, error) {
