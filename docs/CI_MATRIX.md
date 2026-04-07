@@ -18,7 +18,7 @@ Manual CI dispatch is available via `workflow_dispatch` for stability drills.
 ## Required Merge Policy Check
 
 - Required branch-protection status check context on `main`: `CI Required Gate`
-- This check consolidates required CI jobs (`test` + `db-matrix-required` + `compatibility-harness`) into a single stable context for merge policy.
+- This check consolidates required CI jobs (`test` + `db-matrix-required` + `compatibility-harness` + `contract-freeze`) into a single stable context for merge policy.
 
 Apply branch protection (requires repo-admin permissions):
 
@@ -45,6 +45,12 @@ go test ./...
 
 ```bash
 bash scripts/ci/run_compatibility_harness.sh --enforce-threshold
+```
+
+## Stable contract freeze (required)
+
+```bash
+bash scripts/ci/check_contract_freeze.sh
 ```
 
 ## PostgreSQL required profile

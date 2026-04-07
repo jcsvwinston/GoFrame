@@ -228,6 +228,23 @@ jobs:
           path: ci-reports/compatibility_harness.md
           if-no-files-found: error
 
+  contract-freeze:
+    name: Contract Freeze
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: "1.26.x"
+          cache: true
+
+      - name: Validate stable contract freeze baselines
+        run: bash scripts/ci/check_contract_freeze.sh
+
   ci-required-gate:
     name: CI Required Gate
     runs-on: ubuntu-latest
@@ -236,6 +253,7 @@ jobs:
       - test
       - db-matrix-required
       - compatibility-harness
+      - contract-freeze
 
     steps:
       - name: Evaluate required CI results
@@ -244,6 +262,7 @@ jobs:
           echo "test result: ${{ needs.test.result }}"
           echo "db-matrix-required result: ${{ needs.db-matrix-required.result }}"
           echo "compatibility-harness result: ${{ needs.compatibility-harness.result }}"
+          echo "contract-freeze result: ${{ needs.contract-freeze.result }}"
 
           if [ "${{ needs.test.result }}" != "success" ]; then
             echo "Required job 'test' did not succeed"
@@ -255,6 +274,10 @@ jobs:
           fi
           if [ "${{ needs.compatibility-harness.result }}" != "success" ]; then
             echo "Required job 'compatibility-harness' did not succeed"
+            exit 1
+          fi
+          if [ "${{ needs.contract-freeze.result }}" != "success" ]; then
+            echo "Required job 'contract-freeze' did not succeed"
             exit 1
           fi
 

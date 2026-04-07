@@ -62,6 +62,17 @@ func buildCommandMap() map[string]commandSpec {
 	return out
 }
 
+// ContractPrimaryCommandNames returns the sorted list of primary CLI command
+// names that are considered part of the root command surface contract.
+func ContractPrimaryCommandNames() []string {
+	names := make([]string, 0, len(commandSpecs))
+	for _, spec := range commandSpecs {
+		names = append(names, spec.name)
+	}
+	sort.Strings(names)
+	return names
+}
+
 // Run executes the CLI command dispatch and returns a process exit code.
 func Run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	parsedArgs, outputOpts, err := parseGlobalOutputOptions(args)

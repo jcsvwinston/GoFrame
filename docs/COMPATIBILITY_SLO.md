@@ -82,14 +82,16 @@ bash scripts/ci/run_exploratory_stability.sh --runs 10 --output docs/reports/exp
 ```
 
 2. Run compatibility harness for fixture applications.
-3. Aggregate results into release artifacts.
-4. Validate against SLO thresholds before tagging.
+3. Run stable contract freeze validation (CLI/config no-removal baseline).
+4. Aggregate results into release artifacts.
+5. Validate against SLO thresholds before tagging.
 
 Recommended automation commands:
 
 ```bash
 bash scripts/release/generate_compatibility_report.sh --output dist/reports/compatibility_report.md --enforce-threshold
 bash scripts/release/generate_dependency_impact_report.sh --output dist/reports/dependency_impact_report.md
+bash scripts/ci/check_contract_freeze.sh
 ```
 
 ## Ownership

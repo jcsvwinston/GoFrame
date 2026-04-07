@@ -157,6 +157,10 @@ while in pre-1.0 mode (`v0.x.y`).
   - PK emitted as `pk`
   - FK emitted as `fk:<table>.<column>`
   - index metadata emitted as `index`/`unique` (single-column) or named variants for composites.
+- New stable-contract freeze guardrails:
+  - baseline files under `contracts/baseline/` for CLI primary command names and config key patterns
+  - automated no-removal checks in `contracts/freeze_test.go`
+  - CI/release integration via `scripts/ci/check_contract_freeze.sh` and required `contract-freeze` job.
 
 ## [0.5.5] - 2026-04-05
 
