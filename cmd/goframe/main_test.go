@@ -771,9 +771,12 @@ func TestRun_GenerateModelAndHandler(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("generate model failed: code=%d stderr=%s", code, errOut.String())
 	}
-	modelPath := filepath.Join(dir, "models", "user_profile.go")
+	modelPath := filepath.Join(dir, "internal", "models", "user_profile.go")
 	if _, err := os.Stat(modelPath); err != nil {
 		t.Fatalf("expected model scaffold file %s: %v", modelPath, err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "models", "user_profile.go")); err == nil {
+		t.Fatalf("unexpected legacy model path generated")
 	}
 
 	out.Reset()
@@ -782,9 +785,12 @@ func TestRun_GenerateModelAndHandler(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("generate handler failed: code=%d stderr=%s", code, errOut.String())
 	}
-	handlerPath := filepath.Join(dir, "handlers", "user_profile_handler.go")
+	handlerPath := filepath.Join(dir, "internal", "controllers", "user_profile_handler.go")
 	if _, err := os.Stat(handlerPath); err != nil {
 		t.Fatalf("expected handler scaffold file %s: %v", handlerPath, err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "handlers", "user_profile_handler.go")); err == nil {
+		t.Fatalf("unexpected legacy handler path generated")
 	}
 }
 
@@ -798,14 +804,20 @@ func TestRun_GenerateResource(t *testing.T) {
 		t.Fatalf("generate resource failed: code=%d stderr=%s", code, errOut.String())
 	}
 
-	modelPath := filepath.Join(dir, "models", "category.go")
-	handlerPath := filepath.Join(dir, "handlers", "category_handler.go")
-	testPath := filepath.Join(dir, "handlers", "category_handler_test.go")
+	modelPath := filepath.Join(dir, "internal", "models", "category.go")
+	handlerPath := filepath.Join(dir, "internal", "controllers", "category_handler.go")
+	testPath := filepath.Join(dir, "internal", "controllers", "category_handler_test.go")
 
 	for _, p := range []string{modelPath, handlerPath, testPath} {
 		if _, err := os.Stat(p); err != nil {
 			t.Fatalf("expected generated file %s: %v", p, err)
 		}
+	}
+	if _, err := os.Stat(filepath.Join(dir, "models", "category.go")); err == nil {
+		t.Fatalf("unexpected legacy resource model path generated")
+	}
+	if _, err := os.Stat(filepath.Join(dir, "handlers", "category_handler.go")); err == nil {
+		t.Fatalf("unexpected legacy resource handler path generated")
 	}
 
 	migrationsDir := filepath.Join(dir, "migrations")
@@ -864,6 +876,9 @@ func TestRun_NewProjectScaffold(t *testing.T) {
 	goMod := string(goModRaw)
 	if !strings.Contains(goMod, "module example.com/blogapp") {
 		t.Fatalf("go.mod missing module path: %s", goMod)
+	}
+	if !strings.Contains(goMod, "go 1.24") {
+		t.Fatalf("go.mod missing expected go version: %s", goMod)
 	}
 
 	cfgRaw, err := os.ReadFile(filepath.Join(projectDir, "goframe.yaml"))

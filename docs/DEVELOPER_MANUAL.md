@@ -696,9 +696,9 @@ Flags:
 
 `resource` creates:
 
-- model
-- CRUD scaffold handler
-- handler test
+- model (`internal/models/<name>.go`)
+- CRUD scaffold controller (`internal/controllers/<name>_handler.go`)
+- controller test (`internal/controllers/<name>_handler_test.go`)
 - migration up/down
 
 ## 16. Diagnostic Commands

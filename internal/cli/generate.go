@@ -108,7 +108,7 @@ type resourceScaffoldResult struct {
 }
 
 func generateModelScaffold(outDir, snake, pascal string, force bool) (string, error) {
-	path := filepath.Join(outDir, "models", snake+".go")
+	path := filepath.Join(outDir, "internal", "models", snake+".go")
 	body := fmt.Sprintf(modelTemplate, pascal, pascal)
 	if err := writeFileIfNotExists(path, body, force); err != nil {
 		return "", err
@@ -117,7 +117,7 @@ func generateModelScaffold(outDir, snake, pascal string, force bool) (string, er
 }
 
 func generateHandlerScaffold(outDir, snake, pascal string, force bool) (string, error) {
-	path := filepath.Join(outDir, "handlers", snake+"_handler.go")
+	path := filepath.Join(outDir, "internal", "controllers", snake+"_handler.go")
 	body := fmt.Sprintf(
 		handlerTemplate,
 		pascal, // comment
@@ -143,7 +143,7 @@ func generateResourceScaffold(outDir, migrationsDir, snake, pascal string, force
 	}
 
 	resourcePath := pluralizeResource(snake)
-	handlerPath := filepath.Join(outDir, "handlers", snake+"_handler.go")
+	handlerPath := filepath.Join(outDir, "internal", "controllers", snake+"_handler.go")
 	handlerBody := fmt.Sprintf(
 		resourceHandlerTemplate,
 		pascal,       // 1 comment
@@ -168,7 +168,7 @@ func generateResourceScaffold(outDir, migrationsDir, snake, pascal string, force
 		return nil, err
 	}
 
-	testPath := filepath.Join(outDir, "handlers", snake+"_handler_test.go")
+	testPath := filepath.Join(outDir, "internal", "controllers", snake+"_handler_test.go")
 	testBody := fmt.Sprintf(resourceHandlerTestTemplate, pascal, pascal, resourcePath)
 	if err := writeFileIfNotExists(testPath, testBody, force); err != nil {
 		return nil, err
@@ -242,7 +242,7 @@ type %s struct {
 }
 `
 
-const handlerTemplate = `package handlers
+const handlerTemplate = `package controllers
 
 import (
 	"encoding/json"
@@ -270,7 +270,7 @@ func (h *%sHandler) List(w http.ResponseWriter, _ *http.Request) {
 }
 `
 
-const resourceHandlerTemplate = `package handlers
+const resourceHandlerTemplate = `package controllers
 
 import (
 	"encoding/json"
@@ -323,7 +323,7 @@ func respondNotImplemented(w http.ResponseWriter, message string) {
 }
 `
 
-const resourceHandlerTestTemplate = `package handlers
+const resourceHandlerTestTemplate = `package controllers
 
 import (
 	"net/http"
