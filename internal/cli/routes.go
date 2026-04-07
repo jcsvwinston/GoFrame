@@ -76,7 +76,7 @@ func runRoutes(args []string, _ io.Reader, stdout, stderr io.Writer) error {
 		return routes[i].Pattern < routes[j].Pattern
 	})
 
-	if *asJSON {
+	if outputWantsJSON(*asJSON) {
 		enc := json.NewEncoder(stdout)
 		enc.SetIndent("", "  ")
 		return enc.Encode(routes)
@@ -84,6 +84,18 @@ func runRoutes(args []string, _ io.Reader, stdout, stderr io.Writer) error {
 
 	if len(routes) == 0 {
 		fmt.Fprintln(stdout, "No routes registered")
+		return nil
+	}
+
+	if outputIsPretty() {
+		fmt.Fprintf(stdout, "Routes: %d\n", len(routes))
+		for _, r := range routes {
+			if *verbose {
+				fmt.Fprintf(stdout, "  %s  %s  mw=%d\n", r.Method, r.Pattern, r.Middlewares)
+				continue
+			}
+			fmt.Fprintf(stdout, "  %s  %s\n", r.Method, r.Pattern)
+		}
 		return nil
 	}
 

@@ -122,10 +122,40 @@ func runPluginList(args []string, stdout, stderr io.Writer) error {
 		Providers:        toPluginListItems(inventory, activeMailDriver),
 	}
 
-	if *asJSON {
+	if outputWantsJSON(*asJSON) {
 		enc := json.NewEncoder(stdout)
 		enc.SetIndent("", "  ")
 		return enc.Encode(report)
+	}
+
+	if outputIsPretty() {
+		fmt.Fprintf(stdout, "Plugins (active mail driver: %s)\n", report.ActiveMailDriver)
+		if len(report.Providers) == 0 {
+			fmt.Fprintln(stdout, "  none")
+			return nil
+		}
+		for _, item := range report.Providers {
+			status := "info"
+			if item.ActiveMail {
+				status = "ok"
+			}
+			if strings.TrimSpace(item.ProbeError) != "" {
+				status = "warning"
+			}
+			capabilities := "-"
+			if len(item.Capabilities) > 0 {
+				capabilities = strings.Join(item.Capabilities, ",")
+			}
+			fmt.Fprintf(stdout, "  %s  %s (%s) caps=%s", statusTag(stdout, status), item.Provider, item.Source, capabilities)
+			if strings.TrimSpace(item.BinaryPath) != "" {
+				fmt.Fprintf(stdout, " bin=%s", item.BinaryPath)
+			}
+			if strings.TrimSpace(item.ProbeError) != "" {
+				fmt.Fprintf(stdout, " probe=%s", item.ProbeError)
+			}
+			fmt.Fprintln(stdout)
+		}
+		return nil
 	}
 
 	fmt.Fprintf(stdout, "Active mail driver: %s\n", report.ActiveMailDriver)
@@ -277,16 +307,27 @@ func runPluginDoctor(args []string, stdout, stderr io.Writer) error {
 		}
 	}
 
-	if *asJSON {
+	if outputWantsJSON(*asJSON) {
 		enc := json.NewEncoder(stdout)
 		enc.SetIndent("", "  ")
 		if err := enc.Encode(report); err != nil {
 			return err
 		}
 	} else {
-		fmt.Fprintf(stdout, "overall\t%s\n", report.Status)
-		for _, check := range report.Checks {
-			fmt.Fprintf(stdout, "%s\t%s\t%s\n", check.Name, check.Status, check.Details)
+		if outputIsPretty() {
+			fmt.Fprintf(stdout, "Plugin doctor: %s\n", statusTag(stdout, report.Status))
+			for _, check := range report.Checks {
+				fmt.Fprintf(stdout, "  %s  %s", statusTag(stdout, check.Status), check.Name)
+				if strings.TrimSpace(check.Details) != "" {
+					fmt.Fprintf(stdout, " - %s", check.Details)
+				}
+				fmt.Fprintln(stdout)
+			}
+		} else {
+			fmt.Fprintf(stdout, "overall\t%s\n", report.Status)
+			for _, check := range report.Checks {
+				fmt.Fprintf(stdout, "%s\t%s\t%s\n", check.Name, check.Status, check.Details)
+			}
 		}
 	}
 
@@ -519,25 +560,41 @@ func capabilityInSlice(values []string, target string) bool {
 }
 
 func emitPluginTestResult(report pluginTestReport, asJSON bool, stdout io.Writer) error {
-	if asJSON {
+	if outputWantsJSON(asJSON) {
 		enc := json.NewEncoder(stdout)
 		enc.SetIndent("", "  ")
 		if err := enc.Encode(report); err != nil {
 			return err
 		}
 	} else {
-		fmt.Fprintf(stdout, "provider\t%s\n", report.Provider)
-		fmt.Fprintf(stdout, "capability\t%s\n", report.Capability)
-		fmt.Fprintf(stdout, "mode\t%s\n", report.Mode)
-		fmt.Fprintf(stdout, "status\t%s\n", report.Status)
-		if report.Source != "" {
-			fmt.Fprintf(stdout, "source\t%s\n", report.Source)
-		}
-		if strings.TrimSpace(report.BinaryPath) != "" {
-			fmt.Fprintf(stdout, "binary\t%s\n", report.BinaryPath)
-		}
-		if strings.TrimSpace(report.Details) != "" {
-			fmt.Fprintf(stdout, "details\t%s\n", report.Details)
+		if outputIsPretty() {
+			fmt.Fprintf(stdout, "Plugin test: %s\n", statusTag(stdout, report.Status))
+			fmt.Fprintf(stdout, "  provider:   %s\n", report.Provider)
+			fmt.Fprintf(stdout, "  capability: %s\n", report.Capability)
+			fmt.Fprintf(stdout, "  mode:       %s\n", report.Mode)
+			if report.Source != "" {
+				fmt.Fprintf(stdout, "  source:     %s\n", report.Source)
+			}
+			if strings.TrimSpace(report.BinaryPath) != "" {
+				fmt.Fprintf(stdout, "  binary:     %s\n", report.BinaryPath)
+			}
+			if strings.TrimSpace(report.Details) != "" {
+				fmt.Fprintf(stdout, "  details:    %s\n", report.Details)
+			}
+		} else {
+			fmt.Fprintf(stdout, "provider\t%s\n", report.Provider)
+			fmt.Fprintf(stdout, "capability\t%s\n", report.Capability)
+			fmt.Fprintf(stdout, "mode\t%s\n", report.Mode)
+			fmt.Fprintf(stdout, "status\t%s\n", report.Status)
+			if report.Source != "" {
+				fmt.Fprintf(stdout, "source\t%s\n", report.Source)
+			}
+			if strings.TrimSpace(report.BinaryPath) != "" {
+				fmt.Fprintf(stdout, "binary\t%s\n", report.BinaryPath)
+			}
+			if strings.TrimSpace(report.Details) != "" {
+				fmt.Fprintf(stdout, "details\t%s\n", report.Details)
+			}
 		}
 	}
 

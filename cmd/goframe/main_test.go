@@ -2044,6 +2044,85 @@ func TestRun_HealthJSON_ReportsPrimaryAlias(t *testing.T) {
 	}
 }
 
+func TestRun_GlobalOutputJSON_Health(t *testing.T) {
+	dir := t.TempDir()
+	dbPath := filepath.Join(dir, "app.db")
+	cfgPath := writeCLIConfig(t, dir, dbPath)
+
+	var out bytes.Buffer
+	var errOut bytes.Buffer
+	code := run([]string{"--output", "json", "health", "--config", cfgPath}, &out, &errOut)
+	if code != 0 {
+		t.Fatalf("health with global json output failed: code=%d stderr=%s", code, errOut.String())
+	}
+	body := out.String()
+	if !strings.Contains(body, "\"status\": \"ok\"") || !strings.Contains(body, "\"components\"") {
+		t.Fatalf("unexpected global json health output: %s", body)
+	}
+}
+
+func TestRun_GlobalOutputPretty_Health(t *testing.T) {
+	dir := t.TempDir()
+	dbPath := filepath.Join(dir, "app.db")
+	cfgPath := writeCLIConfig(t, dir, dbPath)
+
+	var out bytes.Buffer
+	var errOut bytes.Buffer
+	code := run([]string{"--output", "pretty", "--no-symbols", "health", "--config", cfgPath}, &out, &errOut)
+	if code != 0 {
+		t.Fatalf("health with global pretty output failed: code=%d stderr=%s", code, errOut.String())
+	}
+	body := out.String()
+	if !strings.Contains(body, "Overall: ") || !strings.Contains(body, "database") {
+		t.Fatalf("unexpected global pretty health output: %s", body)
+	}
+}
+
+func TestRun_GlobalColorAlways_Health(t *testing.T) {
+	dir := t.TempDir()
+	dbPath := filepath.Join(dir, "app.db")
+	cfgPath := writeCLIConfig(t, dir, dbPath)
+
+	var out bytes.Buffer
+	var errOut bytes.Buffer
+	code := run([]string{"--output", "pretty", "--color", "always", "health", "--config", cfgPath}, &out, &errOut)
+	if code != 0 {
+		t.Fatalf("health with forced color output failed: code=%d stderr=%s", code, errOut.String())
+	}
+	if !strings.Contains(out.String(), "\x1b[") {
+		t.Fatalf("expected ANSI colors in output, got: %q", out.String())
+	}
+}
+
+func TestRun_GlobalOutputInvalidValue(t *testing.T) {
+	var out bytes.Buffer
+	var errOut bytes.Buffer
+	code := run([]string{"--output", "fancy", "health"}, &out, &errOut)
+	if code == 0 {
+		t.Fatal("expected non-zero exit for invalid global --output value")
+	}
+	if !strings.Contains(errOut.String(), "invalid --output value") {
+		t.Fatalf("unexpected stderr: %s", errOut.String())
+	}
+}
+
+func TestRun_GlobalJSONShorthand(t *testing.T) {
+	dir := t.TempDir()
+	dbPath := filepath.Join(dir, "app.db")
+	cfgPath := writeCLIConfig(t, dir, dbPath)
+
+	var out bytes.Buffer
+	var errOut bytes.Buffer
+	code := run([]string{"--json", "routes", "--config", cfgPath}, &out, &errOut)
+	if code != 0 {
+		t.Fatalf("routes with global --json failed: code=%d stderr=%s", code, errOut.String())
+	}
+	body := out.String()
+	if !strings.Contains(body, "\"method\"") || !strings.Contains(body, "\"pattern\"") {
+		t.Fatalf("unexpected routes json output: %s", body)
+	}
+}
+
 func TestRun_InspectDB_UsesPrimaryAlias(t *testing.T) {
 	dir := t.TempDir()
 	defaultDBPath := filepath.Join(dir, "default.db")

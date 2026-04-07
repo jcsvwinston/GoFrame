@@ -78,16 +78,27 @@ func runHealth(args []string, _ io.Reader, stdout, stderr io.Writer) error {
 		applyDeployChecks(cfg, &report)
 	}
 
-	if *asJSON {
+	if outputWantsJSON(*asJSON) {
 		enc := json.NewEncoder(stdout)
 		enc.SetIndent("", "  ")
 		if err := enc.Encode(report); err != nil {
 			return err
 		}
 	} else {
-		fmt.Fprintf(stdout, "overall\t%s\n", report.Status)
-		for _, c := range report.Components {
-			fmt.Fprintf(stdout, "%s\t%s\t%s\n", c.Name, c.Status, c.Details)
+		if outputIsPretty() {
+			fmt.Fprintf(stdout, "Overall: %s\n", statusTag(stdout, report.Status))
+			for _, c := range report.Components {
+				fmt.Fprintf(stdout, "  %s  %s", statusTag(stdout, c.Status), c.Name)
+				if strings.TrimSpace(c.Details) != "" {
+					fmt.Fprintf(stdout, " - %s", c.Details)
+				}
+				fmt.Fprintln(stdout)
+			}
+		} else {
+			fmt.Fprintf(stdout, "overall\t%s\n", report.Status)
+			for _, c := range report.Components {
+				fmt.Fprintf(stdout, "%s\t%s\t%s\n", c.Name, c.Status, c.Details)
+			}
 		}
 	}
 

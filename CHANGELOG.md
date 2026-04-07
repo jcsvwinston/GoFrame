@@ -81,6 +81,10 @@ while in pre-1.0 mode (`v0.x.y`).
   - host/site/tenant resolution middleware
   - `RequestScope` context helpers
   - `App.Database(alias)` and `App.DatabaseForRequest(r)` for DB alias routing
+- CLI output contract foundation:
+  - global output flags: `--output plain|pretty|json`, `--color auto|always|never`, `--symbols|--no-symbols`, `--json` shorthand
+  - pretty/status rendering support for `health`, `routes`, `mailproviders`, and `plugin` command family
+  - tests for global output mode/color behavior
 - Security-by-default tenant isolation guardrails:
   - startup validation rejects tenant configurations that resolve multiple tenants to one DB alias
   - tenant routing rejects shared site DB alias usage when multitenancy is enabled

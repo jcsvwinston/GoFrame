@@ -64,6 +64,17 @@ func buildCommandMap() map[string]commandSpec {
 
 // Run executes the CLI command dispatch and returns a process exit code.
 func Run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
+	parsedArgs, outputOpts, err := parseGlobalOutputOptions(args)
+	if err != nil {
+		fmt.Fprintf(stderr, "error: %v\n", err)
+		return 1
+	}
+	args = parsedArgs
+
+	previousOutputOpts := currentOutputOptions()
+	setOutputOptions(outputOpts)
+	defer setOutputOptions(previousOutputOpts)
+
 	if len(args) == 0 {
 		printRootUsage(stdout)
 		return 0
@@ -127,7 +138,13 @@ func Run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 
 func printRootUsage(w io.Writer) {
 	fmt.Fprintln(w, "Usage:")
-	fmt.Fprintln(w, "  goframe <command> [options]")
+	fmt.Fprintln(w, "  goframe [global options] <command> [options]")
+	fmt.Fprintln(w, "")
+	fmt.Fprintln(w, "Global options:")
+	fmt.Fprintln(w, "  --output plain|pretty|json")
+	fmt.Fprintln(w, "  --color auto|always|never")
+	fmt.Fprintln(w, "  --symbols / --no-symbols")
+	fmt.Fprintln(w, "  --json                    Shorthand for --output json")
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Commands:")
 

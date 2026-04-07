@@ -60,10 +60,33 @@ func runMailProviders(args []string, _ io.Reader, stdout, stderr io.Writer) erro
 		Providers:    entries,
 	}
 
-	if *asJSON {
+	if outputWantsJSON(*asJSON) {
 		enc := json.NewEncoder(stdout)
 		enc.SetIndent("", "  ")
 		return enc.Encode(report)
+	}
+
+	if outputIsPretty() {
+		fmt.Fprintf(stdout, "Mail providers (active: %s)\n", report.ActiveDriver)
+		if len(report.Providers) == 0 {
+			fmt.Fprintln(stdout, "  none")
+			return nil
+		}
+		for _, provider := range report.Providers {
+			state := "info"
+			if provider.Active {
+				state = "ok"
+			}
+			fmt.Fprintf(stdout, "  %s  %s", statusTag(stdout, state), provider.Driver)
+			if provider.Registered {
+				fmt.Fprint(stdout, " [registered]")
+			}
+			if strings.TrimSpace(provider.ExternalPath) != "" {
+				fmt.Fprintf(stdout, " [external=%s]", provider.ExternalPath)
+			}
+			fmt.Fprintln(stdout)
+		}
+		return nil
 	}
 
 	fmt.Fprintf(stdout, "Active driver: %s\n", report.ActiveDriver)

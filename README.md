@@ -93,6 +93,14 @@ For full usage:
 goframe help
 ```
 
+Global output controls are available for every command:
+
+```bash
+goframe --output plain|pretty|json <command> ...
+goframe --color auto|always|never <command> ...
+goframe --symbols|--no-symbols <command> ...
+```
+
 ## Mail Providers and Plugins
 
 GoFrame supports multiple mail delivery strategies:

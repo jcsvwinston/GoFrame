@@ -895,6 +895,15 @@ goframe routes [--config ...] [--path ...] [--json] [--verbose]
 goframe health [--config ...] [--timeout 3s] [--json] [--deploy]
 ```
 
+Global output options (before command):
+
+```bash
+goframe --output plain|pretty|json <command> ...
+goframe --color auto|always|never <command> ...
+goframe --symbols|--no-symbols <command> ...
+goframe --json <command> ...            # shorthand for --output json
+```
+
 Compatibility aliases:
 
 ```bash
