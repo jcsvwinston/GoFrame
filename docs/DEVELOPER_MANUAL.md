@@ -902,4 +902,5 @@ go run ./cmd/worker
 - email providers and plugins: `docs/MAIL_PROVIDERS.md`
 - enterprise roadmap: `docs/ENTERPRISE_ROADMAP.md`
 - long-term compatibility roadmap: `docs/LONG_TERM_COMPATIBILITY_ROADMAP.md`
+- compatibility SLO policy: `docs/COMPATIBILITY_SLO.md`
 - release checklist: `docs/RELEASE_CHECKLIST.md`

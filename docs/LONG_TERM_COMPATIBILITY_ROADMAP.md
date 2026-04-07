@@ -192,6 +192,7 @@ Every release candidate must include:
 Required docs to keep in sync:
 
 - `docs/VERSIONING.md`
+- `docs/COMPATIBILITY_SLO.md`
 - `docs/GO_VERSION_POLICY.md`
 - `docs/PLUGIN_SDK.md`
 - `docs/CI_MATRIX.md`

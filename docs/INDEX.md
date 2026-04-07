@@ -32,6 +32,7 @@ This file is the canonical entrypoint for GoFrame documentation.
 
 - [RELEASE_CHECKLIST.md](RELEASE_CHECKLIST.md)
 - [VERSIONING.md](VERSIONING.md)
+- [COMPATIBILITY_SLO.md](COMPATIBILITY_SLO.md)
 - [GO_VERSION_POLICY.md](GO_VERSION_POLICY.md)
 - [CI_MATRIX.md](CI_MATRIX.md)
 - [../CHANGELOG.md](../CHANGELOG.md)

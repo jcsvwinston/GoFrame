@@ -30,11 +30,26 @@ Verify:
 - release workflow completes
 - release asset smoke checks pass
 
-## 5. Artifact Review
+## 5. Compatibility Gates (Mandatory)
+
+Before tagging, attach and review:
+
+- compatibility report (fixture app + stable contract summary)
+- exploratory DB stability report (when exploratory lanes are in scope)
+- dependency impact report for critical dependencies
+- explicit compatibility statement:
+  - `no breaking changes`, or
+  - `major-only breaking changes with migration plan`
+
+Policy reference:
+
+- `docs/COMPATIBILITY_SLO.md`
+
+## 6. Artifact Review
 
 Check release artifacts include expected OS/arch matrix and checksums.
 
-## 6. Post-Release
+## 7. Post-Release
 
 - Verify `goframe version` prints the expected release version.
 - Update any roadmap/status docs if a phase milestone changed.
