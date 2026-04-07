@@ -5,27 +5,27 @@
 [![Release Asset Smoke](https://github.com/jcsvwinston/GoFrame/actions/workflows/release_asset_smoke.yml/badge.svg)](https://github.com/jcsvwinston/GoFrame/actions/workflows/release_asset_smoke.yml)
 [![Go Reference](https://pkg.go.dev/badge/github.com/jcsvwinston/GoFrame.svg)](https://pkg.go.dev/github.com/jcsvwinston/GoFrame)
 
-Enterprise-oriented web framework for Go, inspired by Django.
+Enterprise-oriented web framework for Go, built for long-lived systems.
 
-GoFrame combines a native router stack, SQL-first data access over `database/sql`, auto-generated admin, background jobs with Asynq, and a Django-style CLI workflow (`manage.py`-like experience for Go teams).
+GoFrame combines a native router stack, SQL-first data access over `database/sql`, auto-generated admin, background jobs with Asynq, and an operations-first CLI for real production workflows.
 
 ## Why GoFrame
 
-- Fast start, long-term structure: scaffold apps quickly and keep a clean architecture as teams grow.
-- SQL-first by design: the framework runtime is built on `database/sql`, with practical CLI tools for migrations, fixtures, and schema introspection.
-- Built-in operations mindset: health checks, deploy checks, static handling, i18n flow, and release rehearsal are first-class.
-- Extensible platform: external CLI commands (`goframe-<name>`) and capability-based provider plugins (`goframe-plugin-<provider>`, legacy `goframe-mail-<driver>`).
+- Long-term upgrade safety: explicit compatibility policy and release gates for stable contracts.
+- SQL-first by design: runtime and tooling aligned to `database/sql` with practical migration/fixture/introspection commands.
+- Built for operations: deploy checks, health diagnostics, observability baseline, and release rehearsal baked in.
+- Extensible platform: capability-based provider plugins and external CLI extensions.
 
 ## What You Get Today
 
-- App container (`pkg/app`) with lifecycle, config, logger, router, DB, admin mount, and mail sender wiring.
-- HTTP stack (`pkg/router`) with security middleware, CSRF, advanced rate limit dimensions (burst/route/role), and OTel HTTP telemetry.
-- Auth/Authz (`pkg/auth`, `pkg/authz`) with JWT support, server-side sessions (`memory|sql|redis`), and Casbin integration points.
-- Model system (`pkg/model`) with metadata extraction, registry, generic CRUD.
-- Embedded admin UI (`pkg/admin`) for CRUD, schema, filters, CSV export, bulk operations, and live session observability (`/admin` sessions view).
+- App container (`pkg/app`) with lifecycle, config, logger, router, DB, admin, session, and mail wiring.
+- HTTP stack (`pkg/router`) with security middleware, CSRF, advanced rate-limit dimensions, and OTel HTTP telemetry.
+- Auth/Authz (`pkg/auth`, `pkg/authz`) with JWT, server-side sessions (`memory|sql|redis`), and Casbin integration points.
+- Model system (`pkg/model`) with metadata extraction, registry, and generic CRUD.
+- Embedded admin UI (`pkg/admin`) for CRUD, schema inspection, filters, CSV export, bulk operations, and session observability.
 - Task runtime (`pkg/tasks`) with Asynq manager + worker scaffold.
 - Mail layer (`pkg/mail`) with `noop`, `smtp`, `sendgrid`, and external plugin runtime (`goframe-plugin-<driver>` with legacy fallback `goframe-mail-<driver>`), plus capability discovery via `pkg/plugins`.
-- Rich CLI (`cmd/goframe`) with Django-style aliases and operational commands.
+- Rich CLI (`cmd/goframe`) with scaffolding, operations, data lifecycle, plugin diagnostics, and testing workflows.
 
 ## Install
 
@@ -59,7 +59,7 @@ go run ./cmd/server
 go run ./cmd/worker
 ```
 
-If you do not need background jobs yet, you can run only the server.
+If you do not need background jobs yet, run only the server.
 
 ### 3. Open the app
 
@@ -81,7 +81,7 @@ GoFrame ships a broad set of framework commands, including:
 - Plugin ops: `plugin list`, `plugin doctor`, `plugin test`
 - Dev/test: `shell`, `test`, `testserver`
 
-Django-style aliases are available:
+Compatibility aliases are also available:
 
 - `runserver`, `startproject`, `makemigrations`, `showmigrations`, `createsuperuser`, `dbshell`, `check`
 
@@ -99,7 +99,7 @@ GoFrame supports multiple mail delivery strategies:
 - In-process registration via `mail.RegisterProvider(...)`
 - External plugin binaries via:
   - `goframe-plugin-<provider>` (capability-based discovery)
-  - `goframe-mail-<driver>` (mail compatibility bridge)
+  - `goframe-mail-<driver>` (legacy compatibility bridge)
 
 Useful commands:
 
@@ -134,21 +134,15 @@ myapp/
 
 Reference: [docs/PROJECT_LAYOUT.md](docs/PROJECT_LAYOUT.md)
 
-## Project Status
+## Strategic Direction
 
 GoFrame is actively developed and stable for pre-1.0 usage (`v0.x`).
 
-Current baseline includes:
+Canonical strategy and governance docs:
 
-- SQL-native runtime and migration flow
-- Admin UI v1 with strong CRUD ergonomics
-- OTel baseline (traces/metrics) and structured logging
-- Release automation with CI/rehearsal/smoke workflows
-
-Roadmap and alignment status:
-
-- [docs/ENTERPRISE_ROADMAP.md](docs/ENTERPRISE_ROADMAP.md)
-- [docs/V0.6.0_ROADMAP.md](docs/V0.6.0_ROADMAP.md)
+- [docs/ENTERPRISE_LONG_TERM_ROADMAP.md](docs/ENTERPRISE_LONG_TERM_ROADMAP.md)
+- [docs/COMPATIBILITY_SLO.md](docs/COMPATIBILITY_SLO.md)
+- [docs/VERSIONING.md](docs/VERSIONING.md)
 
 ## Documentation
 
@@ -156,25 +150,16 @@ Start here:
 
 - [docs/INDEX.md](docs/INDEX.md)
 - [docs/QUICKSTART.md](docs/QUICKSTART.md)
-- [docs/DETAILED_TUTORIAL.md](docs/DETAILED_TUTORIAL.md)
 - [docs/DEVELOPER_MANUAL.md](docs/DEVELOPER_MANUAL.md)
+- [docs/PROJECT_LAYOUT.md](docs/PROJECT_LAYOUT.md)
 - [docs/MODELING_MULTI_DATABASE.md](docs/MODELING_MULTI_DATABASE.md)
 - [docs/PLUGIN_SDK.md](docs/PLUGIN_SDK.md)
-- [docs/PLUGIN_EXAMPLES.md](docs/PLUGIN_EXAMPLES.md)
 
-CLI and parity references:
+Operations and release docs:
 
-- [docs/CLI_BEST_PRACTICES.md](docs/CLI_BEST_PRACTICES.md)
-- [docs/CLI_DJANGO_PARITY.md](docs/CLI_DJANGO_PARITY.md)
-- [docs/MAIL_PROVIDERS.md](docs/MAIL_PROVIDERS.md)
-- [docs/OBSERVABILITY_BASELINE.md](docs/OBSERVABILITY_BASELINE.md)
-
-Release and governance docs:
-
-- [docs/RELEASE_CHECKLIST.md](docs/RELEASE_CHECKLIST.md)
-- [docs/VERSIONING.md](docs/VERSIONING.md)
-- [docs/GO_VERSION_POLICY.md](docs/GO_VERSION_POLICY.md)
 - [docs/CI_MATRIX.md](docs/CI_MATRIX.md)
+- [docs/RELEASE_CHECKLIST.md](docs/RELEASE_CHECKLIST.md)
+- [docs/GO_VERSION_POLICY.md](docs/GO_VERSION_POLICY.md)
 - [CHANGELOG.md](CHANGELOG.md)
 
 ## Compatibility
@@ -182,7 +167,7 @@ Release and governance docs:
 - Minimum supported Go: `1.24`
 - Recommended for development/release: `1.26.x`
 - Core-supported SQL URLs: `sqlite://`, `postgres://`/`postgresql://`, `mysql://`
-- Exploratory SQL URLs: `sqlserver://`/`mssql://`, `oracle://` (runtime adapter available; not yet first-class across all CLI workflows)
+- Enterprise exploratory SQL URLs: `sqlserver://`/`mssql://`, `oracle://`
 
 ## Contributing
 

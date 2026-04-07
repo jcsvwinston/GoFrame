@@ -52,4 +52,4 @@ Check release artifacts include expected OS/arch matrix and checksums.
 ## 7. Post-Release
 
 - Verify `goframe version` prints the expected release version.
-- Update any roadmap/status docs if a phase milestone changed.
+- Update strategic/status docs when milestone posture changes.

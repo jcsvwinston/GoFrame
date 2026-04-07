@@ -103,7 +103,7 @@ Optional explicit repo/branch:
 ```bash
 bash scripts/ci/run_exploratory_stability.sh \
   --repo jcsvwinston/GoFrame \
-  --branch codex/v0.6.0-roadmap \
+  --branch <feature-or-release-branch> \
   --runs 10
 ```
 
@@ -111,13 +111,13 @@ bash scripts/ci/run_exploratory_stability.sh \
 
 - `pkg/db` supports SQL URLs for `sqlite://`, `postgres://`/`postgresql://`, `mysql://`, `sqlserver://`/`mssql://`, and `oracle://`.
 - MS SQL Server and Oracle lanes are live-smoke in CI but remain non-blocking.
-- Some CLI helper paths still need deeper parity tuning for enterprise engines (especially Oracle sequence/reset and engine-specific DDL edge cases).
+- Some CLI helper paths still need deeper coverage tuning for enterprise engines (especially Oracle sequence/reset and engine-specific DDL edge cases).
 
 ## Promotion Criteria (Exploratory -> Required)
 
 - Add runtime adapter support for MS SQL Server and Oracle in `pkg/db`:
   - DSN conversion/open path
   - driver wiring and health checks
-- Complete SQL helper parity for affected CLI commands (flush/fixtures/inspect/cache/session helpers).
+- Complete SQL helper coverage for affected CLI commands (flush/fixtures/inspect/cache/session helpers).
 - Keep live exploratory smoke stable over time (low flaky rate, reproducible local setup).
 - Promote the lane to required only after stable green results and documented local reproduction.

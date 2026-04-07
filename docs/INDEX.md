@@ -5,59 +5,47 @@ Status: Current.
 
 This file is the canonical entrypoint for GoFrame documentation.
 
-## Start Here (Current)
+## Start Here
 
 - [QUICKSTART.md](QUICKSTART.md)
-- [DETAILED_TUTORIAL.md](DETAILED_TUTORIAL.md)
 - [DEVELOPER_MANUAL.md](DEVELOPER_MANUAL.md)
-
-## Core References (Current)
-
 - [PROJECT_LAYOUT.md](PROJECT_LAYOUT.md)
+
+## Core Engineering References
+
 - [MODELING_MULTI_DATABASE.md](MODELING_MULTI_DATABASE.md)
 - [CLI_BEST_PRACTICES.md](CLI_BEST_PRACTICES.md)
-- [CLI_DJANGO_PARITY.md](CLI_DJANGO_PARITY.md)
-- [MAIL_PROVIDERS.md](MAIL_PROVIDERS.md)
 - [PLUGIN_SDK.md](PLUGIN_SDK.md)
 - [PLUGIN_EXAMPLES.md](PLUGIN_EXAMPLES.md)
+- [MAIL_PROVIDERS.md](MAIL_PROVIDERS.md)
 - [OBSERVABILITY_BASELINE.md](OBSERVABILITY_BASELINE.md)
 
-## Roadmaps and Status (Current)
+## Strategy and Governance
 
-- [ENTERPRISE_ROADMAP.md](ENTERPRISE_ROADMAP.md)
-- [LONG_TERM_COMPATIBILITY_ROADMAP.md](LONG_TERM_COMPATIBILITY_ROADMAP.md)
-- [V0.6.0_ROADMAP.md](V0.6.0_ROADMAP.md)
-
-## Release and Governance (Current)
-
-- [RELEASE_CHECKLIST.md](RELEASE_CHECKLIST.md)
-- [VERSIONING.md](VERSIONING.md)
+- [ENTERPRISE_LONG_TERM_ROADMAP.md](ENTERPRISE_LONG_TERM_ROADMAP.md)
 - [COMPATIBILITY_SLO.md](COMPATIBILITY_SLO.md)
+- [VERSIONING.md](VERSIONING.md)
 - [GO_VERSION_POLICY.md](GO_VERSION_POLICY.md)
 - [CI_MATRIX.md](CI_MATRIX.md)
+- [RELEASE_CHECKLIST.md](RELEASE_CHECKLIST.md)
 - [../CHANGELOG.md](../CHANGELOG.md)
 
-## Historical Archive (Reference Only)
+## Validation Reports
 
-These files are retained for project history and should not be treated as active roadmap source:
+- [reports/exploratory_stability.md](reports/exploratory_stability.md)
+- [reports/exploratory_stability_postfix.md](reports/exploratory_stability_postfix.md)
+- [reports/exploratory_stability_postfix_10runs.md](reports/exploratory_stability_postfix_10runs.md)
 
-- [PHASE0.md](PHASE0.md)
-- [PHASE1_BACKLOG.md](PHASE1_BACKLOG.md)
-- [PHASE2.md](PHASE2.md)
-- [PHASE3.md](PHASE3.md)
-- [PHASE4.md](PHASE4.md)
-- [PHASE5.md](PHASE5.md)
+## Precedence Rule
 
-## Consolidation Rule
+When documents conflict, use this precedence:
 
-When docs conflict, use this precedence:
+1. `README.md`
+2. strategy/governance docs listed above
+3. detailed implementation docs
+4. historical behavior only from git history (not separate phase files)
 
-1. `README.md` + current docs listed above
-2. `CHANGELOG.md` for release-scoped behavior
-3. historical phase files only as context
+## Terminology
 
-## Terminology Conventions
-
-- External provider binaries: prefer `goframe-plugin-<provider>`.
-- Legacy mail binary naming remains supported as fallback: `goframe-mail-<driver>`.
-- Use "current baseline" for shipped behavior and "historical" for archived phase notes.
+- External provider binaries: `goframe-plugin-<provider>`
+- Legacy mail fallback naming: `goframe-mail-<driver>`

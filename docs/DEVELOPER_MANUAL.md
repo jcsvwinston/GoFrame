@@ -7,7 +7,7 @@ This is the main guide to build, operate, and deploy applications with GoFrame.
 
 ## 1. Objective
 
-GoFrame is a Go web framework inspired by Django, focused on:
+GoFrame is a Go web framework built for long-lived production systems, focused on:
 
 - MVC + REST API applications
 - integrated admin panel
@@ -61,7 +61,7 @@ Supported SQL engines by URL:
 Current exploratory note:
 
 - runtime connectivity and exploratory CLI smoke are covered in CI live lanes for `mssql` and `oracle`
-- full operational CLI parity is still in exploratory maturation before promotion to required lanes
+- full operational CLI coverage is still in exploratory maturation before promotion to required lanes
 
 CI matrix profiles and local reproduction:
 
@@ -448,7 +448,7 @@ Change an existing admin password:
 goframe changepassword admin --config goframe.yaml --password newsecret123 --no-input
 ```
 
-## 13.1 Cache and sessions (Django parity)
+## 13.1 Cache and sessions
 
 Create SQL table for DB-based cache:
 
@@ -465,7 +465,7 @@ goframe clearsessions --config goframe.yaml --all
 goframe clearsessions --config goframe.yaml --dry-run
 ```
 
-## 13.2 i18n (Django parity)
+## 13.2 i18n
 
 Extract translatable strings into `.po` catalogs:
 
@@ -871,7 +871,7 @@ goframe routes [--config ...] [--path ...] [--json] [--verbose]
 goframe health [--config ...] [--timeout 3s] [--json] [--deploy]
 ```
 
-Django-style aliases:
+Compatibility aliases:
 
 ```bash
 goframe runserver [addr:port]
@@ -898,9 +898,7 @@ go run ./cmd/worker
 - step-by-step tutorial: `docs/DETAILED_TUTORIAL.md`
 - recommended layout: `docs/PROJECT_LAYOUT.md`
 - CLI best practices: `docs/CLI_BEST_PRACTICES.md`
-- CLI parity with Django: `docs/CLI_DJANGO_PARITY.md`
 - email providers and plugins: `docs/MAIL_PROVIDERS.md`
-- enterprise roadmap: `docs/ENTERPRISE_ROADMAP.md`
-- long-term compatibility roadmap: `docs/LONG_TERM_COMPATIBILITY_ROADMAP.md`
+- enterprise and long-term roadmap: `docs/ENTERPRISE_LONG_TERM_ROADMAP.md`
 - compatibility SLO policy: `docs/COMPATIBILITY_SLO.md`
 - release checklist: `docs/RELEASE_CHECKLIST.md`
