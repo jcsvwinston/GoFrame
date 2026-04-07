@@ -7,28 +7,37 @@ import (
 
 // FieldMeta holds all metadata extracted from a single struct field.
 type FieldMeta struct {
-	Name         string   // Go field name (e.g. "Email")
-	Column       string   // SQL column name (e.g. "email")
-	Label        string   // Human-readable label (e.g. "Correo electrónico")
-	GoType       string   // Go type as string (e.g. "string", "int", "bool")
-	HTMLType     string   // HTML input type (e.g. "text", "email", "number")
-	IsPK         bool     // Is primary key
-	IsRequired   bool     // Required field (not null / validate:"required")
-	IsReadOnly   bool     // Read-only in admin forms
-	IsList       bool     // Shown in list view
-	IsSearch     bool     // Included in search queries
-	IsFilter     bool     // Shown as filter option
-	IsExcluded   bool     // Excluded from admin entirely
-	IsForeignKey bool     // This field is a foreign key reference
-	ForeignModel string   // Name of the related model (e.g. "User" for UserID)
-	MaxLength    int      // Max length from validate tag
-	Choices      []Choice // Enum/select options
+	Name          string // Go field name (e.g. "Email")
+	Column        string // SQL column name (e.g. "email")
+	Label         string // Human-readable label (e.g. "Correo electrónico")
+	GoType        string // Go type as string (e.g. "string", "int", "bool")
+	HTMLType      string // HTML input type (e.g. "text", "email", "number")
+	IsPK          bool   // Is primary key
+	IsRequired    bool   // Required field (not null / validate:"required")
+	IsReadOnly    bool   // Read-only in admin forms
+	IsList        bool   // Shown in list view
+	IsSearch      bool   // Included in search queries
+	IsFilter      bool   // Shown as filter option
+	IsExcluded    bool   // Excluded from admin entirely
+	IsForeignKey  bool   // This field is a foreign key reference
+	ForeignModel  string // Name of the related model (e.g. "User" for UserID)
+	ForeignTable  string // Name of the related table (e.g. "users")
+	ForeignColumn string // Name of the referenced column (e.g. "id")
+	IndexRefs     []IndexRef
+	MaxLength     int      // Max length from validate tag
+	Choices       []Choice // Enum/select options
 }
 
 // Choice represents a selectable option for enum/select fields.
 type Choice struct {
 	Value string `json:"value"`
 	Label string `json:"label"`
+}
+
+// IndexRef captures a field-level index declaration from db tags.
+type IndexRef struct {
+	Name   string `json:"name"`
+	Unique bool   `json:"unique"`
 }
 
 // inferHTMLType maps a Go type and field name to an appropriate HTML input type.

@@ -145,6 +145,10 @@ while in pre-1.0 mode (`v0.x.y`).
   - removed legacy keys `database_engine`, `database_url`, `database_max_open`, `database_max_idle`, `database_max_lifetime`
   - canonical runtime keys are `database_default` + `databases.<alias>.*`
 - CLI/runtime DB wiring now resolves from the primary alias (`database_default`) rather than legacy single-URL keys.
+- `pkg/model` metadata contract now supports:
+  - explicit FK declarations (`fk` / `fk:<model|table.column|key=value,...>`)
+  - simple and composite index declarations (`index`, `index:<name>`, `unique`, `unique:<name>`)
+  - validation for multiple PK declarations, malformed FK specs, and mixed unique/non-unique index groups.
 
 ## [0.5.5] - 2026-04-05
 

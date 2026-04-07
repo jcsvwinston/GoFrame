@@ -3,6 +3,7 @@ package model
 import (
 	"context"
 	"database/sql"
+	"strings"
 	"testing"
 	"time"
 
@@ -38,6 +39,35 @@ type TestDBTagModel struct {
 	ID        uint      `db:"pk"`
 	Email     string    `db:"column:email_addr;required"`
 	CreatedAt time.Time `db:"readonly"`
+}
+
+type TestCustomPKModel struct {
+	OrderCode string `db:"column:order_code;pk"`
+	Name      string `db:"column:name;required"`
+}
+
+type TestExplicitFKAndIndexesModel struct {
+	BaseModel
+	TenantID   uint   `db:"column:tenant_id;index:idx_orders_tenant_created;unique:uq_orders_tenant_external"`
+	CreatedAt  int64  `db:"column:created_at;index:idx_orders_tenant_created"`
+	ExternalID string `db:"column:external_id;unique:uq_orders_tenant_external"`
+	AccountID  uint   `db:"column:account_id;fk:model=Account,table=accounts,column=id;index"`
+}
+
+type TestMultiplePKModel struct {
+	ID    uint `db:"pk"`
+	Other uint `db:"pk"`
+}
+
+type TestInvalidFKModel struct {
+	BaseModel
+	OwnerID uint `db:"column:owner_id;fk:model=,column=id"`
+}
+
+type TestMixedIndexKindModel struct {
+	BaseModel
+	TenantID uint `db:"column:tenant_id;index:tenant_lookup"`
+	Code     uint `db:"column:code;unique:tenant_lookup"`
 }
 
 // --- Fields tests ---
@@ -206,6 +236,123 @@ func TestExtractMeta_DBTagSupport(t *testing.T) {
 	}
 	if !field["CreatedAt"].IsReadOnly {
 		t.Error("CreatedAt should be readonly from db tag")
+	}
+}
+
+func TestExtractMeta_CustomPKAndColumnMapping(t *testing.T) {
+	meta, err := ExtractMeta(&TestCustomPKModel{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if meta.PrimaryKey != "OrderCode" {
+		t.Fatalf("expected OrderCode as PK, got %s", meta.PrimaryKey)
+	}
+
+	fieldByName := make(map[string]FieldMeta, len(meta.Fields))
+	for _, f := range meta.Fields {
+		fieldByName[f.Name] = f
+	}
+	pk := fieldByName["OrderCode"]
+	if !pk.IsPK {
+		t.Fatal("OrderCode should be marked as PK")
+	}
+	if pk.Column != "order_code" {
+		t.Fatalf("expected order_code column, got %s", pk.Column)
+	}
+}
+
+func TestExtractMeta_ExplicitFKAndIndexDeclarations(t *testing.T) {
+	meta, err := ExtractMeta(&TestExplicitFKAndIndexesModel{})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var accountFK ForeignKey
+	for _, fk := range meta.ForeignKeys {
+		if fk.FieldName == "AccountID" {
+			accountFK = fk
+			break
+		}
+	}
+	if accountFK.FieldName == "" {
+		t.Fatal("expected AccountID FK declaration")
+	}
+	if accountFK.ForeignModel != "Account" {
+		t.Fatalf("expected FK model Account, got %s", accountFK.ForeignModel)
+	}
+	if accountFK.ForeignTable != "accounts" {
+		t.Fatalf("expected FK table accounts, got %s", accountFK.ForeignTable)
+	}
+	if accountFK.ForeignColumn != "id" {
+		t.Fatalf("expected FK column id, got %s", accountFK.ForeignColumn)
+	}
+
+	indexByName := make(map[string]IndexMeta, len(meta.Indexes))
+	for _, idx := range meta.Indexes {
+		indexByName[idx.Name] = idx
+	}
+
+	composite, ok := indexByName["idx_orders_tenant_created"]
+	if !ok {
+		t.Fatal("expected composite non-unique index idx_orders_tenant_created")
+	}
+	if composite.Unique {
+		t.Fatal("idx_orders_tenant_created should be non-unique")
+	}
+	if len(composite.Columns) != 2 || composite.Columns[0] != "tenant_id" || composite.Columns[1] != "created_at" {
+		t.Fatalf("unexpected composite columns: %+v", composite.Columns)
+	}
+
+	uniqueComposite, ok := indexByName["uq_orders_tenant_external"]
+	if !ok {
+		t.Fatal("expected composite unique index uq_orders_tenant_external")
+	}
+	if !uniqueComposite.Unique {
+		t.Fatal("uq_orders_tenant_external should be unique")
+	}
+	if len(uniqueComposite.Columns) != 2 || uniqueComposite.Columns[0] != "tenant_id" || uniqueComposite.Columns[1] != "external_id" {
+		t.Fatalf("unexpected unique composite columns: %+v", uniqueComposite.Columns)
+	}
+
+	foundDefaultAccountIndex := false
+	for _, idx := range meta.Indexes {
+		if !idx.Unique && len(idx.Columns) == 1 && idx.Columns[0] == "account_id" {
+			foundDefaultAccountIndex = true
+			break
+		}
+	}
+	if !foundDefaultAccountIndex {
+		t.Fatalf("expected default non-unique index for account_id column, got %+v", meta.Indexes)
+	}
+}
+
+func TestExtractMeta_ErrorOnMultiplePrimaryKeys(t *testing.T) {
+	_, err := ExtractMeta(&TestMultiplePKModel{})
+	if err == nil {
+		t.Fatal("expected error for multiple primary keys")
+	}
+	if !strings.Contains(err.Error(), "multiple primary keys") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestExtractMeta_ErrorOnInvalidFKSpec(t *testing.T) {
+	_, err := ExtractMeta(&TestInvalidFKModel{})
+	if err == nil {
+		t.Fatal("expected error for invalid fk spec")
+	}
+	if !strings.Contains(err.Error(), "fk model value cannot be empty") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestExtractMeta_ErrorOnMixedIndexKind(t *testing.T) {
+	_, err := ExtractMeta(&TestMixedIndexKindModel{})
+	if err == nil {
+		t.Fatal("expected error for mixed index uniqueness declarations")
+	}
+	if !strings.Contains(err.Error(), "mixes unique and non-unique") {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }
 

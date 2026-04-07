@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"reflect"
 	"strings"
+	"unicode"
 )
 
 // ModelMeta holds all metadata extracted from a registered model struct.
@@ -14,16 +15,25 @@ type ModelMeta struct {
 	Fields      []FieldMeta  // Extracted field metadata
 	PrimaryKey  string       // Name of the PK field (e.g. "ID")
 	ForeignKeys []ForeignKey // Detected foreign key relationships
+	Indexes     []IndexMeta  // Declared simple/composite indexes
 	Config      ModelConfig  // User-provided configuration
 	Type        reflect.Type // The reflect.Type of the struct
 }
 
 // ForeignKey describes a detected foreign key relationship.
 type ForeignKey struct {
-	FieldName    string // The FK field (e.g. "UserID")
-	Column       string // The FK column (e.g. "user_id")
-	ForeignModel string // The related model name (e.g. "User")
-	ForeignTable string // The related table name (e.g. "users")
+	FieldName     string // The FK field (e.g. "UserID")
+	Column        string // The FK column (e.g. "user_id")
+	ForeignModel  string // The related model name (e.g. "User")
+	ForeignTable  string // The related table name (e.g. "users")
+	ForeignColumn string // The related column name (e.g. "id")
+}
+
+// IndexMeta describes an index extracted from one or more model fields.
+type IndexMeta struct {
+	Name    string   // SQL index name
+	Columns []string // Ordered indexed columns
+	Unique  bool     // Unique index/constraint
 }
 
 // tabler is the interface models can implement to define a custom table name.
@@ -58,80 +68,253 @@ func ExtractMeta(model interface{}) (*ModelMeta, error) {
 		meta.Table = toSnakeCase(meta.Plural)
 	}
 
-	// Extract fields recursively (handles embedded structs)
-	meta.Fields = extractFields(t)
-
-	// Find primary key
-	for _, f := range meta.Fields {
-		if f.IsPK {
-			meta.PrimaryKey = f.Name
-			break
-		}
+	// Extract fields recursively (handles embedded structs).
+	fields, err := extractFields(t)
+	if err != nil {
+		return nil, err
 	}
-	if meta.PrimaryKey == "" {
-		// Default: look for field named "ID"
-		for i := range meta.Fields {
-			if meta.Fields[i].Name == "ID" {
-				meta.Fields[i].IsPK = true
-				meta.PrimaryKey = "ID"
-				break
-			}
-		}
+	meta.Fields = fields
+
+	pk, err := resolvePrimaryKey(meta.Fields)
+	if err != nil {
+		return nil, err
+	}
+	meta.PrimaryKey = pk
+
+	if err := resolveForeignKeys(meta, t); err != nil {
+		return nil, err
 	}
 
-	// Detect foreign keys: fields ending in "ID" that have a corresponding struct field.
-	fieldNames := make(map[string]bool, len(meta.Fields))
-	for _, f := range meta.Fields {
-		fieldNames[f.Name] = true
+	indexes, err := resolveIndexes(meta.Table, meta.Fields)
+	if err != nil {
+		return nil, err
 	}
-	for i, f := range meta.Fields {
-		if strings.HasSuffix(f.Name, "ID") && f.Name != "ID" {
-			related := strings.TrimSuffix(f.Name, "ID")
-			// Check if there's a struct field with the related name (may have been
-			// skipped during extraction because it's a pointer to struct).
-			if hasStructField(t, related) {
-				meta.Fields[i].IsForeignKey = true
-				meta.Fields[i].ForeignModel = related
-				fk := ForeignKey{
-					FieldName:    f.Name,
-					Column:       f.Column,
-					ForeignModel: related,
-					ForeignTable: toSnakeCase(toPlural(related)),
-				}
-				meta.ForeignKeys = append(meta.ForeignKeys, fk)
-			}
-		}
-	}
+	meta.Indexes = indexes
 
 	return meta, nil
 }
 
+func resolvePrimaryKey(fields []FieldMeta) (string, error) {
+	explicit := make([]string, 0, 1)
+	for _, f := range fields {
+		if f.IsPK {
+			explicit = append(explicit, f.Name)
+		}
+	}
+
+	switch len(explicit) {
+	case 0:
+		for i := range fields {
+			if fields[i].Name == "ID" {
+				fields[i].IsPK = true
+				return "ID", nil
+			}
+		}
+		return "", nil
+	case 1:
+		return explicit[0], nil
+	default:
+		return "", fmt.Errorf("model.ExtractMeta: multiple primary keys declared: %s", strings.Join(explicit, ", "))
+	}
+}
+
+func resolveForeignKeys(meta *ModelMeta, t reflect.Type) error {
+	explicitFields := make(map[string]struct{}, len(meta.Fields))
+
+	for i := range meta.Fields {
+		f := &meta.Fields[i]
+		if !f.IsForeignKey {
+			continue
+		}
+		if err := normalizeExplicitForeignKey(f); err != nil {
+			return fmt.Errorf("model.ExtractMeta: field %s: %w", f.Name, err)
+		}
+		meta.ForeignKeys = append(meta.ForeignKeys, ForeignKey{
+			FieldName:     f.Name,
+			Column:        f.Column,
+			ForeignModel:  f.ForeignModel,
+			ForeignTable:  f.ForeignTable,
+			ForeignColumn: f.ForeignColumn,
+		})
+		explicitFields[f.Name] = struct{}{}
+	}
+
+	// Backward-compatible implicit FK detection: fields ending in "ID" with a
+	// corresponding relation struct field.
+	for i := range meta.Fields {
+		f := &meta.Fields[i]
+		if _, ok := explicitFields[f.Name]; ok {
+			continue
+		}
+		if strings.HasSuffix(f.Name, "ID") && f.Name != "ID" {
+			related := strings.TrimSuffix(f.Name, "ID")
+			if hasStructField(t, related) {
+				f.IsForeignKey = true
+				f.ForeignModel = related
+				f.ForeignTable = toSnakeCase(toPlural(related))
+				f.ForeignColumn = "id"
+				meta.ForeignKeys = append(meta.ForeignKeys, ForeignKey{
+					FieldName:     f.Name,
+					Column:        f.Column,
+					ForeignModel:  related,
+					ForeignTable:  f.ForeignTable,
+					ForeignColumn: "id",
+				})
+			}
+		}
+	}
+	return nil
+}
+
+func normalizeExplicitForeignKey(f *FieldMeta) error {
+	if f.ForeignColumn == "" {
+		f.ForeignColumn = "id"
+	}
+	if f.ForeignModel != "" && f.ForeignTable == "" {
+		f.ForeignTable = toSnakeCase(toPlural(f.ForeignModel))
+	}
+	if f.ForeignModel == "" && f.ForeignTable == "" {
+		if strings.HasSuffix(f.Name, "ID") && f.Name != "ID" {
+			related := strings.TrimSuffix(f.Name, "ID")
+			f.ForeignModel = related
+			f.ForeignTable = toSnakeCase(toPlural(related))
+		} else {
+			return fmt.Errorf("fk requires target model/table when field does not follow <Name>ID convention")
+		}
+	}
+	if !isValidIdentifierLike(f.ForeignTable) {
+		return fmt.Errorf("invalid fk table %q", f.ForeignTable)
+	}
+	if !isValidIdentifierLike(f.ForeignColumn) {
+		return fmt.Errorf("invalid fk column %q", f.ForeignColumn)
+	}
+	return nil
+}
+
+func resolveIndexes(table string, fields []FieldMeta) ([]IndexMeta, error) {
+	if len(fields) == 0 {
+		return nil, nil
+	}
+
+	orderedNames := make([]string, 0)
+	byName := make(map[string]*IndexMeta)
+
+	for _, f := range fields {
+		for _, ref := range f.IndexRefs {
+			name := strings.TrimSpace(ref.Name)
+			if name == "" {
+				name = buildDefaultIndexName(table, f.Column, ref.Unique)
+			}
+			if !isValidIdentifierLike(name) {
+				return nil, fmt.Errorf("model.ExtractMeta: field %s: invalid index name %q", f.Name, name)
+			}
+
+			idx, exists := byName[name]
+			if !exists {
+				idx = &IndexMeta{Name: name, Unique: ref.Unique, Columns: make([]string, 0, 2)}
+				byName[name] = idx
+				orderedNames = append(orderedNames, name)
+			}
+			if idx.Unique != ref.Unique {
+				return nil, fmt.Errorf("model.ExtractMeta: index %q mixes unique and non-unique declarations", name)
+			}
+			if containsString(idx.Columns, f.Column) {
+				continue
+			}
+			idx.Columns = append(idx.Columns, f.Column)
+		}
+	}
+
+	indexes := make([]IndexMeta, 0, len(orderedNames))
+	for _, name := range orderedNames {
+		idx := byName[name]
+		indexes = append(indexes, *idx)
+	}
+	return indexes, nil
+}
+
+func buildDefaultIndexName(table, column string, unique bool) string {
+	prefix := "idx"
+	if unique {
+		prefix = "uq"
+	}
+	return fmt.Sprintf("%s_%s_%s", prefix, sanitizeIdentifierPart(table), sanitizeIdentifierPart(column))
+}
+
+func sanitizeIdentifierPart(in string) string {
+	if in == "" {
+		return "x"
+	}
+	var b strings.Builder
+	for _, r := range in {
+		switch {
+		case unicode.IsLetter(r), unicode.IsDigit(r):
+			b.WriteRune(unicode.ToLower(r))
+		default:
+			b.WriteRune('_')
+		}
+	}
+	out := strings.Trim(b.String(), "_")
+	if out == "" {
+		return "x"
+	}
+	return out
+}
+
+func containsString(values []string, needle string) bool {
+	for _, v := range values {
+		if v == needle {
+			return true
+		}
+	}
+	return false
+}
+
+func isValidIdentifierLike(value string) bool {
+	if strings.TrimSpace(value) == "" {
+		return false
+	}
+	for _, r := range value {
+		switch {
+		case unicode.IsLetter(r), unicode.IsDigit(r), r == '_', r == '.':
+			continue
+		default:
+			return false
+		}
+	}
+	return true
+}
+
 // extractFields recursively extracts FieldMeta from a struct type,
 // flattening embedded structs.
-func extractFields(t reflect.Type) []FieldMeta {
+func extractFields(t reflect.Type) ([]FieldMeta, error) {
 	var fields []FieldMeta
 
 	for i := 0; i < t.NumField(); i++ {
 		sf := t.Field(i)
 
-		// Skip unexported fields
+		// Skip unexported fields.
 		if !sf.IsExported() {
 			continue
 		}
 
-		// Flatten embedded structs (e.g. BaseModel)
+		// Flatten embedded structs (e.g. BaseModel).
 		if sf.Anonymous {
 			ft := sf.Type
 			if ft.Kind() == reflect.Ptr {
 				ft = ft.Elem()
 			}
 			if ft.Kind() == reflect.Struct && ft.Name() != "Time" && ft.Name() != "DeletedAt" {
-				fields = append(fields, extractFields(ft)...)
+				embedded, err := extractFields(ft)
+				if err != nil {
+					return nil, err
+				}
+				fields = append(fields, embedded...)
 				continue
 			}
 		}
 
-		// Skip struct/pointer-to-struct fields that represent relations (not columns)
+		// Skip struct/pointer-to-struct fields that represent relations (not columns).
 		ft := sf.Type
 		if ft.Kind() == reflect.Ptr {
 			ft = ft.Elem()
@@ -143,15 +326,18 @@ func extractFields(t reflect.Type) []FieldMeta {
 			continue
 		}
 
-		field := extractFieldMeta(sf)
+		field, err := extractFieldMeta(sf)
+		if err != nil {
+			return nil, fmt.Errorf("model.ExtractMeta: field %s: %w", sf.Name, err)
+		}
 		fields = append(fields, field)
 	}
 
-	return fields
+	return fields, nil
 }
 
 // extractFieldMeta builds a FieldMeta from a single struct field.
-func extractFieldMeta(sf reflect.StructField) FieldMeta {
+func extractFieldMeta(sf reflect.StructField) (FieldMeta, error) {
 	f := FieldMeta{
 		Name:   sf.Name,
 		Column: toSnakeCase(sf.Name),
@@ -162,22 +348,24 @@ func extractFieldMeta(sf reflect.StructField) FieldMeta {
 	// Parse storage tags.
 	dbTag := sf.Tag.Get("db")
 	if dbTag != "" {
-		parseDBTag(dbTag, &f)
+		if err := parseDBTag(dbTag, &f); err != nil {
+			return FieldMeta{}, err
+		}
 	}
 
-	// Parse json tag for column name override in API responses
+	// Parse json tag for column name override in API responses.
 	jsonTag := sf.Tag.Get("json")
 	if jsonTag == "-" {
 		f.IsExcluded = true
 	}
 
-	// Parse validate tag
+	// Parse validate tag.
 	validateTag := sf.Tag.Get("validate")
 	if strings.Contains(validateTag, "required") {
 		f.IsRequired = true
 	}
 
-	// Parse admin tag
+	// Parse admin tag.
 	adminTag := sf.Tag.Get("admin")
 	if adminTag != "" {
 		opts := parseAdminTag(adminTag)
@@ -196,32 +384,141 @@ func extractFieldMeta(sf reflect.StructField) FieldMeta {
 		}
 	}
 
-	// Infer HTML type
+	// Infer HTML type.
 	f.HTMLType = inferHTMLType(f.GoType, sf.Name)
 	if len(f.Choices) > 0 {
 		f.HTMLType = "select"
 	}
 
-	return f
+	return f, nil
 }
 
 // parseDBTag extracts relevant settings from storage struct tags.
 // It supports GoFrame's db conventions plus legacy aliases like primaryKey.
-func parseDBTag(tag string, f *FieldMeta) {
+func parseDBTag(tag string, f *FieldMeta) error {
 	parts := strings.Split(tag, ";")
-	for _, p := range parts {
-		p = strings.TrimSpace(p)
+	for _, part := range parts {
+		raw := strings.TrimSpace(part)
+		if raw == "" {
+			continue
+		}
+		lower := strings.ToLower(raw)
+
 		switch {
-		case strings.HasPrefix(p, "column:"):
-			f.Column = strings.TrimPrefix(p, "column:")
-		case p == "primaryKey" || p == "primarykey" || p == "primary_key" || p == "pk":
+		case strings.HasPrefix(lower, "column:"):
+			value := strings.TrimSpace(raw[len("column:"):])
+			if value == "" {
+				return fmt.Errorf("column tag cannot be empty")
+			}
+			f.Column = value
+
+		case lower == "primarykey" || lower == "primary_key" || lower == "pk":
 			f.IsPK = true
-		case p == "not null" || strings.HasPrefix(p, "not null") || p == "required":
+
+		case lower == "not null" || strings.HasPrefix(lower, "not null") || lower == "required":
 			f.IsRequired = true
-		case p == "autoCreateTime" || p == "autoUpdateTime" || p == "readonly" || p == "read_only" || p == "ro":
+
+		case lower == "autocreatetime" || lower == "autoupdatetime" || lower == "readonly" || lower == "read_only" || lower == "ro":
 			f.IsReadOnly = true
+
+		case lower == "fk":
+			f.IsForeignKey = true
+
+		case strings.HasPrefix(lower, "fk:"):
+			spec := strings.TrimSpace(raw[len("fk:"):])
+			if err := parseForeignKeySpec(spec, f); err != nil {
+				return err
+			}
+
+		case lower == "index":
+			f.IndexRefs = append(f.IndexRefs, IndexRef{Unique: false})
+
+		case strings.HasPrefix(lower, "index:"):
+			name := strings.TrimSpace(raw[len("index:"):])
+			if name == "" {
+				return fmt.Errorf("index name cannot be empty")
+			}
+			f.IndexRefs = append(f.IndexRefs, IndexRef{Name: name, Unique: false})
+
+		case lower == "unique":
+			f.IndexRefs = append(f.IndexRefs, IndexRef{Unique: true})
+
+		case strings.HasPrefix(lower, "unique:"):
+			name := strings.TrimSpace(raw[len("unique:"):])
+			if name == "" {
+				return fmt.Errorf("unique index name cannot be empty")
+			}
+			f.IndexRefs = append(f.IndexRefs, IndexRef{Name: name, Unique: true})
 		}
 	}
+	return nil
+}
+
+func parseForeignKeySpec(spec string, f *FieldMeta) error {
+	f.IsForeignKey = true
+	if spec == "" {
+		return nil
+	}
+
+	if strings.Contains(spec, "=") {
+		pairs := strings.Split(spec, ",")
+		for _, pair := range pairs {
+			pair = strings.TrimSpace(pair)
+			if pair == "" {
+				continue
+			}
+			k, v, ok := strings.Cut(pair, "=")
+			if !ok {
+				return fmt.Errorf("invalid fk spec %q", pair)
+			}
+			key := strings.ToLower(strings.TrimSpace(k))
+			value := strings.TrimSpace(v)
+			if value == "" {
+				return fmt.Errorf("fk %s value cannot be empty", key)
+			}
+			switch key {
+			case "model":
+				f.ForeignModel = value
+			case "table":
+				f.ForeignTable = value
+			case "column":
+				f.ForeignColumn = value
+			default:
+				return fmt.Errorf("unknown fk key %q", key)
+			}
+		}
+		if f.ForeignModel == "" && f.ForeignTable == "" {
+			return fmt.Errorf("fk spec requires model or table")
+		}
+		return nil
+	}
+
+	if strings.Contains(spec, ".") {
+		table, column, ok := strings.Cut(spec, ".")
+		table = strings.TrimSpace(table)
+		column = strings.TrimSpace(column)
+		if !ok || table == "" || column == "" {
+			return fmt.Errorf("invalid fk dotted syntax %q (expected table.column)", spec)
+		}
+		f.ForeignTable = table
+		f.ForeignColumn = column
+		return nil
+	}
+
+	// Short single-token form: treat CamelCase as model, otherwise as table.
+	if startsWithUpper(spec) {
+		f.ForeignModel = spec
+		return nil
+	}
+	f.ForeignTable = spec
+	return nil
+}
+
+func startsWithUpper(s string) bool {
+	for _, r := range s {
+		return unicode.IsUpper(r)
+	}
+	return false
 }
 
 // typeName returns a simplified string representation of a reflect.Type.

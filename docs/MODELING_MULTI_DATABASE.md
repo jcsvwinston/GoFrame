@@ -10,7 +10,7 @@ This guide explains how to add models to GoFrame with a long-term, backward-comp
 For durability across years and framework upgrades, treat these as your public model contract:
 
 - model structs and field names
-- `db` tags (`column`, `pk`, `required`, `readonly`)
+- `db` tags (`column`, `pk`, `required`, `readonly`, `fk`, `index`, `unique`)
 - JSON shape (`json` tags)
 - admin behavior (`admin` tags)
 
@@ -101,6 +101,42 @@ Both variants execute the same flow:
 4. Stamp baseline in `goframe_schema_migrations` so environments stay aligned.
 
 Important: `goframe.yaml` is the single source of truth for connection targeting. If you use `databases.<alias>.url`, set `database_default` (or pass a config that points to the alias you want) before running these scripts.
+
+## 2.4 Advanced Model Tag Contract (PK/FK/Indexes)
+
+GoFrame model metadata supports explicit primary key naming, FK targets, and index declarations.
+
+Example:
+
+```go
+type Invoice struct {
+	InvoiceID  string `db:"column:invoice_id;pk"`
+	TenantID   string `db:"column:tenant_id;index:idx_invoices_tenant_created;unique:uq_invoices_tenant_external"`
+	CreatedAt  int64  `db:"column:created_at;index:idx_invoices_tenant_created"`
+	ExternalID string `db:"column:external_id;unique:uq_invoices_tenant_external"`
+	CustomerID uint   `db:"column:customer_id;fk:model=Customer,table=customers,column=id;index"`
+}
+```
+
+Supported FK forms:
+
+- `fk` (infer target from `<Name>ID` field convention)
+- `fk:Customer` (model shorthand)
+- `fk:customers.id` (table/column shorthand)
+- `fk:model=Customer,table=customers,column=id` (fully explicit)
+
+Supported index forms:
+
+- `index` (single-column non-unique index with generated name)
+- `index:<name>` (named index; same name across fields => composite index)
+- `unique` (single-column unique index with generated name)
+- `unique:<name>` (named unique index; same name across fields => composite unique index)
+
+Validation rules:
+
+- more than one `pk` field is rejected,
+- malformed `fk` declarations are rejected,
+- mixing `index:<name>` and `unique:<name>` with the same name is rejected.
 
 ## 3. Multi-Database Configuration
 
