@@ -49,9 +49,11 @@ type PanelConfig struct {
 	Prefix              string // URL prefix (default "/admin")
 	Title               string // Site title shown in the UI
 	Environment         string
+	RedisURL            string // optional Redis URL for background jobs runtime snapshot
 	Databases           []DatabaseRuntimeInfo
 	DatabaseHandles     map[string]*db.DB // optional alias->db handle mapping for runtime stats
 	EnvironmentSnapshot []string          // optional env snapshot (defaults to os.Environ at startup)
+	FeatureFlags        map[string]bool   // optional initial in-memory feature flags
 	Auth                AdminAuth
 	Session             *auth.SessionManager // optional session manager for admin telemetry
 	SessionStore        string               // configured session store label (memory|sql|redis)
@@ -67,6 +69,7 @@ type Panel struct {
 	bus      *signals.Bus
 	cruds    map[string]model.CRUDOperator
 	live     *liveRuntime
+	flags    *featureFlagStore
 	bootEnv  []systemEnvVar
 }
 
@@ -90,6 +93,7 @@ func NewPanel(database *db.DB, registry *model.Registry, logger *slog.Logger, cf
 		logger:   logger,
 		cruds:    make(map[string]model.CRUDOperator),
 		live:     newLiveRuntime(),
+		flags:    newFeatureFlagStore(cfg.FeatureFlags),
 		bootEnv:  buildSystemEnvironmentRows(env),
 	}
 }
@@ -159,6 +163,8 @@ func (p *Panel) mountRoutes(r *router.Mux) {
 	r.Get("/api/live/snapshot", p.handleLiveSnapshot)
 	r.Get("/api/live/ws", p.handleLiveWS)
 	r.Get("/api/system/snapshot", p.handleSystemSnapshot)
+	r.Get("/api/system/flags", p.handleListSystemFlags)
+	r.Put("/api/system/flags/{name}", p.handleSetSystemFlag)
 
 	// Serve embedded UI
 	uiContent, _ := fs.Sub(uiFS, "ui")

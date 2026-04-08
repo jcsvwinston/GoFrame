@@ -453,6 +453,8 @@ Configuration:
   - goroutine state snapshot from runtime profile
   - memory and GC snapshot from `runtime.ReadMemStats`
   - DB pool snapshot from `database/sql` stats
+  - worker/job pool runtime snapshot from Asynq (`redis_url`) with queues, servers and active workers
+  - in-memory feature flags with runtime toggle support from admin
   - startup environment snapshot with automatic sensitive-value masking
 
 ## 10.3 Admin API
@@ -472,6 +474,8 @@ Main routes:
 - `GET /admin/api/live/snapshot`
 - `GET /admin/api/live/ws`
 - `GET /admin/api/system/snapshot`
+- `GET /admin/api/system/flags`
+- `PUT /admin/api/system/flags/{name}`
 
 List query validation contract (`GET /admin/api/models/{name}`):
 

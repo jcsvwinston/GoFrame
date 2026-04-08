@@ -524,6 +524,10 @@ textarea {
   overflow: auto;
 }
 
+.system-subtable {
+  margin-top: 10px;
+}
+
 table {
   width: 100%;
   border-collapse: collapse;

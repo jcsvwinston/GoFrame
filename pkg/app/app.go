@@ -133,6 +133,7 @@ func New(cfg *Config) (*App, error) {
 		Prefix:          effective.AdminPrefix,
 		Title:           effective.AdminTitle,
 		Environment:     effective.Env,
+		RedisURL:        effective.RedisURL,
 		Databases:       buildAdminDatabaseRuntimeInfo(effective, dbs, defaultAlias),
 		DatabaseHandles: dbs,
 		Auth:            admin.NewDatabaseAdminAuth(sqlDB, sessionManager, effective.AdminPrefix),

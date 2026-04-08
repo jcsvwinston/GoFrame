@@ -1,9 +1,12 @@
 package admin
 
 import (
+	"bytes"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/jcsvwinston/GoFrame/pkg/db"
@@ -109,5 +112,108 @@ func TestPanelSystemSnapshotEndpoint(t *testing.T) {
 	}
 	if env["APP_ENV"].Masked {
 		t.Fatalf("expected APP_ENV not masked, got %#v", env["APP_ENV"])
+	}
+}
+
+func TestPanelSystemSnapshotIncludesJobsAndFlags(t *testing.T) {
+	panel, cleanup := setupPanelForTest(t, db.EngineSQL)
+	defer cleanup()
+
+	panel.SetFeatureFlag("checkout_v2", true)
+
+	srv := httptest.NewServer(panel.Handler())
+	defer srv.Close()
+
+	res, err := http.Get(srv.URL + "/api/system/snapshot")
+	if err != nil {
+		t.Fatalf("snapshot request failed: %v", err)
+	}
+	defer res.Body.Close()
+
+	var payload systemSnapshotResponse
+	if err := json.NewDecoder(res.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode failed: %v", err)
+	}
+
+	if payload.Jobs.Enabled {
+		t.Fatalf("expected jobs snapshot disabled without redis_url")
+	}
+	if !strings.Contains(payload.Jobs.Reason, "redis_url") {
+		t.Fatalf("expected jobs reason to mention redis_url, got %q", payload.Jobs.Reason)
+	}
+
+	if len(payload.Flags) == 0 {
+		t.Fatalf("expected at least one feature flag")
+	}
+	found := false
+	for _, row := range payload.Flags {
+		if row.Name == "checkout_v2" {
+			found = true
+			if !row.Enabled {
+				t.Fatalf("expected checkout_v2 enabled in snapshot")
+			}
+		}
+	}
+	if !found {
+		t.Fatalf("expected checkout_v2 flag in snapshot rows")
+	}
+}
+
+func TestPanelSystemFeatureFlagEndpoints(t *testing.T) {
+	panel, cleanup := setupPanelForTest(t, db.EngineSQL)
+	defer cleanup()
+
+	srv := httptest.NewServer(panel.Handler())
+	defer srv.Close()
+
+	body := bytes.NewBufferString(`{"enabled":true}`)
+	req, err := http.NewRequest(http.MethodPut, srv.URL+"/api/system/flags/checkout_v2", body)
+	if err != nil {
+		t.Fatalf("new request failed: %v", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("put request failed: %v", err)
+	}
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		raw, _ := io.ReadAll(res.Body)
+		t.Fatalf("expected status 200 from PUT flag, got %d body=%s", res.StatusCode, string(raw))
+	}
+
+	listRes, err := http.Get(srv.URL + "/api/system/flags")
+	if err != nil {
+		t.Fatalf("flags list request failed: %v", err)
+	}
+	defer listRes.Body.Close()
+
+	var listPayload struct {
+		Enabled bool               `json:"enabled"`
+		Count   int                `json:"count"`
+		Flags   []featureFlagState `json:"flags"`
+	}
+	if err := json.NewDecoder(listRes.Body).Decode(&listPayload); err != nil {
+		t.Fatalf("decode list response failed: %v", err)
+	}
+
+	if !listPayload.Enabled {
+		t.Fatalf("expected flags endpoint enabled")
+	}
+	if listPayload.Count == 0 || len(listPayload.Flags) == 0 {
+		t.Fatalf("expected at least one feature flag in list")
+	}
+	found := false
+	for _, row := range listPayload.Flags {
+		if row.Name != "checkout_v2" {
+			continue
+		}
+		found = true
+		if !row.Enabled {
+			t.Fatalf("expected checkout_v2 to be enabled")
+		}
+	}
+	if !found {
+		t.Fatalf("expected checkout_v2 in flags list")
 	}
 }

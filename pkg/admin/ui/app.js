@@ -144,6 +144,11 @@
       sessions: (limit) => req(`/sessions?limit=${encodeURIComponent(String(limit || 250))}`),
       liveSnapshot: (limit) => req(`/live/snapshot?limit=${encodeURIComponent(String(limit || 50))}`),
       systemSnapshot: (envLimit) => req(`/system/snapshot?env_limit=${encodeURIComponent(String(envLimit || 200))}`),
+      systemSetFlag: (name, enabled) =>
+        req(`/system/flags/${encodeURIComponent(String(name || ""))}`, {
+          method: "PUT",
+          body: JSON.stringify({ enabled: !!enabled }),
+        }),
       liveWebSocketURL: function () {
         const protocol = window.location.protocol === "https:" ? "wss://" : "ws://";
         return protocol + window.location.host + root + "/live/ws";
@@ -754,10 +759,14 @@
       const goroutines = payload.goroutines || {};
       const memory = payload.memory || {};
       const databases = Array.isArray(payload.databases) ? payload.databases : [];
+      const jobs = payload.jobs || {};
+      const jobQueues = Array.isArray(jobs.queues) ? jobs.queues : [];
+      const jobWorkers = Array.isArray(jobs.workers) ? jobs.workers : [];
+      const flags = Array.isArray(payload.flags) ? payload.flags : [];
       const envRows = Array.isArray(payload.environment) ? payload.environment : [];
 
       els.app.innerHTML =
-        UI.sectionHead("System pulse", "Go runtime + DB pool + environment", "Snapshot") +
+        UI.sectionHead("System pulse", "Go runtime + DB pool + jobs + feature flags", "Snapshot") +
         `
           <section class="detail-grid">
             ${UI.kv("Go version", payload.go_version || "-")}
@@ -765,6 +774,8 @@
             ${UI.kv("Goroutines", String(Number(goroutines.count || 0)))}
             ${UI.kv("GOMAXPROCS", String(Number(payload.gomaxprocs || 0)))}
             ${UI.kv("CPU cores", String(Number(payload.cpus || 0)))}
+            ${UI.kv("Queues discovered", String(Number(jobs.total_queues || 0)))}
+            ${UI.kv("Active workers", String(Number(jobs.total_workers || 0)))}
             ${UI.kv("Generated", formatTemporal(payload.generated_at))}
           </section>
 
@@ -824,6 +835,82 @@
 
           <section class="section-block">
             <div class="section-block-head">
+              <h3>Worker/job pool monitor</h3>
+              <p>${jobs.enabled ? "Asynq runtime snapshot" : `Unavailable: ${escapeHtml(jobs.reason || "runtime not available")}`}</p>
+            </div>
+            <section class="detail-grid">
+              ${UI.kv("Queues", String(Number(jobs.total_queues || 0)))}
+              ${UI.kv("Servers", String(Number(jobs.total_servers || 0)))}
+              ${UI.kv("Workers", String(Number(jobs.total_workers || 0)))}
+              ${UI.kv("Pending", String(Number(jobs.total_pending || 0)))}
+              ${UI.kv("Active", String(Number(jobs.total_active || 0)))}
+              ${UI.kv("Scheduled", String(Number(jobs.total_scheduled || 0)))}
+              ${UI.kv("Retry", String(Number(jobs.total_retry || 0)))}
+              ${UI.kv("Processed today", String(Number(jobs.total_processed_today || 0)))}
+            </section>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Queue</th>
+                    <th>Size</th>
+                    <th>Pending</th>
+                    <th>Active</th>
+                    <th>Scheduled</th>
+                    <th>Retry</th>
+                    <th>Paused</th>
+                    <th>Latency (ms)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${renderSystemJobQueueRows(jobQueues)}
+                </tbody>
+              </table>
+            </div>
+            <div class="table-wrap system-subtable">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Server</th>
+                    <th>Queue</th>
+                    <th>Task type</th>
+                    <th>Task ID</th>
+                    <th>Started</th>
+                    <th>Deadline</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${renderSystemWorkerRows(jobWorkers)}
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+          <section class="section-block">
+            <div class="section-block-head">
+              <h3>Live feature flags</h3>
+              <p>In-memory booleans editable at runtime</p>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Flag</th>
+                    <th>Enabled</th>
+                    <th>Updated at</th>
+                    <th>Updated by</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${renderFeatureFlagRows(flags)}
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+          <section class="section-block">
+            <div class="section-block-head">
               <h3>Environment (startup snapshot)</h3>
               <p>Sensitive values are masked by key policy</p>
             </div>
@@ -843,6 +930,8 @@
             </div>
           </section>
         `;
+
+      bindFeatureFlagActions();
     } catch (err) {
       const retryID = "retry-system";
       els.app.innerHTML = renderRecoverableError("Could not load system pulse", errorText(err), retryID);
@@ -896,6 +985,102 @@
         `;
       })
       .join("");
+  }
+
+  function renderSystemJobQueueRows(rows) {
+    if (!Array.isArray(rows) || rows.length === 0) {
+      return `<tr><td class="table-empty" colspan="8">No queues discovered</td></tr>`;
+    }
+    return rows
+      .map(function (row) {
+        return `
+          <tr>
+            <td>${escapeHtml(row.name || "-")}</td>
+            <td>${escapeHtml(String(row.size || 0))}</td>
+            <td>${escapeHtml(String(row.pending || 0))}</td>
+            <td>${escapeHtml(String(row.active || 0))}</td>
+            <td>${escapeHtml(String(row.scheduled || 0))}</td>
+            <td>${escapeHtml(String(row.retry || 0))}</td>
+            <td>${row.paused ? "yes" : "no"}</td>
+            <td>${escapeHtml(String(row.latency_ms || 0))}</td>
+          </tr>
+        `;
+      })
+      .join("");
+  }
+
+  function renderSystemWorkerRows(rows) {
+    if (!Array.isArray(rows) || rows.length === 0) {
+      return `<tr><td class="table-empty" colspan="6">No active workers</td></tr>`;
+    }
+    return rows
+      .map(function (row) {
+        const server = `${row.host || "-"}#${row.pid || "-"}`;
+        return `
+          <tr>
+            <td>${escapeHtml(server)}</td>
+            <td>${escapeHtml(row.queue || "-")}</td>
+            <td>${escapeHtml(row.task_type || "-")}</td>
+            <td>${escapeHtml(row.task_id || "-")}</td>
+            <td>${escapeHtml(formatTemporal(row.started_at || ""))}</td>
+            <td>${escapeHtml(formatTemporal(row.deadline || ""))}</td>
+          </tr>
+        `;
+      })
+      .join("");
+  }
+
+  function renderFeatureFlagRows(rows) {
+    if (!Array.isArray(rows) || rows.length === 0) {
+      return `<tr><td class="table-empty" colspan="5">No feature flags registered yet</td></tr>`;
+    }
+    return rows
+      .map(function (row) {
+        const enabled = !!row.enabled;
+        return `
+          <tr>
+            <td>${escapeHtml(row.name || "-")}</td>
+            <td>${enabled ? "yes" : "no"}</td>
+            <td>${escapeHtml(formatTemporal(row.updated_at || ""))}</td>
+            <td>${escapeHtml(row.updated_by || "-")}</td>
+            <td>
+              <button
+                type="button"
+                class="btn btn-ghost btn-sm"
+                data-flag-toggle="1"
+                data-flag-name="${escapeHtml(row.name || "")}"
+                data-flag-enabled="${enabled ? "1" : "0"}"
+              >
+                ${enabled ? "Disable" : "Enable"}
+              </button>
+            </td>
+          </tr>
+        `;
+      })
+      .join("");
+  }
+
+  function bindFeatureFlagActions() {
+    document.querySelectorAll("[data-flag-toggle='1']").forEach(function (btn) {
+      btn.addEventListener("click", async function () {
+        const name = String(btn.getAttribute("data-flag-name") || "").trim();
+        if (!name) {
+          return;
+        }
+        const current = btn.getAttribute("data-flag-enabled") === "1";
+        const next = !current;
+        const restore = setButtonPending(btn, next ? "Enabling..." : "Disabling...");
+        try {
+          await API.systemSetFlag(name, next);
+          toast(`Feature flag ${name} is now ${next ? "enabled" : "disabled"}`, "success");
+          await renderSystemOverview();
+        } catch (err) {
+          toast(errorText(err), "error");
+        } finally {
+          restore();
+        }
+      });
+    });
   }
 
   function renderSystemEnvRows(rows) {

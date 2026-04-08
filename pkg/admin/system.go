@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/jcsvwinston/GoFrame/pkg/db"
+	"github.com/jcsvwinston/GoFrame/pkg/tasks"
 )
 
 const (
@@ -30,6 +31,8 @@ type systemSnapshotResponse struct {
 	Goroutines  systemGoroutinesInfo    `json:"goroutines"`
 	Memory      systemMemoryInfo        `json:"memory"`
 	Databases   []systemDatabasePoolRow `json:"databases"`
+	Jobs        tasks.RuntimeSnapshot   `json:"jobs"`
+	Flags       []featureFlagState      `json:"flags"`
 	Environment []systemEnvVar          `json:"environment"`
 }
 
@@ -106,6 +109,8 @@ func (p *Panel) handleSystemSnapshot(w http.ResponseWriter, r *http.Request) {
 			PauseTotalMS:    uint64(mem.PauseTotalNs / uint64(time.Millisecond)),
 		},
 		Databases:   p.systemDatabasePoolRows(),
+		Jobs:        tasks.InspectRuntime(p.config.RedisURL),
+		Flags:       p.systemFeatureFlags(),
 		Environment: p.systemEnvironmentRows(limit),
 	}
 
@@ -175,6 +180,13 @@ func (p *Panel) systemDatabasePoolRows() []systemDatabasePoolRow {
 		rows = append(rows, row)
 	}
 	return rows
+}
+
+func (p *Panel) systemFeatureFlags() []featureFlagState {
+	if p == nil || p.flags == nil {
+		return []featureFlagState{}
+	}
+	return p.flags.list()
 }
 
 func (p *Panel) lookupSystemDBHandle(info DatabaseRuntimeInfo) *db.DB {

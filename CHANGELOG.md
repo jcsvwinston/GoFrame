@@ -58,6 +58,10 @@ while in pre-1.0 mode (`v0.x.y`).
   - `GET /admin/api/system/snapshot` for Go runtime + DB pool + startup environment telemetry
   - startup environment viewer with mandatory masking for `KEY|SECRET|PASSWORD|TOKEN`
   - new `/admin#/system` view for goroutine states, memory/GC metrics, and DB pool stats
+  - integrated worker/job pool monitor via Asynq runtime inspector (queues, servers, active workers)
+  - feature flags runtime control endpoints:
+    - `GET /admin/api/system/flags`
+    - `PUT /admin/api/system/flags/{name}`
 - Advanced in-process rate limiting dimensions:
   - `rate_limit_burst` for controlled token-bucket burst capacity
   - `rate_limit_by_route` for route-scoped budgets
