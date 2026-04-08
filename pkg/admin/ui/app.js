@@ -2,8 +2,10 @@
   "use strict";
 
   const PAGE_SIZE = 25;
+  const OVERVIEW_SERIES_POINTS = 24;
   const UI = window.AdminUI || createFallbackUI();
   const SIDEBAR_PREF_KEY = "goframe_admin_sidebar_collapsed";
+  const THEME_PREF_KEY = "goframe_admin_theme";
 
   const els = {
     layout: document.getElementById("layout"),
@@ -13,6 +15,8 @@
     siteTitle: document.getElementById("site-title"),
     breadcrumbs: document.getElementById("breadcrumbs"),
     refreshBtn: document.getElementById("refresh-btn"),
+    themeToggle: document.getElementById("theme-toggle"),
+    themeToggleLabel: document.getElementById("theme-toggle-label"),
     newRecordBtn: document.getElementById("new-record-btn"),
     runtimeEnvPill: document.getElementById("runtime-env-pill"),
     runtimeEnv: document.getElementById("runtime-env"),
@@ -47,10 +51,13 @@
     liveLimitRequests: 80,
     liveLimitSQL: 80,
     liveLimitSessions: 80,
+    sessionsLimit: 200,
     liveNodeFilter: "",
     sidebarCollapsed: false,
     dataStudioSearch: "",
     dataStudioEngine: "all",
+    traceURLTemplate: "",
+    theme: "dark",
   };
 
   let sessionsRefreshTimer = null;
@@ -223,6 +230,7 @@
   })();
 
   function init() {
+    hydrateThemePreference();
     state.sidebarCollapsed = readSidebarPreference();
     applySidebarLayout();
     bindGlobalEvents();
@@ -258,6 +266,13 @@
         toast(errorText(err), "error");
       }
     });
+
+    if (els.themeToggle) {
+      els.themeToggle.addEventListener("click", function () {
+        const nextTheme = state.theme === "dark" ? "light" : "dark";
+        applyTheme(nextTheme, true);
+      });
+    }
 
     els.newRecordBtn.addEventListener("click", function () {
       if (!state.currentModel) {
@@ -327,6 +342,7 @@
     const payload = await API.models(mode);
     state.models = payload.models || [];
     state.runtime = payload.runtime || {};
+    state.traceURLTemplate = String((state.runtime && state.runtime.trace_url_template) || "").trim();
     if (!state.currentDBAlias || !isKnownDatabaseAlias(state.currentDBAlias)) {
       state.currentDBAlias = defaultDatabaseAlias();
     }
@@ -342,6 +358,9 @@
   }
 
   function renderModelNav() {
+    if (!els.modelNav) {
+      return;
+    }
     const runtime = state.runtime || {};
     const groups = Array.isArray(runtime.engine_groups) ? runtime.engine_groups : [];
     const fallbackDatabases = Array.isArray(runtime.databases) ? runtime.databases : [];
@@ -462,7 +481,7 @@
           : route.view === "system"
             ? "system"
             : route.model
-              ? route.db + ":" + route.model
+              ? "data-studio"
               : "overview";
     setActiveNav(navKey);
     renderBreadcrumbs(route);
@@ -474,7 +493,7 @@
       state.currentModel = null;
       state.schema = null;
       updateNewButton();
-      renderDashboard();
+      await renderDashboard();
       return;
     }
 
@@ -650,116 +669,146 @@
     });
   }
 
-  function renderDashboard() {
-    const runtime = state.runtime || {};
-    const databases = Array.isArray(runtime.databases) ? runtime.databases : [];
-    const engines = Array.isArray(runtime.engines) ? runtime.engines : [];
-    const sessionsActive = toNumber(runtime.sessions_active, 0);
-    const env = runtime.environment || "development";
-    const countsAvailable = runtime.counts_available !== false;
-    const recordsTotalKnown = isKnownCount(runtime.records_total);
-    const recordsSummary = countsAvailable && recordsTotalKnown ? Number(runtime.records_total || 0).toLocaleString() : "Deferred";
-    const overviewTrend = buildOverviewTrendPoints(state.models.length, sessionsActive);
-    const activityRows = buildOverviewActivityRows(databases);
-    const serviceRows = buildOverviewServiceRows(databases, env);
+  async function renderDashboard() {
+    setAppBusy(true);
+    els.app.innerHTML = loadingMarkup();
 
-    const cards = state.models
-      .map(function (model) {
-        const alias = defaultDatabaseAlias();
-        const byAlias = model.counts && alias ? model.counts[alias] : model.count;
-        const knownCount = isKnownCount(byAlias);
-        return `
-          <article class="card" data-hash="${modelHash(model.name, alias)}">
-            <p class="card-label">${escapeHtml(model.plural || model.name)}</p>
-            <p class="card-count ${knownCount ? "" : "card-count-muted"}">${knownCount ? Number(byAlias) : "Deferred"}</p>
-            <span class="status-chip">${escapeHtml(alias)}</span>
-            ${knownCount ? "" : '<span class="status-chip status-chip-muted">counts disabled by default</span>'}
-          </article>
+    try {
+      const runtime = state.runtime || {};
+      const databases = Array.isArray(runtime.databases) ? runtime.databases : [];
+      const engines = Array.isArray(runtime.engines) ? runtime.engines : [];
+      const sessionsActive = toNumber(runtime.sessions_active, 0);
+      const env = runtime.environment || "development";
+      const countsAvailable = runtime.counts_available !== false;
+      const recordsTotalKnown = isKnownCount(runtime.records_total);
+      const recordsSummary = countsAvailable && recordsTotalKnown ? Number(runtime.records_total || 0).toLocaleString() : "Deferred";
+      const liveSignals = await fetchOverviewLiveSignals();
+      const clusterStatusLabel = liveSignals.clusterEnabled
+        ? liveSignals.clusterConnected
+          ? "connected"
+          : "degraded"
+        : "disabled";
+      const sessionSeriesSummary = summarizeOverviewSeries(liveSignals.sessionSeries);
+      const requestSeriesSummary = summarizeOverviewSeries(liveSignals.requestSeries);
+      const activityRows = buildOverviewActivityRows(databases, liveSignals);
+      const serviceRows = buildOverviewServiceRows(databases, env, liveSignals);
+
+      const cards = state.models
+        .map(function (model) {
+          const alias = defaultDatabaseAlias();
+          const byAlias = model.counts && alias ? model.counts[alias] : model.count;
+          const knownCount = isKnownCount(byAlias);
+          return `
+            <article class="card" data-hash="${modelHash(model.name, alias)}">
+              <p class="card-label">${escapeHtml(model.plural || model.name)}</p>
+              <p class="card-count ${knownCount ? "" : "card-count-muted"}">${knownCount ? Number(byAlias) : "Deferred"}</p>
+              <span class="status-chip">${escapeHtml(alias)}</span>
+              ${knownCount ? "" : '<span class="status-chip status-chip-muted">counts disabled by default</span>'}
+            </article>
+          `;
+        })
+        .join("");
+
+      els.app.innerHTML =
+        UI.sectionHead("Overview", "Resumen del estado del framework", env) +
+        `
+          <section class="cards kpi-grid">
+            <article class="card kpi-card card-static">
+              <p class="card-label">Modelos activos</p>
+              <p class="kpi-value">${state.models.length}</p>
+              <span class="status-chip">${engines.length} engines</span>
+            </article>
+            <article class="card kpi-card card-static">
+              <p class="card-label">Sessions activas</p>
+              <p class="kpi-value">${sessionsActive.toLocaleString()}</p>
+              <span class="status-chip">${env}</span>
+            </article>
+            <article class="card kpi-card card-static">
+              <p class="card-label">Bases configuradas</p>
+              <p class="kpi-value">${databases.length}</p>
+              <span class="status-chip">${countsAvailable ? "counts ready" : "light mode"}</span>
+            </article>
+            <article class="card kpi-card card-static">
+              <p class="card-label">Registros totales</p>
+              <p class="kpi-value ${recordsTotalKnown ? "" : "card-count-muted"}">${recordsSummary}</p>
+              <span class="status-chip">${countsAvailable ? "full" : "deferred"}</span>
+            </article>
+          </section>
+
+          <section class="section-block">
+            <div class="section-block-head">
+              <h3>Live traffic signals</h3>
+              <p>Source: /admin/api/sessions + /admin/api/live/snapshot</p>
+            </div>
+            <section class="toolbar overview-signal-toolbar">
+              <span class="status-chip">Sessions realtime: latest ${sessionSeriesSummary.latest} · peak ${sessionSeriesSummary.peak}</span>
+              <span class="status-chip">Requests/min: latest ${requestSeriesSummary.latest} · peak ${requestSeriesSummary.peak}</span>
+              <span class="status-chip">Request buffer: ${liveSignals.requestBuffered}/${liveSignals.requestCapacity}</span>
+              <span class="status-chip">Cluster relay: ${clusterStatusLabel}${liveSignals.clusterNodeID ? ` (${escapeHtml(liveSignals.clusterNodeID)})` : ""}</span>
+              <span class="status-chip">Generated: ${escapeHtml(formatTemporal(liveSignals.generatedAt))}</span>
+            </section>
+            ${renderOverviewLiveTrend(liveSignals.sessionSeries, liveSignals.requestSeries)}
+          </section>
+
+          <section class="cards overview-meta-grid">
+            <article class="section-block overview-panel">
+              <div class="section-block-head">
+                <h3>Actividad reciente</h3>
+                <p>Eventos observados en runtime</p>
+              </div>
+              <ul class="overview-list">
+                ${renderOverviewListRows(activityRows)}
+              </ul>
+            </article>
+            <article class="section-block overview-panel">
+              <div class="section-block-head">
+                <h3>Servicios</h3>
+                <p>Estado general del entorno</p>
+              </div>
+              <ul class="overview-list">
+                ${renderOverviewListRows(serviceRows)}
+              </ul>
+            </article>
+          </section>
+
+          <section class="section-block">
+            <div class="section-block-head">
+              <h3>Database runtime</h3>
+              <p>Engines: ${escapeHtml(engines.join(", ") || "n/a")}</p>
+            </div>
+            <section class="cards dashboard-db-grid">
+              ${renderRuntimeDatabaseCards(databases)}
+            </section>
+          </section>
+
+          <section class="section-block">
+            <div class="section-block-head">
+              <h3>Registered models</h3>
+              <p>Click shortcuts or open Data Studio for cross-engine operations</p>
+            </div>
+            <section class="cards">
+              ${cards || UI.empty("No models registered")}
+            </section>
+          </section>
         `;
-      })
-      .join("");
 
-    els.app.innerHTML =
-      UI.sectionHead("Overview", "Resumen del estado del framework", env) +
-      `
-        <section class="cards kpi-grid">
-          <article class="card kpi-card card-static">
-            <p class="card-label">Modelos activos</p>
-            <p class="kpi-value">${state.models.length}</p>
-            <span class="status-chip">${engines.length} engines</span>
-          </article>
-          <article class="card kpi-card card-static">
-            <p class="card-label">Sessions activas</p>
-            <p class="kpi-value">${sessionsActive.toLocaleString()}</p>
-            <span class="status-chip">${env}</span>
-          </article>
-          <article class="card kpi-card card-static">
-            <p class="card-label">Bases configuradas</p>
-            <p class="kpi-value">${databases.length}</p>
-            <span class="status-chip">${countsAvailable ? "counts ready" : "light mode"}</span>
-          </article>
-          <article class="card kpi-card card-static">
-            <p class="card-label">Registros totales</p>
-            <p class="kpi-value ${recordsTotalKnown ? "" : "card-count-muted"}">${recordsSummary}</p>
-            <span class="status-chip">${countsAvailable ? "full" : "deferred"}</span>
-          </article>
-        </section>
-
-        <section class="section-block">
-          <div class="section-block-head">
-            <h3>Traffic signal - Last 24h</h3>
-            <p>Synthetic overview from current runtime state</p>
-          </div>
-          ${renderOverviewTrend(overviewTrend)}
-        </section>
-
-        <section class="cards overview-meta-grid">
-          <article class="section-block overview-panel">
-            <div class="section-block-head">
-              <h3>Actividad reciente</h3>
-              <p>Eventos inferidos del runtime</p>
-            </div>
-            <ul class="overview-list">
-              ${renderOverviewListRows(activityRows)}
-            </ul>
-          </article>
-          <article class="section-block overview-panel">
-            <div class="section-block-head">
-              <h3>Servicios</h3>
-              <p>Estado general del entorno</p>
-            </div>
-            <ul class="overview-list">
-              ${renderOverviewListRows(serviceRows)}
-            </ul>
-          </article>
-        </section>
-
-        <section class="section-block">
-          <div class="section-block-head">
-            <h3>Database runtime</h3>
-            <p>Engines: ${escapeHtml(engines.join(", ") || "n/a")}</p>
-          </div>
-          <section class="cards dashboard-db-grid">
-            ${renderRuntimeDatabaseCards(databases)}
-          </section>
-        </section>
-
-        <section class="section-block">
-          <div class="section-block-head">
-            <h3>Registered models</h3>
-            <p>Click shortcuts or open Data Studio for cross-engine operations</p>
-          </div>
-          <section class="cards">
-            ${cards || UI.empty("No models registered")}
-          </section>
-        </section>
-      `;
-
-    els.app.querySelectorAll("[data-hash]").forEach(function (card) {
-      card.addEventListener("click", function () {
-        navigate(card.getAttribute("data-hash"));
+      els.app.querySelectorAll("[data-hash]").forEach(function (card) {
+        card.addEventListener("click", function () {
+          navigate(card.getAttribute("data-hash"));
+        });
       });
-    });
+    } catch (err) {
+      els.app.innerHTML = renderRecoverableError("Could not load overview", errorText(err), "retry-overview");
+      const retryBtn = document.getElementById("retry-overview");
+      if (retryBtn) {
+        retryBtn.addEventListener("click", function () {
+          renderDashboard();
+        });
+      }
+      toast(errorText(err), "error");
+    } finally {
+      setAppBusy(false);
+    }
   }
 
   function toNumber(value, fallback) {
@@ -770,63 +819,257 @@
     return n;
   }
 
-  function buildOverviewTrendPoints(modelsCount, sessionsCount) {
-    const points = [];
-    const base = Math.max(40, modelsCount * 5 + sessionsCount * 2);
-    for (let hour = 0; hour < 24; hour++) {
-      const wave = Math.sin((hour / 24) * Math.PI * 4);
-      const noise = Math.cos((hour / 24) * Math.PI * 6) * 0.35;
-      const value = Math.max(8, Math.round(base + base * 0.22 * wave + base * 0.11 * noise + hour * 0.6));
-      points.push({ hour: hour, value: value });
-    }
-    return points;
+  async function fetchOverviewLiveSignals() {
+    const sessionsPromise = API.sessions(220).catch(function () {
+      return null;
+    });
+    const livePromise = API.liveSnapshot({
+      requests: 240,
+      sql: 1,
+      sessions: 1,
+      node: "",
+    }).catch(function () {
+      return null;
+    });
+    const settled = await Promise.all([sessionsPromise, livePromise]);
+    const sessionsPayload = asOverviewPayload(settled[0], "telemetry");
+    const livePayload = asOverviewPayload(settled[1], "requests");
+    const sessionSeries = buildOverviewSessionSeries(sessionsPayload);
+    const requestSeries = buildOverviewRequestSeries(livePayload);
+    const requestBuffer = (livePayload && livePayload.request_buffer) || {};
+    const cluster = (livePayload && livePayload.cluster) || {};
+
+    return {
+      sessionsAvailable: !!(sessionsPayload && sessionsPayload.enabled !== false),
+      requestsAvailable: !!(livePayload && livePayload.enabled !== false),
+      sessionSeries: sessionSeries,
+      requestSeries: requestSeries,
+      requestBuffered: Number(requestBuffer.stored || 0),
+      requestCapacity: Number(requestBuffer.capacity || 0),
+      clusterEnabled: !!cluster.enabled,
+      clusterConnected: !!cluster.connected,
+      clusterNodeID: String(cluster.node_id || "").trim(),
+      clusterChannel: String(cluster.channel || "").trim(),
+      clusterReason: String(cluster.reason || "").trim(),
+      generatedAt: (livePayload && livePayload.generated_at) || (sessionsPayload && sessionsPayload.generated_at) || "",
+    };
   }
 
-  function renderOverviewTrend(points) {
-    if (!Array.isArray(points) || points.length === 0) {
-      return `<div class="table-empty">No trend data</div>`;
+  function asOverviewPayload(value, expectedKey) {
+    if (!value || typeof value !== "object" || Array.isArray(value)) {
+      return null;
     }
+    if (typeof Response !== "undefined" && value instanceof Response) {
+      return null;
+    }
+    if (expectedKey && !Object.prototype.hasOwnProperty.call(value, expectedKey)) {
+      return null;
+    }
+    return value;
+  }
+
+  function buildOverviewSessionSeries(payload) {
+    if (!payload || payload.enabled === false) {
+      return [];
+    }
+    const telemetry = payload.telemetry || {};
+    const realtime = telemetry.realtime || {};
+    const points = Array.isArray(realtime.points) ? realtime.points : [];
+    const mapped = points
+      .map(function (item) {
+        return {
+          timestamp: String(item.timestamp || ""),
+          value: Number(item.active || 0),
+        };
+      })
+      .filter(function (item) {
+        return Number.isFinite(item.value);
+      });
+    if (mapped.length === 0) {
+      return [];
+    }
+    return resampleOverviewSeries(mapped, OVERVIEW_SERIES_POINTS);
+  }
+
+  function buildOverviewRequestSeries(payload) {
+    if (!payload || payload.enabled === false) {
+      return [];
+    }
+    const rows = Array.isArray(payload.requests) ? payload.requests : [];
+    const stamped = rows
+      .map(function (row) {
+        const ts = parseTemporalMillis(row && row.timestamp);
+        return {
+          ts: ts,
+        };
+      })
+      .filter(function (item) {
+        return Number.isFinite(item.ts);
+      })
+      .sort(function (a, b) {
+        return a.ts - b.ts;
+      });
+    if (stamped.length === 0) {
+      return [];
+    }
+
+    const bucketMS = 60 * 1000;
+    const latest = stamped[stamped.length - 1].ts;
+    const start = latest - (OVERVIEW_SERIES_POINTS - 1) * bucketMS;
+    const buckets = new Array(OVERVIEW_SERIES_POINTS).fill(0);
+
+    stamped.forEach(function (row) {
+      if (row.ts < start || row.ts > latest) {
+        return;
+      }
+      const rawIdx = Math.floor((row.ts - start) / bucketMS);
+      const idx = Math.max(0, Math.min(OVERVIEW_SERIES_POINTS - 1, rawIdx));
+      buckets[idx] += 1;
+    });
+
+    return buckets.map(function (count, idx) {
+      const ts = new Date(start + idx * bucketMS);
+      return {
+        timestamp: ts.toISOString(),
+        value: count,
+      };
+    });
+  }
+
+  function resampleOverviewSeries(points, targetSize) {
+    const source = Array.isArray(points) ? points : [];
+    const size = Number(targetSize || OVERVIEW_SERIES_POINTS);
+    if (source.length === 0 || size <= 0) {
+      return [];
+    }
+    if (source.length === size) {
+      return source.slice();
+    }
+    if (source.length === 1) {
+      return new Array(size).fill(0).map(function () {
+        return {
+          timestamp: source[0].timestamp,
+          value: source[0].value,
+        };
+      });
+    }
+
+    const out = [];
+    for (let idx = 0; idx < size; idx += 1) {
+      const pos = (idx / Math.max(1, size - 1)) * (source.length - 1);
+      const lo = Math.floor(pos);
+      const hi = Math.min(source.length - 1, Math.ceil(pos));
+      const ratio = pos - lo;
+      const loPoint = source[lo];
+      const hiPoint = source[hi];
+      const value = Math.round(Number(loPoint.value || 0) + (Number(hiPoint.value || 0) - Number(loPoint.value || 0)) * ratio);
+      out.push({
+        timestamp: ratio <= 0.5 ? loPoint.timestamp : hiPoint.timestamp,
+        value: value,
+      });
+    }
+    return out;
+  }
+
+  function summarizeOverviewSeries(points) {
+    const rows = Array.isArray(points) ? points : [];
+    if (rows.length === 0) {
+      return { latest: 0, peak: 0 };
+    }
+    const values = rows.map(function (item) {
+      return Number(item.value || 0);
+    });
+    return {
+      latest: Number(values[values.length - 1] || 0),
+      peak: Math.max(0, ...values),
+    };
+  }
+
+  function renderOverviewLiveTrend(sessionPoints, requestPoints) {
+    const hasSessions = Array.isArray(sessionPoints) && sessionPoints.length > 0;
+    const hasRequests = Array.isArray(requestPoints) && requestPoints.length > 0;
+    if (!hasSessions && !hasRequests) {
+      return `<div class="table-empty">No live telemetry available yet</div>`;
+    }
+
+    const baseCount = Math.max(hasSessions ? sessionPoints.length : 0, hasRequests ? requestPoints.length : 0, 2);
+    const sessions = hasSessions ? resampleOverviewSeries(sessionPoints, baseCount) : [];
+    const requests = hasRequests ? resampleOverviewSeries(requestPoints, baseCount) : [];
+    const values = [];
+    sessions.forEach(function (item) {
+      values.push(Number(item.value || 0));
+    });
+    requests.forEach(function (item) {
+      values.push(Number(item.value || 0));
+    });
+    const max = Math.max(1, ...values);
+
     const width = 1240;
     const height = 250;
     const padX = 20;
     const padY = 16;
     const graphW = width - padX * 2;
     const graphH = height - padY * 2;
-    const max = Math.max(1, ...points.map(function (item) {
-      return Number(item.value || 0);
-    }));
-    const coords = points.map(function (item, idx) {
-      const x = padX + (idx / Math.max(1, points.length - 1)) * graphW;
-      const y = padY + graphH - (Number(item.value || 0) / max) * graphH;
-      return [x, y];
-    });
-    const path = coords
-      .map(function (pair, idx) {
-        return `${idx === 0 ? "M" : "L"}${pair[0].toFixed(1)} ${pair[1].toFixed(1)}`;
-      })
-      .join(" ");
-    const areaPath = `${path} L${(padX + graphW).toFixed(1)} ${(padY + graphH).toFixed(1)} L${padX.toFixed(1)} ${(padY + graphH).toFixed(1)} Z`;
-    const labels = points
+
+    const buildPath = function (series) {
+      if (!Array.isArray(series) || series.length === 0) {
+        return "";
+      }
+      return series
+        .map(function (item, idx) {
+          const x = padX + (idx / Math.max(1, series.length - 1)) * graphW;
+          const y = padY + graphH - (Number(item.value || 0) / max) * graphH;
+          return `${idx === 0 ? "M" : "L"}${x.toFixed(1)} ${y.toFixed(1)}`;
+        })
+        .join(" ");
+    };
+
+    const sessionPath = buildPath(sessions);
+    const requestPath = buildPath(requests);
+    const sessionArea = sessionPath
+      ? `${sessionPath} L${(padX + graphW).toFixed(1)} ${(padY + graphH).toFixed(1)} L${padX.toFixed(1)} ${(padY + graphH).toFixed(1)} Z`
+      : "";
+    const labelSource = requests.length > 0 ? requests : sessions;
+    const divider = Math.max(1, Math.floor(labelSource.length / 6));
+    const labels = labelSource
       .map(function (item, idx) {
-        if (idx % 2 !== 0 && idx !== points.length - 1) {
-          return "";
+        if (idx % divider !== 0 && idx !== labelSource.length - 1) {
+          return "<span></span>";
         }
-        return `<span>${item.hour}:00</span>`;
+        return `<span>${escapeHtml(formatOverviewTimeLabel(item.timestamp))}</span>`;
       })
       .join("");
 
     return `
       <div class="overview-trend-wrap">
-        <svg viewBox="0 0 ${width} ${height}" class="overview-trend-chart" role="img" aria-label="Overview traffic trend">
-          <path class="overview-trend-area" d="${areaPath}"></path>
-          <path class="overview-trend-line" d="${path}"></path>
+        <svg viewBox="0 0 ${width} ${height}" class="overview-trend-chart" role="img" aria-label="Live traffic signals">
+          ${sessionArea ? `<path class="overview-trend-area" d="${sessionArea}"></path>` : ""}
+          ${sessionPath ? `<path class="overview-trend-line" d="${sessionPath}"></path>` : ""}
+          ${requestPath ? `<path class="overview-trend-line-secondary" d="${requestPath}"></path>` : ""}
         </svg>
-        <div class="overview-trend-labels">${labels}</div>
+        <div class="overview-trend-labels" style="grid-template-columns: repeat(${labelSource.length}, minmax(0, 1fr));">${labels}</div>
       </div>
     `;
   }
 
-  function buildOverviewActivityRows(databases) {
+  function formatOverviewTimeLabel(value) {
+    const ts = parseTemporalMillis(value);
+    if (!Number.isFinite(ts)) {
+      return "-";
+    }
+    return new Date(ts).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  }
+
+  function parseTemporalMillis(value) {
+    const raw = String(value || "").trim();
+    if (!raw) {
+      return NaN;
+    }
+    const ts = Date.parse(raw);
+    return Number.isFinite(ts) ? ts : NaN;
+  }
+
+  function buildOverviewActivityRows(databases, liveSignals) {
     const rows = [];
     if (Array.isArray(databases) && databases.length > 0) {
       const first = databases[0] || {};
@@ -835,13 +1078,33 @@
         meta: `${Number(first.model_count || 0)} models`,
       });
     }
+    if (liveSignals && liveSignals.sessionsAvailable) {
+      const sessionSummary = summarizeOverviewSeries(liveSignals.sessionSeries);
+      rows.push({
+        label: "Session telemetry online",
+        meta: `realtime peak ${sessionSummary.peak}`,
+      });
+    } else {
+      rows.push({
+        label: "Session telemetry pending",
+        meta: "no data yet",
+      });
+    }
+    if (liveSignals && liveSignals.requestsAvailable) {
+      rows.push({
+        label: "Network Inspector buffer",
+        meta: `${Number(liveSignals.requestBuffered || 0)}/${Number(liveSignals.requestCapacity || 0)} requests`,
+      });
+    }
+    rows.push({
+      label: "Cluster relay",
+      meta: (liveSignals && liveSignals.clusterEnabled)
+        ? (liveSignals.clusterConnected ? "connected" : "degraded")
+        : (liveSignals && liveSignals.clusterReason ? liveSignals.clusterReason : "disabled"),
+    });
     rows.push({
       label: "Data Studio available",
       meta: `${state.models.length} models indexed`,
-    });
-    rows.push({
-      label: "Network Inspector online",
-      meta: "Live stream ready",
     });
     rows.push({
       label: "Security policies active",
@@ -850,12 +1113,20 @@
     return rows;
   }
 
-  function buildOverviewServiceRows(databases, env) {
+  function buildOverviewServiceRows(databases, env, liveSignals) {
     const aliasCount = Array.isArray(databases) ? databases.length : 0;
+    const requestSummary = summarizeOverviewSeries((liveSignals && liveSignals.requestSeries) || []);
+    const sessionsSummary = summarizeOverviewSeries((liveSignals && liveSignals.sessionSeries) || []);
+    const clusterLabel = (liveSignals && liveSignals.clusterEnabled)
+      ? (liveSignals.clusterConnected ? "connected" : "degraded")
+      : "disabled";
     return [
       { label: "Admin API", meta: "99.9%" },
       { label: "Model Registry", meta: `${state.models.length} active` },
       { label: "Database Layer", meta: `${aliasCount} aliases` },
+      { label: "Network Inspector", meta: (liveSignals && liveSignals.requestsAvailable) ? `latest ${requestSummary.latest}/min` : "waiting data" },
+      { label: "Session Tracker", meta: (liveSignals && liveSignals.sessionsAvailable) ? `${sessionsSummary.latest} active` : "waiting data" },
+      { label: "Cluster Relay", meta: clusterLabel },
       { label: "Runtime Env", meta: String(env || "development") },
     ];
   }
@@ -881,48 +1152,85 @@
     const rows = buildDataStudioRows(state.dataStudioSearch, state.dataStudioEngine);
     const allRows = buildDataStudioRows("", "all");
     const engines = availableDataStudioEngines();
+    const aliases = new Set(
+      allRows
+        .map(function (row) {
+          return String(row.db || "").trim();
+        })
+        .filter(Boolean)
+    );
     const totalKnown = rows.reduce(function (acc, row) {
       return acc + (isKnownCount(row.count) ? Number(row.count || 0) : 0);
     }, 0);
     const hasDeferred = rows.some(function (row) {
       return !isKnownCount(row.count);
     });
+    const activeRows = rows.filter(function (row) {
+      return isKnownCount(row.count);
+    }).length;
+    const deferredRows = rows.length - activeRows;
 
     els.app.innerHTML =
       UI.sectionHead("Data Studio", "CRUD de modelos, filtros y exportación", `${rows.length} resultados`) +
       `
-        <section class="toolbar data-studio-toolbar">
-          <input id="data-studio-search" class="input" type="search" placeholder="Buscar modelo, tabla, engine o alias..." value="${escapeHtml(state.dataStudioSearch || "")}">
-          <select id="data-studio-engine" class="select">
-            ${renderDataStudioEngineOptions(engines, state.dataStudioEngine)}
-          </select>
-          <button class="btn btn-ghost" type="button" id="data-studio-clear">Clear</button>
-          <button class="btn btn-primary" type="button" id="data-studio-load-counts">Compute counts</button>
+        <section class="cards kpi-grid data-studio-kpi-grid">
+          <article class="card kpi-card card-static">
+            <p class="card-label">Modelos visibles</p>
+            <p class="kpi-value">${rows.length.toLocaleString()}</p>
+            <span class="status-chip">${allRows.length.toLocaleString()} indexados</span>
+          </article>
+          <article class="card kpi-card card-static">
+            <p class="card-label">Engines activos</p>
+            <p class="kpi-value">${engines.length.toLocaleString()}</p>
+            <span class="status-chip">${aliases.size.toLocaleString()} aliases</span>
+          </article>
+          <article class="card kpi-card card-static">
+            <p class="card-label">Estado modelos</p>
+            <p class="kpi-value">${activeRows.toLocaleString()}</p>
+            <span class="status-chip">${deferredRows.toLocaleString()} diferidos</span>
+          </article>
+          <article class="card kpi-card card-static">
+            <p class="card-label">Registros visibles</p>
+            <p class="kpi-value">${formatDataStudioTotal(totalKnown, hasDeferred)}</p>
+            <span class="status-chip">${hasDeferred ? "Light mode" : "Counts completos"}</span>
+          </article>
         </section>
 
-        <div class="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Model</th>
-                <th>Engine</th>
-                <th>Database alias</th>
-                <th>Table</th>
-                <th>Records</th>
-                <th>Status</th>
-                <th>Actions</th>
-              </tr>
-            </thead>
-            <tbody id="data-studio-body">
-              ${renderDataStudioRows(rows)}
-            </tbody>
-          </table>
-        </div>
+        <section class="section-block data-studio-shell">
+          <section class="toolbar data-studio-toolbar">
+            <input id="data-studio-search" class="input" type="search" placeholder="Buscar modelo, tabla, engine o alias..." value="${escapeHtml(state.dataStudioSearch || "")}">
+            <select id="data-studio-engine" class="select">
+              ${renderDataStudioEngineOptions(engines, state.dataStudioEngine)}
+            </select>
+            <button class="btn btn-ghost" type="button" id="data-studio-clear">Clear</button>
+            <button class="btn btn-primary" type="button" id="data-studio-load-counts">Compute counts</button>
+          </section>
 
-        <section class="toolbar data-studio-footer">
-          <span class="status-chip">${rows.length} / ${allRows.length} modelos visibles</span>
-          <span class="status-chip">Total registros: ${formatDataStudioTotal(totalKnown, hasDeferred)}</span>
-          ${hasDeferred ? '<span class="status-chip status-chip-muted">Light mode: algunos recuentos están diferidos</span>' : ""}
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Model</th>
+                  <th>Engine</th>
+                  <th>Database alias</th>
+                  <th>Table</th>
+                  <th>Records</th>
+                  <th>Status</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="data-studio-body">
+                ${renderDataStudioRows(rows)}
+              </tbody>
+            </table>
+          </div>
+
+          <section class="toolbar data-studio-footer">
+            <span class="status-chip">${rows.length} / ${allRows.length} modelos visibles</span>
+            <span class="status-chip">Total registros: ${formatDataStudioTotal(totalKnown, hasDeferred)}</span>
+            <span class="status-chip">Engines: ${engines.length} | Aliases: ${aliases.size}</span>
+            ${hasDeferred ? '<span class="status-chip status-chip-muted">Light mode: algunos recuentos están diferidos</span>' : ""}
+          </section>
         </section>
       `;
 
@@ -1234,7 +1542,9 @@
     els.app.innerHTML = loadingMarkup();
 
     try {
-      const payload = await API.sessions(400);
+      const requestedLimit = Number(state.sessionsLimit || 200);
+      const normalizedLimit = Number.isFinite(requestedLimit) && requestedLimit > 0 ? requestedLimit : 200;
+      const payload = await API.sessions(normalizedLimit);
       if (!payload || payload.enabled === false) {
         const reason = (payload && payload.reason) || "Session telemetry is not available.";
         els.app.innerHTML =
@@ -1261,14 +1571,42 @@
       };
       const sourcePod = normalizeSessionPod(sourceRuntime);
       const sourceHost = normalizeSessionHost(sourceRuntime);
+      const currentActive = Number(payload.current_active || 0);
+      const active5m = Number(payload.active_last_5m || 0);
+      const active1h = Number(payload.active_last_hour || 0);
+      const includedRows = Number(payload.included_rows || sessionRows.length || 0);
+      const selectedLimit = Number(state.sessionsLimit || normalizedLimit || 200);
 
       els.app.innerHTML =
-        UI.sectionHead("Infra Manager", `${Number(payload.current_active || 0)} active sessions`, "Live telemetry") +
+        UI.sectionHead("Infra Manager", `${currentActive} active sessions`, "Live telemetry") +
         `
+          <section class="cards kpi-grid sessions-kpi-grid">
+            <article class="card kpi-card card-static">
+              <p class="card-label">Active now</p>
+              <p class="kpi-value">${currentActive.toLocaleString()}</p>
+              <span class="status-chip">store: ${escapeHtml(payload.store || "memory")}</span>
+            </article>
+            <article class="card kpi-card card-static">
+              <p class="card-label">Last 5 minutes</p>
+              <p class="kpi-value">${active5m.toLocaleString()}</p>
+              <span class="status-chip">session churn</span>
+            </article>
+            <article class="card kpi-card card-static">
+              <p class="card-label">Last hour</p>
+              <p class="kpi-value">${active1h.toLocaleString()}</p>
+              <span class="status-chip">stability signal</span>
+            </article>
+            <article class="card kpi-card card-static">
+              <p class="card-label">Rows loaded</p>
+              <p class="kpi-value">${includedRows.toLocaleString()}</p>
+              <span class="status-chip">limit ${selectedLimit}</span>
+            </article>
+          </section>
+
           <section class="detail-grid">
-            ${UI.kv("Current active", String(Number(payload.current_active || 0)))}
-            ${UI.kv("Active (last 5m)", String(Number(payload.active_last_5m || 0)))}
-            ${UI.kv("Active (last hour)", String(Number(payload.active_last_hour || 0)))}
+            ${UI.kv("Current active", String(currentActive))}
+            ${UI.kv("Active (last 5m)", String(active5m))}
+            ${UI.kv("Active (last hour)", String(active1h))}
             ${UI.kv("Store", payload.store || "memory")}
             ${UI.kv("Runtime", payload.source_runtime || "-")}
             ${UI.kv("Environment", payload.source_env || "-")}
@@ -1283,9 +1621,14 @@
             ${renderSessionChartCard("Today", "Active sessions by current day", today.points || [])}
           </section>
 
-          <section class="toolbar">
+          <section class="toolbar toolbar-panel sessions-controls-row">
+            <label for="sessions-limit-select">Show latest</label>
+            <select id="sessions-limit-select" class="select">
+              ${renderLiveLimitOptions(selectedLimit, "sessions")}
+            </select>
+            <button class="btn btn-ghost btn-sm" id="sessions-limit-apply" type="button">Apply</button>
             <div class="status-chip">Generated: ${escapeHtml(formatTemporal(payload.generated_at))}</div>
-            ${payload.truncated_by_limit ? `<div class="status-chip">Showing first ${Number(payload.included_rows || sessionRows.length)} sessions</div>` : ""}
+            ${payload.truncated_by_limit ? `<div class="status-chip">Showing first ${includedRows} sessions</div>` : ""}
             <button class="btn btn-ghost" id="sessions-refresh" type="button">Refresh now</button>
           </section>
 
@@ -1316,6 +1659,26 @@
           renderSessionsOverview();
         });
       }
+      const limitSelect = document.getElementById("sessions-limit-select");
+      const limitApply = document.getElementById("sessions-limit-apply");
+      const applyLimit = function () {
+        if (!limitSelect) {
+          return;
+        }
+        const value = Number(limitSelect.value || state.sessionsLimit || 200);
+        if (!Number.isFinite(value) || value <= 0) {
+          toast("Invalid sessions limit value", "warning");
+          return;
+        }
+        state.sessionsLimit = value;
+        renderSessionsOverview();
+      };
+      if (limitSelect) {
+        limitSelect.addEventListener("change", applyLimit);
+      }
+      if (limitApply) {
+        limitApply.addEventListener("click", applyLimit);
+      }
     } catch (err) {
       els.app.innerHTML = renderRecoverableError("Could not load sessions", errorText(err), "retry-sessions");
       const retryBtn = document.getElementById("retry-sessions");
@@ -1345,6 +1708,7 @@
       const requests = Array.isArray(payload.requests) ? payload.requests : [];
       const queries = Array.isArray(payload.queries) ? payload.queries : [];
       const sessions = Array.isArray(payload.sessions) ? payload.sessions : [];
+      const nodes = Array.isArray(payload.nodes) ? payload.nodes : [];
       const cluster = payload.cluster || {};
       const excludePatterns = Array.isArray(payload.exclude_patterns) ? payload.exclude_patterns : [];
       const buffer = payload.request_buffer || {};
@@ -1353,6 +1717,7 @@
       state.liveLimitSQL = Number(payload.sql_limit || state.liveLimitSQL || 80);
       state.liveLimitSessions = Number(payload.session_limit || state.liveLimitSessions || 80);
       state.liveNodeFilter = String(payload.node_filter || state.liveNodeFilter || "").trim();
+      state.traceURLTemplate = String(payload.trace_url_template || state.traceURLTemplate || "").trim();
       const liveNodes = collectLiveNodeOptions(payload, liveStreamEvents);
       const clusterEnabled = !!cluster.enabled;
       const clusterConnected = !!cluster.connected;
@@ -1367,18 +1732,46 @@
           : "badge-warning"
         : "badge-neutral";
       const nodeFilterLabel = state.liveNodeFilter ? state.liveNodeFilter : "All nodes";
+      const bufferedRequests = Number(buffer.stored || requests.length || 0);
+      const bufferedSQL = Number(sqlBuffer.stored || queries.length || 0);
+      const trackedSessions = Number(stream.tracked_sessions || sessions.length || 0);
+      const droppedEvents = Number(stream.dropped || 0);
 
       els.app.innerHTML =
         UI.sectionHead("Network Inspector", "HTTP and SQL stream in real time", liveStreamConnected ? "Stream connected" : "Stream offline") +
         `
+          <section class="cards kpi-grid live-kpi-grid">
+            <article class="card kpi-card card-static">
+              <p class="card-label">HTTP buffered</p>
+              <p class="kpi-value">${bufferedRequests.toLocaleString()}</p>
+              <span class="status-chip">limit ${Number(buffer.capacity || requests.length || 0)}</span>
+            </article>
+            <article class="card kpi-card card-static">
+              <p class="card-label">SQL buffered</p>
+              <p class="kpi-value">${bufferedSQL.toLocaleString()}</p>
+              <span class="status-chip">limit ${Number(sqlBuffer.capacity || queries.length || 0)}</span>
+            </article>
+            <article class="card kpi-card card-static">
+              <p class="card-label">Tracked sessions</p>
+              <p class="kpi-value">${trackedSessions.toLocaleString()}</p>
+              <span class="status-chip">scope ${escapeHtml(nodeFilterLabel)}</span>
+            </article>
+            <article class="card kpi-card card-static">
+              <p class="card-label">Dropped events</p>
+              <p class="kpi-value">${droppedEvents.toLocaleString()}</p>
+              <span class="badge ${clusterStatusClass}">relay ${escapeHtml(clusterStatusLabel)}</span>
+            </article>
+          </section>
+
           <section class="detail-grid">
             ${UI.kv("Active stream subscribers", String(Number(stream.subscribers || 0)))}
             ${UI.kv("Published events", String(Number(stream.published || 0)))}
-            ${UI.kv("Dropped events", String(Number(stream.dropped || 0)))}
-            ${UI.kv("Buffered requests", `${Number(buffer.stored || requests.length)}/${Number(buffer.capacity || requests.length)}`)}
-            ${UI.kv("Showing requests", `${Number(requests.length || 0)} / ${Number(buffer.stored || requests.length || 0)}`)}
-            ${UI.kv("Buffered SQL queries", `${Number(sqlBuffer.stored || queries.length)}/${Number(sqlBuffer.capacity || queries.length)}`)}
-            ${UI.kv("Tracked sessions", String(sessions.length))}
+            ${UI.kv("Dropped events", String(droppedEvents))}
+            ${UI.kv("Buffered requests", `${bufferedRequests}/${Number(buffer.capacity || requests.length)}`)}
+            ${UI.kv("Showing requests", `${Number(requests.length || 0)} / ${bufferedRequests}`)}
+            ${UI.kv("Buffered SQL queries", `${bufferedSQL}/${Number(sqlBuffer.capacity || queries.length)}`)}
+            ${UI.kv("Tracked sessions", String(trackedSessions))}
+            ${UI.kv("Nodes seen", String(nodes.length))}
             ${UI.kv("Cluster relay", clusterStatusLabel)}
             ${UI.kv("Cluster node", cluster.node_id || "-")}
             ${UI.kv("Cluster channel", cluster.channel || "-")}
@@ -1394,6 +1787,31 @@
             <button class="btn btn-ghost btn-sm" id="live-node-apply" type="button">Apply</button>
             <span class="status-chip">Current scope: <strong>${escapeHtml(nodeFilterLabel)}</strong></span>
             <span class="badge ${clusterStatusClass}">Relay ${escapeHtml(clusterStatusLabel)}</span>
+          </section>
+
+          <section class="section-block">
+            <div class="section-block-head">
+              <h3>Cluster topology</h3>
+              <p>Nodes discovered from live traffic and session activity</p>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Node</th>
+                    <th>Status</th>
+                    <th>Last seen</th>
+                    <th>Last event</th>
+                    <th>HTTP events</th>
+                    <th>SQL events</th>
+                    <th>Tracked sessions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${renderLiveNodeRows(nodes, state.liveNodeFilter)}
+                </tbody>
+              </table>
+            </div>
           </section>
 
           <section class="section-block">
@@ -1631,18 +2049,46 @@
       const jobWorkers = Array.isArray(jobs.workers) ? jobs.workers : [];
       const flags = Array.isArray(payload.flags) ? payload.flags : [];
       const envRows = Array.isArray(payload.environment) ? payload.environment : [];
+      const goroutineCount = Number(goroutines.count || 0);
+      const workerCount = Number(jobs.total_workers || 0);
+      const queueCount = Number(jobs.total_queues || 0);
+      const heapUsage = formatBytes(memory.heap_alloc_bytes);
+      const gcCycles = Number(memory.num_gc || 0);
 
       els.app.innerHTML =
-        UI.sectionHead("System pulse", "Go runtime + DB pool + jobs + feature flags", "Snapshot") +
+        UI.sectionHead("System Pulse", "Go runtime + DB pool + jobs + feature flags", "Snapshot") +
         `
+          <section class="cards kpi-grid system-kpi-grid">
+            <article class="card kpi-card card-static">
+              <p class="card-label">Goroutines</p>
+              <p class="kpi-value">${goroutineCount.toLocaleString()}</p>
+              <span class="status-chip">runtime snapshot</span>
+            </article>
+            <article class="card kpi-card card-static">
+              <p class="card-label">Heap alloc</p>
+              <p class="kpi-value">${escapeHtml(heapUsage)}</p>
+              <span class="status-chip">GC cycles ${gcCycles.toLocaleString()}</span>
+            </article>
+            <article class="card kpi-card card-static">
+              <p class="card-label">Queue workers</p>
+              <p class="kpi-value">${workerCount.toLocaleString()}</p>
+              <span class="status-chip">${queueCount.toLocaleString()} queues</span>
+            </article>
+            <article class="card kpi-card card-static">
+              <p class="card-label">Feature flags</p>
+              <p class="kpi-value">${flags.length.toLocaleString()}</p>
+              <span class="status-chip">${envRows.length.toLocaleString()} env vars</span>
+            </article>
+          </section>
+
           <section class="detail-grid">
             ${UI.kv("Go version", payload.go_version || "-")}
             ${UI.kv("Runtime", `${payload.go_os || "-"} / ${payload.go_arch || "-"}`)}
-            ${UI.kv("Goroutines", String(Number(goroutines.count || 0)))}
+            ${UI.kv("Goroutines", String(goroutineCount))}
             ${UI.kv("GOMAXPROCS", String(Number(payload.gomaxprocs || 0)))}
             ${UI.kv("CPU cores", String(Number(payload.cpus || 0)))}
-            ${UI.kv("Queues discovered", String(Number(jobs.total_queues || 0)))}
-            ${UI.kv("Active workers", String(Number(jobs.total_workers || 0)))}
+            ${UI.kv("Queues discovered", String(queueCount))}
+            ${UI.kv("Active workers", String(workerCount))}
             ${UI.kv("Generated", formatTemporal(payload.generated_at))}
           </section>
 
@@ -2254,6 +2700,7 @@
       const requests = Array.isArray(payload.requests) ? payload.requests : [];
       const queries = Array.isArray(payload.queries) ? payload.queries : [];
       const sessions = Array.isArray(payload.sessions) ? payload.sessions : [];
+      const nodes = Array.isArray(payload.nodes) ? payload.nodes : [];
       requests.forEach(function (row) {
         add(row && row.node_id);
       });
@@ -2261,6 +2708,9 @@
         add(row && row.node_id);
       });
       sessions.forEach(function (row) {
+        add(row && row.node_id);
+      });
+      nodes.forEach(function (row) {
         add(row && row.node_id);
       });
       add(payload.node_filter);
@@ -2368,6 +2818,37 @@
     });
   }
 
+  function renderLiveNodeRows(rows, nodeFilter) {
+    if (!Array.isArray(rows) || rows.length === 0) {
+      return `<tr><td class="table-empty" colspan="7">No nodes discovered yet</td></tr>`;
+    }
+    const targetNode = String(nodeFilter || "").trim().toLowerCase();
+    const filtered = targetNode
+      ? rows.filter(function (row) {
+          return String((row && row.node_id) || "").trim().toLowerCase() === targetNode;
+        })
+      : rows;
+    if (filtered.length === 0) {
+      return `<tr><td class="table-empty" colspan="7">No nodes match current scope</td></tr>`;
+    }
+    return filtered
+      .map(function (row) {
+        const status = String((row && row.status) || "idle").trim().toLowerCase() || "idle";
+        return `
+          <tr>
+            <td>${escapeHtml(liveNodeLabel((row && row.node_id) || ""))}</td>
+            <td><span class="badge ${liveNodeStatusBadgeClass(status)}">${escapeHtml(status)}</span></td>
+            <td>${escapeHtml(formatTemporal((row && row.last_seen_at) || ""))}</td>
+            <td>${escapeHtml((row && row.last_event_type) || "-")}</td>
+            <td>${escapeHtml(String((row && row.requests) || 0))}</td>
+            <td>${escapeHtml(String((row && row.sql_queries) || 0))}</td>
+            <td>${escapeHtml(String((row && row.sessions) || 0))}</td>
+          </tr>
+        `;
+      })
+      .join("");
+  }
+
   function renderLiveRequestRows(rows) {
     if (!Array.isArray(rows) || rows.length === 0) {
       return `<tr><td class="table-empty" colspan="8">No recent requests</td></tr>`;
@@ -2386,7 +2867,7 @@
             <td><span class="badge ${statusBadgeClass(statusCode)}">${escapeHtml(String(row.status || "-"))}</span></td>
             <td><span class="metric-pill ${durationBadgeClass(duration)}">${escapeHtml(String(duration))}</span></td>
             <td>${escapeHtml(row.remote_ip || "-")}</td>
-            <td>${escapeHtml(shortenTrace(row.trace_id || ""))}</td>
+            <td>${renderTraceCell(row.trace_id || "")}</td>
           </tr>
         `;
       })
@@ -2407,7 +2888,7 @@
             <td>${escapeHtml(row.last_route || "-")}</td>
             <td>${escapeHtml(formatTemporal(row.last_seen_at || ""))}</td>
             <td>${escapeHtml(row.ip || "-")}</td>
-            <td>${escapeHtml(shortenTrace(row.trace_id || ""))}</td>
+            <td>${renderTraceCell(row.trace_id || "")}</td>
           </tr>
         `;
       })
@@ -2430,7 +2911,7 @@
             <td><span class="badge ${operationBadgeClass(row.operation || "-")}">${escapeHtml(row.operation || "-")}</span></td>
             <td><span class="metric-pill ${durationBadgeClass(duration)}">${escapeHtml(String(duration))}</span></td>
             <td>${escapeHtml(args)}</td>
-            <td>${escapeHtml(shortenTrace(row.trace_id || ""))}</td>
+            <td>${renderTraceCell(row.trace_id || "")}</td>
             <td title="${escapeHtml(row.query || "")}">
               ${escapeHtml(shortenSQL(row.query || ""))}
               ${row.error ? `<div class="status-chip">error: ${escapeHtml(row.error)}</div>` : ""}
@@ -2447,6 +2928,65 @@
       return text || "-";
     }
     return text.slice(0, 12) + "...";
+  }
+
+  function renderTraceCell(traceID) {
+    const trace = String(traceID || "").trim();
+    if (!trace) {
+      return "-";
+    }
+    const url = buildTraceURL(trace);
+    const label = escapeHtml(shortenTrace(trace));
+    if (!url) {
+      return label;
+    }
+    return `<a class="trace-link" href="${escapeHtml(url)}" target="_blank" rel="noopener">${label}</a>`;
+  }
+
+  function buildTraceURL(traceID) {
+    const trace = String(traceID || "").trim();
+    if (!trace) {
+      return "";
+    }
+    const template = String(state.traceURLTemplate || "").trim();
+    if (!template) {
+      return "";
+    }
+    const encodedTrace = encodeURIComponent(trace);
+
+    let rawURL = template;
+    if (template.includes("{trace_id}")) {
+      rawURL = template.split("{trace_id}").join(encodedTrace);
+    } else if (template.includes("{{trace_id}}")) {
+      rawURL = template.split("{{trace_id}}").join(encodedTrace);
+    } else if (template.includes("%s")) {
+      rawURL = template.replace("%s", encodedTrace);
+    } else {
+      rawURL = template + (template.includes("?") ? "&" : "?") + "trace_id=" + encodedTrace;
+    }
+
+    try {
+      const resolved = new URL(rawURL, window.location.origin);
+      if (resolved.protocol !== "http:" && resolved.protocol !== "https:") {
+        return "";
+      }
+      return resolved.toString();
+    } catch (_) {
+      return "";
+    }
+  }
+
+  function liveNodeStatusBadgeClass(status) {
+    switch (String(status || "").toLowerCase()) {
+      case "online":
+        return "badge-success";
+      case "degraded":
+        return "badge-warning";
+      case "stale":
+        return "badge-danger";
+      default:
+        return "badge-neutral";
+    }
   }
 
   function methodBadgeClass(method) {
@@ -3620,6 +4160,52 @@
       return window.localStorage.getItem(SIDEBAR_PREF_KEY) === "1";
     } catch (_) {
       return false;
+    }
+  }
+
+  function hydrateThemePreference() {
+    const stored = readThemePreference();
+    if (stored === "light" || stored === "dark") {
+      applyTheme(stored, false);
+      return;
+    }
+    applyTheme("dark", false);
+  }
+
+  function readThemePreference() {
+    try {
+      return String(window.localStorage.getItem(THEME_PREF_KEY) || "").trim().toLowerCase();
+    } catch (_) {
+      return "";
+    }
+  }
+
+  function applyTheme(theme, persist) {
+    const normalized = String(theme || "").toLowerCase() === "light" ? "light" : "dark";
+    state.theme = normalized;
+    if (document.body) {
+      document.body.setAttribute("data-theme", normalized);
+    }
+    if (document.documentElement) {
+      document.documentElement.style.colorScheme = normalized;
+    }
+
+    if (els.themeToggle) {
+      const dark = normalized === "dark";
+      els.themeToggle.classList.toggle("is-dark", dark);
+      els.themeToggle.classList.toggle("is-light", !dark);
+      els.themeToggle.setAttribute("aria-pressed", dark ? "true" : "false");
+      els.themeToggle.setAttribute("title", dark ? "Switch to light mode" : "Switch to dark mode");
+    }
+    if (els.themeToggleLabel) {
+      els.themeToggleLabel.textContent = normalized === "dark" ? "Dark" : "Light";
+    }
+
+    if (persist) {
+      try {
+        window.localStorage.setItem(THEME_PREF_KEY, normalized);
+      } catch (_) {}
+      toast(`Theme switched to ${normalized}`, "success");
     }
   }
 

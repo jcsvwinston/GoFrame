@@ -64,6 +64,7 @@ type Config struct {
 	AdminClusterChannel      string   `koanf:"admin_cluster_channel"`
 	AdminClusterNodeID       string   `koanf:"admin_cluster_node_id"`
 	AdminClusterToken        string   `koanf:"admin_cluster_token"`
+	AdminTraceURLTemplate    string   `koanf:"admin_trace_url_template"`
 
 	// Mail
 	MailDriver       string `koanf:"mail_driver"`
@@ -559,6 +560,7 @@ func normalizeAdminConfig(cfg *Config) {
 	}
 	cfg.AdminClusterNodeID = strings.TrimSpace(cfg.AdminClusterNodeID)
 	cfg.AdminClusterToken = strings.TrimSpace(cfg.AdminClusterToken)
+	cfg.AdminTraceURLTemplate = strings.TrimSpace(cfg.AdminTraceURLTemplate)
 }
 
 func validateMultiTenantIsolation(cfg *Config) error {

@@ -58,6 +58,7 @@ type PanelConfig struct {
 	LiveClusterChannel  string   // optional pub/sub channel (default goframe:admin:live:v1)
 	LiveClusterNodeID   string   // optional explicit node id (defaults to runtime identity)
 	LiveClusterToken    string   // optional shared token to reject untrusted relay messages
+	TraceURLTemplate    string   // optional trace explorer URL template (supports {trace_id})
 	Databases           []DatabaseRuntimeInfo
 	DatabaseHandles     map[string]*db.DB // optional alias->db handle mapping for runtime stats
 	EnvironmentSnapshot []string          // optional env snapshot (defaults to os.Environ at startup)

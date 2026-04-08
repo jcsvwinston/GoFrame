@@ -144,6 +144,7 @@ func New(cfg *Config) (*App, error) {
 		LiveClusterChannel:  effective.AdminClusterChannel,
 		LiveClusterNodeID:   effective.AdminClusterNodeID,
 		LiveClusterToken:    effective.AdminClusterToken,
+		TraceURLTemplate:    effective.AdminTraceURLTemplate,
 		Databases:           buildAdminDatabaseRuntimeInfo(effective, dbs, defaultAlias),
 		DatabaseHandles:     dbs,
 		Auth:                admin.NewDatabaseAdminAuth(sqlDB, sessionManager, effective.AdminPrefix),

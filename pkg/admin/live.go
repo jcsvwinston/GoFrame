@@ -30,6 +30,8 @@ const (
 	defaultLiveListLimit         = 50
 	maxLiveListLimit             = 1000
 	maxLiveSQLArgs               = 16
+	liveNodeOnlineWindow         = 45 * time.Second
+	liveNodeDegradedWindow       = 3 * time.Minute
 )
 
 type liveTrafficObservedKey struct{}
@@ -42,21 +44,33 @@ type liveRuntime struct {
 }
 
 type liveSnapshotResponse struct {
-	Enabled         bool                   `json:"enabled"`
-	GeneratedAt     string                 `json:"generated_at"`
-	Limit           int                    `json:"limit"`
-	NodeFilter      string                 `json:"node_filter,omitempty"`
-	RequestLimit    int                    `json:"request_limit"`
-	SQLLimit        int                    `json:"sql_limit"`
-	SessionLimit    int                    `json:"session_limit"`
-	ExcludePatterns []string               `json:"exclude_patterns"`
-	Requests        []liveRequestEvent     `json:"requests"`
-	Queries         []liveSQLEvent         `json:"queries"`
-	Sessions        []liveSessionActivity  `json:"sessions"`
-	Stream          liveStreamStats        `json:"stream"`
-	RequestBuffer   liveRequestBufferStats `json:"request_buffer"`
-	SQLBuffer       liveRequestBufferStats `json:"sql_buffer"`
-	Cluster         liveClusterSnapshot    `json:"cluster"`
+	Enabled          bool                   `json:"enabled"`
+	GeneratedAt      string                 `json:"generated_at"`
+	Limit            int                    `json:"limit"`
+	NodeFilter       string                 `json:"node_filter,omitempty"`
+	TraceURLTemplate string                 `json:"trace_url_template,omitempty"`
+	RequestLimit     int                    `json:"request_limit"`
+	SQLLimit         int                    `json:"sql_limit"`
+	SessionLimit     int                    `json:"session_limit"`
+	ExcludePatterns  []string               `json:"exclude_patterns"`
+	Nodes            []liveNodeSnapshot     `json:"nodes"`
+	Requests         []liveRequestEvent     `json:"requests"`
+	Queries          []liveSQLEvent         `json:"queries"`
+	Sessions         []liveSessionActivity  `json:"sessions"`
+	Stream           liveStreamStats        `json:"stream"`
+	RequestBuffer    liveRequestBufferStats `json:"request_buffer"`
+	SQLBuffer        liveRequestBufferStats `json:"sql_buffer"`
+	Cluster          liveClusterSnapshot    `json:"cluster"`
+}
+
+type liveNodeSnapshot struct {
+	NodeID        string `json:"node_id"`
+	LastSeenAt    string `json:"last_seen_at,omitempty"`
+	LastEventType string `json:"last_event_type,omitempty"`
+	Requests      int    `json:"requests"`
+	SQLQueries    int    `json:"sql_queries"`
+	Sessions      int    `json:"sessions"`
+	Status        string `json:"status"`
 }
 
 type liveRequestBufferStats struct {
@@ -893,18 +907,20 @@ func (p *Panel) handleLiveSnapshot(w http.ResponseWriter, r *http.Request) {
 	sessionLimit := parseLiveListLimitByKey(r, "sessions_limit", limit)
 
 	resp := liveSnapshotResponse{
-		Enabled:         p != nil && p.live != nil,
-		GeneratedAt:     now.Format(time.RFC3339),
-		Limit:           limit,
-		NodeFilter:      nodeFilter,
-		RequestLimit:    requestLimit,
-		SQLLimit:        sqlLimit,
-		SessionLimit:    sessionLimit,
-		ExcludePatterns: []string{},
-		Requests:        []liveRequestEvent{},
-		Queries:         []liveSQLEvent{},
-		Sessions:        []liveSessionActivity{},
-		Cluster:         p.liveClusterSnapshot(),
+		Enabled:          p != nil && p.live != nil,
+		GeneratedAt:      now.Format(time.RFC3339),
+		Limit:            limit,
+		NodeFilter:       nodeFilter,
+		TraceURLTemplate: strings.TrimSpace(p.config.TraceURLTemplate),
+		RequestLimit:     requestLimit,
+		SQLLimit:         sqlLimit,
+		SessionLimit:     sessionLimit,
+		ExcludePatterns:  []string{},
+		Nodes:            []liveNodeSnapshot{},
+		Requests:         []liveRequestEvent{},
+		Queries:          []liveSQLEvent{},
+		Sessions:         []liveSessionActivity{},
+		Cluster:          p.liveClusterSnapshot(),
 	}
 	if p == nil || p.live == nil {
 		writeJSON(w, http.StatusOK, resp)
@@ -912,12 +928,18 @@ func (p *Panel) handleLiveSnapshot(w http.ResponseWriter, r *http.Request) {
 	}
 
 	resp.ExcludePatterns = p.liveExcludePatterns()
+	requestStats := p.live.requests.stats()
+	sqlStats := p.live.sql.stats()
+	allRequests := p.live.requests.latestFilteredByNode(requestStats.Stored, resp.ExcludePatterns, "")
+	allQueries := p.live.sql.latest(sqlStats.Stored)
+	allSessions := p.live.sessions.snapshot(maxLiveListLimit)
+	resp.Nodes = buildLiveNodeSnapshots(now, p.liveNodeID(), allRequests, allQueries, allSessions)
 	resp.Requests = p.live.requests.latestFilteredByNode(requestLimit, resp.ExcludePatterns, nodeFilter)
 	resp.Queries = filterLiveSQLByNode(p.live.sql.latest(sqlLimit), nodeFilter, sqlLimit)
 	resp.Sessions = filterLiveSessionsByNode(p.live.sessions.snapshot(sessionLimit), nodeFilter, sessionLimit)
 	resp.Stream = p.live.bus.stats()
-	resp.RequestBuffer = p.live.requests.stats()
-	resp.SQLBuffer = p.live.sql.stats()
+	resp.RequestBuffer = requestStats
+	resp.SQLBuffer = sqlStats
 	writeJSON(w, http.StatusOK, resp)
 }
 
@@ -961,6 +983,98 @@ func filterLiveSessionsByNode(rows []liveSessionActivity, nodeID string, limit i
 		}
 	}
 	return out
+}
+
+func buildLiveNodeSnapshots(now time.Time, selfNodeID string, requests []liveRequestEvent, queries []liveSQLEvent, sessions []liveSessionActivity) []liveNodeSnapshot {
+	type nodeAccumulator struct {
+		id         string
+		lastSeen   time.Time
+		lastEvent  string
+		requests   int
+		sqlQueries int
+		sessions   int
+	}
+
+	nodes := map[string]*nodeAccumulator{}
+	ensure := func(raw string) *nodeAccumulator {
+		id := strings.TrimSpace(raw)
+		if id == "" {
+			id = "local"
+		}
+		if existing, ok := nodes[id]; ok {
+			return existing
+		}
+		entry := &nodeAccumulator{id: id}
+		nodes[id] = entry
+		return entry
+	}
+	mark := func(entry *nodeAccumulator, ts time.Time, eventType string) {
+		if entry == nil {
+			return
+		}
+		if ts.IsZero() {
+			return
+		}
+		if entry.lastSeen.IsZero() || ts.After(entry.lastSeen) {
+			entry.lastSeen = ts
+			entry.lastEvent = eventType
+		}
+	}
+
+	for _, row := range requests {
+		entry := ensure(row.NodeID)
+		entry.requests++
+		mark(entry, parseRFC3339(row.Timestamp), "http.request")
+	}
+	for _, row := range queries {
+		entry := ensure(row.NodeID)
+		entry.sqlQueries++
+		mark(entry, parseRFC3339(row.Timestamp), "db.query")
+	}
+	for _, row := range sessions {
+		entry := ensure(row.NodeID)
+		entry.sessions++
+		mark(entry, parseRFC3339(row.LastSeenAt), "session.activity")
+	}
+	ensure(selfNodeID)
+
+	out := make([]liveNodeSnapshot, 0, len(nodes))
+	for _, node := range nodes {
+		snapshot := liveNodeSnapshot{
+			NodeID:        node.id,
+			LastSeenAt:    formatIfSet(node.lastSeen),
+			LastEventType: node.lastEvent,
+			Requests:      node.requests,
+			SQLQueries:    node.sqlQueries,
+			Sessions:      node.sessions,
+			Status:        liveNodeStatus(now, node.lastSeen),
+		}
+		out = append(out, snapshot)
+	}
+
+	sort.SliceStable(out, func(i, j int) bool {
+		ti := parseRFC3339(out[i].LastSeenAt)
+		tj := parseRFC3339(out[j].LastSeenAt)
+		if !ti.Equal(tj) {
+			return ti.After(tj)
+		}
+		return strings.Compare(out[i].NodeID, out[j].NodeID) < 0
+	})
+	return out
+}
+
+func liveNodeStatus(now, lastSeen time.Time) string {
+	if lastSeen.IsZero() {
+		return "idle"
+	}
+	age := now.Sub(lastSeen)
+	if age <= liveNodeOnlineWindow {
+		return "online"
+	}
+	if age <= liveNodeDegradedWindow {
+		return "degraded"
+	}
+	return "stale"
 }
 
 func (p *Panel) handleListLiveExcludePatterns(w http.ResponseWriter, r *http.Request) {

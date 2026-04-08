@@ -95,6 +95,7 @@ Example mapping:
 | `admin_cluster_channel` | `goframe:admin:live:v1` | `stable` | Pub/Sub channel used by the admin live cluster relay. |
 | `admin_cluster_node_id` | `""` | `stable` | Optional explicit runtime node id used in cluster telemetry events. |
 | `admin_cluster_token` | `""` | `stable` | Optional shared token to reject untrusted cluster relay events. |
+| `admin_trace_url_template` | `""` | `stable` | Optional external trace URL template (`{trace_id}` placeholder) used by admin trace links. |
 
 ## Mail
 

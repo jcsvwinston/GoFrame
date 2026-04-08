@@ -56,15 +56,16 @@ func (p *Panel) handleListModels(w http.ResponseWriter, r *http.Request) {
 		Databases []runtimeDatabaseInfo `json:"databases"`
 	}
 	type runtimeInfo struct {
-		Environment     string                `json:"environment"`
-		Databases       []runtimeDatabaseInfo `json:"databases"`
-		Engines         []string              `json:"engines"`
-		EngineGroups    []runtimeEngineInfo   `json:"engine_groups"`
-		ModelsTotal     int                   `json:"models_total"`
-		RecordsTotal    int64                 `json:"records_total"`
-		CountsMode      string                `json:"counts_mode"`
-		CountsAvailable bool                  `json:"counts_available"`
-		SessionsCount   int                   `json:"sessions_active"`
+		Environment      string                `json:"environment"`
+		Databases        []runtimeDatabaseInfo `json:"databases"`
+		Engines          []string              `json:"engines"`
+		EngineGroups     []runtimeEngineInfo   `json:"engine_groups"`
+		TraceURLTemplate string                `json:"trace_url_template,omitempty"`
+		ModelsTotal      int                   `json:"models_total"`
+		RecordsTotal     int64                 `json:"records_total"`
+		CountsMode       string                `json:"counts_mode"`
+		CountsAvailable  bool                  `json:"counts_available"`
+		SessionsCount    int                   `json:"sessions_active"`
 	}
 
 	models := p.registry.All()
@@ -259,15 +260,16 @@ func (p *Panel) handleListModels(w http.ResponseWriter, r *http.Request) {
 		"models": result,
 		"title":  p.config.Title,
 		"runtime": runtimeInfo{
-			Environment:     strings.TrimSpace(p.config.Environment),
-			Databases:       dbRuntime,
-			Engines:         engines,
-			EngineGroups:    engineRuntime,
-			ModelsTotal:     len(result),
-			RecordsTotal:    recordsTotal,
-			CountsMode:      countsMode,
-			CountsAvailable: includeCounts,
-			SessionsCount:   sessionsCount,
+			Environment:      strings.TrimSpace(p.config.Environment),
+			Databases:        dbRuntime,
+			Engines:          engines,
+			EngineGroups:     engineRuntime,
+			TraceURLTemplate: strings.TrimSpace(p.config.TraceURLTemplate),
+			ModelsTotal:      len(result),
+			RecordsTotal:     recordsTotal,
+			CountsMode:       countsMode,
+			CountsAvailable:  includeCounts,
+			SessionsCount:    sessionsCount,
 		},
 	})
 }

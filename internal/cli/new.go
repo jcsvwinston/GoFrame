@@ -146,6 +146,7 @@ rate_limit_by_route: false
 rate_limit_by_role: false
 admin_prefix: /admin
 admin_title: GoFrame Admin
+admin_trace_url_template: ""
 multisite:
   enabled: false
   default_site: default
