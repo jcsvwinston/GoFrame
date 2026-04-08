@@ -190,3 +190,12 @@ Proceed with “GoFrame surpasses Django in enterprise platform value” narrati
 2. Week 3 model contract is implemented and test-backed.
 3. Week 5 output/admin consistency meets automation and UX thresholds.
 4. Week 6 release artifacts pass without unresolved blockers.
+
+## Pending Backlog (Post Week 6)
+
+1. Admin Live Runtime Inspector vNext under `/admin`:
+- Live traffic/session introspection in memory (no large persistent telemetry store).
+- Runtime/system pulse views (goroutines, DB pool, memory, GC, workers).
+- Reflection-driven auto-admin expansion with strict RBAC and bulk governance.
+- WebSocket-driven live feeds with bounded ring buffers and non-blocking drop policy.
+- detailed spec: `docs/ADMIN_LIVE_RUNTIME_INSPECTOR_SPEC.md`.

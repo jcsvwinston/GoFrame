@@ -212,6 +212,12 @@ Baseline SLO interpretation:
 4. Expand SQL critical-command integration coverage for enterprise engines.
 5. Add deprecation template and migration assistant conventions.
 6. Add Oracle custom sequence-mapping support for `sqlsequencereset` (table->sequence strategy beyond common conventions).
+7. Design and stage Admin Live Runtime Inspector vNext under `/admin`:
+  - in-memory live traffic/session/runtime introspection,
+  - reflection-driven auto-admin expansion,
+  - secure-by-default masking/redaction model,
+  - non-blocking event pipeline and WebSocket streaming.
+  - specification source: `docs/ADMIN_LIVE_RUNTIME_INSPECTOR_SPEC.md`
 
 ## Progress Snapshot
 
@@ -227,5 +233,8 @@ Baseline SLO interpretation:
   - expanded exploratory CLI critical-command coverage for `mssql`/`oracle`
   - added assertions for `sqlflush`, `flush --dry-run`, `sqlsequencereset`, and DDL idempotency (`createcachetable`)
   - Oracle `sqlsequencereset` now emits concrete reset SQL for common sequence naming conventions
+- 2026-04-08: Immediate backlog item 7 added:
+  - Admin Live Runtime Inspector vNext specification drafted in `docs/ADMIN_LIVE_RUNTIME_INSPECTOR_SPEC.md`
+  - scoped for additive rollout and compatibility-safe execution
 
 This file is the canonical roadmap for enterprise and long-term strategy.
