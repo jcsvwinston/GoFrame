@@ -482,6 +482,9 @@ Notes:
 - without `--no-input`, it prompts interactively
 - validates username/email/password
 - creates or updates existing user by username/email
+- `/admin` authentication mode is automatic:
+  - bootstrap mode (no users): admin is accessible without login
+  - protected mode (>=1 user): admin requires credentials at `/admin/login`
 
 Change an existing admin password:
 

@@ -92,6 +92,13 @@ func New(cfg *Config) (*App, error) {
 		return nil, wrapOp("New db", fmt.Errorf("database alias %q not initialized", defaultAlias))
 	}
 
+	sqlDB, err := dbConn.SqlDB()
+	if err != nil {
+		_ = closeDatabases(dbs)
+		_ = telemetryShutdown(context.Background())
+		return nil, wrapOp("New db sql handle", err)
+	}
+
 	sessionManager, sessionStoreShutdown, err := buildSessionManager(effective, dbConn)
 	if err != nil {
 		_ = closeDatabases(dbs)
@@ -125,6 +132,7 @@ func New(cfg *Config) (*App, error) {
 	adminPanel := admin.NewPanel(dbConn, reg, logger, admin.PanelConfig{
 		Prefix:         effective.AdminPrefix,
 		Title:          effective.AdminTitle,
+		Auth:           admin.NewDatabaseAdminAuth(sqlDB, sessionManager, effective.AdminPrefix),
 		Session:        sessionManager,
 		SessionStore:   sessionStoreLabel,
 		SessionRuntime: sessionRuntimeIdentity,

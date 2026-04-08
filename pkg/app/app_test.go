@@ -2,13 +2,17 @@ package app
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/jcsvwinston/GoFrame/pkg/auth"
 )
 
 func testAppConfig() *Config {
@@ -300,6 +304,78 @@ func TestAppNew_SQLSessionStorePersistsAcrossRequests(t *testing.T) {
 	}
 }
 
+func TestAppNew_AdminBootstrapMode_AllowsAccessWithoutUsers(t *testing.T) {
+	a, err := New(testAppConfig())
+	if err != nil {
+		t.Fatalf("unexpected error creating app: %v", err)
+	}
+	defer a.Shutdown(context.Background())
+
+	req := httptest.NewRequest(http.MethodGet, "/admin/api/models", nil)
+	rec := httptest.NewRecorder()
+	a.Router.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected bootstrap admin access without users to return 200, got %d", rec.Code)
+	}
+}
+
+func TestAppNew_AdminRequiresLoginAfterCreateUser(t *testing.T) {
+	a, err := New(testAppConfig())
+	if err != nil {
+		t.Fatalf("unexpected error creating app: %v", err)
+	}
+	defer a.Shutdown(context.Background())
+
+	sqlDB, err := a.DB.SqlDB()
+	if err != nil {
+		t.Fatalf("sql db handle: %v", err)
+	}
+	if err := seedAdminUser(sqlDB, "admin", "admin@example.com", "supersecret123"); err != nil {
+		t.Fatalf("seed admin user failed: %v", err)
+	}
+
+	protectedReq := httptest.NewRequest(http.MethodGet, "/admin/api/models", nil)
+	protectedRec := httptest.NewRecorder()
+	a.Router.ServeHTTP(protectedRec, protectedReq)
+	if protectedRec.Code != http.StatusFound {
+		t.Fatalf("expected unauthenticated admin access to redirect, got %d", protectedRec.Code)
+	}
+	if loc := protectedRec.Header().Get("Location"); loc != "/admin/login" {
+		t.Fatalf("expected redirect to /admin/login, got %q", loc)
+	}
+
+	form := url.Values{
+		"username": {"admin"},
+		"password": {"supersecret123"},
+		"next":     {"/admin/"},
+	}
+	loginReq := httptest.NewRequest(http.MethodPost, "/admin/login", strings.NewReader(form.Encode()))
+	loginReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	loginRec := httptest.NewRecorder()
+	a.Router.ServeHTTP(loginRec, loginReq)
+	if loginRec.Code != http.StatusSeeOther {
+		t.Fatalf("expected login to return 303, got %d body=%s", loginRec.Code, loginRec.Body.String())
+	}
+	if loc := loginRec.Header().Get("Location"); loc != "/admin/" {
+		t.Fatalf("expected login redirect to /admin/, got %q", loc)
+	}
+
+	cookies := loginRec.Result().Cookies()
+	if len(cookies) == 0 {
+		t.Fatal("expected login to set session cookie")
+	}
+
+	authReq := httptest.NewRequest(http.MethodGet, "/admin/api/models", nil)
+	for _, c := range cookies {
+		authReq.AddCookie(c)
+	}
+	authRec := httptest.NewRecorder()
+	a.Router.ServeHTTP(authRec, authReq)
+	if authRec.Code != http.StatusOK {
+		t.Fatalf("expected authenticated admin access to return 200, got %d body=%s", authRec.Code, authRec.Body.String())
+	}
+}
+
 func TestAppNew_OpensMultipleDatabaseAliases(t *testing.T) {
 	cfg := testAppConfig()
 	cfg.DatabaseDefault = "primary"
@@ -334,6 +410,41 @@ func TestAppNew_OpensMultipleDatabaseAliases(t *testing.T) {
 	if _, err := a.Database("missing"); !errors.Is(err, ErrDatabaseAliasNotFound) {
 		t.Fatalf("expected ErrDatabaseAliasNotFound, got %v", err)
 	}
+}
+
+func seedAdminUser(sqlDB *sql.DB, username, email, password string) error {
+	if sqlDB == nil {
+		return fmt.Errorf("nil sql db")
+	}
+	hash, err := auth.HashPassword(password)
+	if err != nil {
+		return fmt.Errorf("hash password: %w", err)
+	}
+
+	if _, err := sqlDB.Exec(`
+CREATE TABLE IF NOT EXISTS goframe_admin_users (
+	id VARCHAR(64) PRIMARY KEY,
+	username VARCHAR(191) NOT NULL UNIQUE,
+	email VARCHAR(191) NOT NULL UNIQUE,
+	password_hash TEXT NOT NULL,
+	is_superuser INTEGER NOT NULL DEFAULT 0,
+	created_at TEXT NOT NULL,
+	updated_at TEXT NOT NULL
+)`); err != nil {
+		return fmt.Errorf("create admin users table: %w", err)
+	}
+
+	_, err = sqlDB.Exec(
+		`INSERT INTO goframe_admin_users (id, username, email, password_hash, is_superuser, created_at, updated_at) VALUES (?, ?, ?, ?, 1, datetime('now'), datetime('now'))`,
+		"u_test_admin",
+		username,
+		email,
+		hash,
+	)
+	if err != nil {
+		return fmt.Errorf("insert admin user: %w", err)
+	}
+	return nil
 }
 
 func TestAppDatabaseForRequest_UsesTenantDatabaseAlias(t *testing.T) {

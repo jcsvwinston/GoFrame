@@ -1,0 +1,483 @@
+package admin
+
+import (
+	"context"
+	"database/sql"
+	"errors"
+	"fmt"
+	"html/template"
+	"net/http"
+	"strings"
+
+	"github.com/jcsvwinston/GoFrame/pkg/auth"
+)
+
+const (
+	defaultAdminUsersTable = "goframe_admin_users"
+
+	adminSessionUserIDKey    = "__goframe_admin_user_id"
+	adminSessionUsernameKey  = "__goframe_admin_username"
+	adminSessionEmailKey     = "__goframe_admin_email"
+	adminSessionSuperuserKey = "__goframe_admin_superuser"
+)
+
+var adminLoginTemplate = template.Must(template.New("admin-login").Parse(`<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>GoFrame Admin Login</title>
+  <style>
+    :root { color-scheme: light; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      font-family: "IBM Plex Sans", "Segoe UI", sans-serif;
+      background:
+        radial-gradient(circle at 12% 14%, #dbefff 0%, transparent 32%),
+        radial-gradient(circle at 88% 86%, #dff9eb 0%, transparent 36%),
+        #f6f8fb;
+      color: #142033;
+    }
+    .card {
+      width: min(440px, calc(100vw - 32px));
+      background: #fff;
+      border: 1px solid #d8e1ea;
+      border-radius: 16px;
+      box-shadow: 0 22px 46px rgba(15, 34, 51, 0.12);
+      padding: 28px;
+    }
+    h1 {
+      margin: 0 0 6px;
+      font-size: 28px;
+      letter-spacing: -0.02em;
+    }
+    p { margin: 0 0 18px; color: #4c5f73; }
+    label {
+      display: block;
+      margin-bottom: 6px;
+      font-weight: 600;
+      font-size: 14px;
+    }
+    input {
+      width: 100%;
+      box-sizing: border-box;
+      margin-bottom: 12px;
+      border: 1px solid #c8d4df;
+      border-radius: 10px;
+      padding: 10px 12px;
+      font-size: 15px;
+      outline: none;
+    }
+    input:focus {
+      border-color: #1f6ae0;
+      box-shadow: 0 0 0 3px rgba(31, 106, 224, 0.18);
+    }
+    button {
+      width: 100%;
+      border: 0;
+      border-radius: 10px;
+      padding: 11px 14px;
+      font-weight: 700;
+      cursor: pointer;
+      background: linear-gradient(100deg, #1150bd, #1f6ae0);
+      color: #fff;
+      font-size: 15px;
+    }
+    .notice {
+      border-radius: 10px;
+      padding: 10px 12px;
+      margin-bottom: 14px;
+      font-size: 14px;
+    }
+    .notice.error {
+      background: #feecef;
+      border: 1px solid #f3bbc3;
+      color: #8a1f34;
+    }
+    .notice.info {
+      background: #ecf5ff;
+      border: 1px solid #bfdcff;
+      color: #13437b;
+    }
+  </style>
+</head>
+<body>
+  <main class="card">
+    <h1>Admin</h1>
+    <p>Sign in to continue.</p>
+    {{if .Info}}<div class="notice info">{{.Info}}</div>{{end}}
+    {{if .Error}}<div class="notice error">{{.Error}}</div>{{end}}
+    <form method="post" action="{{.Action}}">
+      <input type="hidden" name="next" value="{{.Next}}">
+      <label for="username">Username or email</label>
+      <input id="username" name="username" autocomplete="username" required>
+      <label for="password">Password</label>
+      <input id="password" type="password" name="password" autocomplete="current-password" required>
+      <button type="submit">Sign in</button>
+    </form>
+  </main>
+</body>
+</html>`))
+
+// DatabaseAdminAuth is the default admin auth provider wired by pkg/app.
+// Behavior:
+// - Bootstrap mode (no admin table or no users): admin remains open.
+// - Protected mode (at least one admin user): login is required.
+type DatabaseAdminAuth struct {
+	db      *sql.DB
+	session *auth.SessionManager
+	prefix  string
+	table   string
+}
+
+// NewDatabaseAdminAuth creates a DB-backed AdminAuth provider that validates
+// credentials against goframe_admin_users (same table used by createuser).
+func NewDatabaseAdminAuth(sqlDB *sql.DB, session *auth.SessionManager, prefix string) *DatabaseAdminAuth {
+	return &DatabaseAdminAuth{
+		db:      sqlDB,
+		session: session,
+		prefix:  normalizeAdminPrefix(prefix),
+		table:   defaultAdminUsersTable,
+	}
+}
+
+func normalizeAdminPrefix(raw string) string {
+	value := strings.TrimSpace(raw)
+	if value == "" {
+		value = "/admin"
+	}
+	if !strings.HasPrefix(value, "/") {
+		value = "/" + value
+	}
+	value = strings.TrimRight(value, "/")
+	if value == "" {
+		value = "/admin"
+	}
+	return value
+}
+
+// Authenticate returns an authenticated admin user from server-side session.
+// In bootstrap mode it returns a synthetic bootstrap user.
+func (a *DatabaseAdminAuth) Authenticate(r *http.Request) (*auth.User, error) {
+	if a == nil || a.db == nil {
+		return nil, errors.New("admin auth provider is not configured")
+	}
+	if r == nil {
+		return nil, errors.New("missing request")
+	}
+
+	bootstrap, err := a.bootstrapMode(r.Context())
+	if err != nil {
+		return nil, err
+	}
+	if bootstrap {
+		return &auth.User{
+			ID:          "bootstrap-admin",
+			Username:    "bootstrap-admin",
+			Role:        "admin",
+			IsSuperuser: true,
+		}, nil
+	}
+
+	if a.session == nil {
+		return nil, errors.New("admin session manager is not configured")
+	}
+	if !sessionContextReady(a.session, r.Context()) {
+		return nil, errors.New("admin session context is not available")
+	}
+
+	userID := strings.TrimSpace(a.session.GetString(r.Context(), adminSessionUserIDKey))
+	if userID == "" {
+		return nil, errors.New("admin authentication required")
+	}
+
+	record, found, err := a.findUserByID(r.Context(), userID)
+	if err != nil {
+		return nil, err
+	}
+	if !found {
+		_ = a.session.Destroy(r.Context())
+		return nil, errors.New("admin session is no longer valid")
+	}
+	return record.toUser(), nil
+}
+
+// Authorize currently allows all actions for authenticated admin users.
+func (a *DatabaseAdminAuth) Authorize(user *auth.User, _ string, _ string) bool {
+	return user != nil && strings.TrimSpace(user.ID) != ""
+}
+
+// LoginHandler renders the login page (GET) and validates credentials (POST).
+func (a *DatabaseAdminAuth) LoginHandler() http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodGet:
+			a.handleLoginGET(w, r)
+		case http.MethodPost:
+			a.handleLoginPOST(w, r)
+		default:
+			w.Header().Set("Allow", "GET, POST")
+			http.Error(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
+		}
+	})
+}
+
+type adminLoginUserRecord struct {
+	ID           string
+	Username     string
+	Email        string
+	PasswordHash string
+	IsSuperuser  bool
+}
+
+func (u adminLoginUserRecord) toUser() *auth.User {
+	return &auth.User{
+		ID:          u.ID,
+		Username:    u.Username,
+		Email:       u.Email,
+		Role:        "admin",
+		IsSuperuser: u.IsSuperuser,
+	}
+}
+
+func (a *DatabaseAdminAuth) handleLoginGET(w http.ResponseWriter, r *http.Request) {
+	next := a.sanitizeNext(r.URL.Query().Get("next"))
+
+	bootstrap, err := a.bootstrapMode(r.Context())
+	if err != nil {
+		http.Error(w, "admin auth bootstrap check failed", http.StatusInternalServerError)
+		return
+	}
+
+	info := ""
+	if bootstrap {
+		info = "No admin users found yet. Create one with: goframe createuser --config goframe.yaml --username admin --email admin@example.com --password <secret> --no-input"
+	}
+
+	a.renderLoginPage(w, http.StatusOK, next, "", info)
+}
+
+func (a *DatabaseAdminAuth) handleLoginPOST(w http.ResponseWriter, r *http.Request) {
+	next := a.sanitizeNext(r.URL.Query().Get("next"))
+	if err := r.ParseForm(); err != nil {
+		a.renderLoginPage(w, http.StatusBadRequest, next, "Invalid form payload.", "")
+		return
+	}
+
+	formNext := strings.TrimSpace(r.FormValue("next"))
+	if formNext != "" {
+		next = a.sanitizeNext(formNext)
+	}
+
+	bootstrap, err := a.bootstrapMode(r.Context())
+	if err != nil {
+		http.Error(w, "admin auth bootstrap check failed", http.StatusInternalServerError)
+		return
+	}
+	if bootstrap {
+		a.renderLoginPage(w, http.StatusServiceUnavailable, next, "No admin users are available. Create one first with goframe createuser.", "")
+		return
+	}
+
+	username := strings.TrimSpace(r.FormValue("username"))
+	password := r.FormValue("password")
+	if username == "" || strings.TrimSpace(password) == "" {
+		a.renderLoginPage(w, http.StatusBadRequest, next, "Username and password are required.", "")
+		return
+	}
+
+	record, found, err := a.findUserByLogin(r.Context(), username)
+	if err != nil {
+		http.Error(w, "admin login query failed", http.StatusInternalServerError)
+		return
+	}
+	if !found || !auth.CheckPassword(password, record.PasswordHash) {
+		a.renderLoginPage(w, http.StatusUnauthorized, next, "Invalid credentials.", "")
+		return
+	}
+
+	if a.session == nil || !sessionContextReady(a.session, r.Context()) {
+		http.Error(w, "session middleware is not configured for admin login", http.StatusInternalServerError)
+		return
+	}
+
+	if err := a.session.RenewToken(r.Context()); err != nil {
+		http.Error(w, "unable to renew session token", http.StatusInternalServerError)
+		return
+	}
+	a.session.Put(r.Context(), adminSessionUserIDKey, record.ID)
+	a.session.Put(r.Context(), adminSessionUsernameKey, record.Username)
+	a.session.Put(r.Context(), adminSessionEmailKey, record.Email)
+	if record.IsSuperuser {
+		a.session.Put(r.Context(), adminSessionSuperuserKey, "1")
+	} else {
+		a.session.Put(r.Context(), adminSessionSuperuserKey, "0")
+	}
+
+	http.Redirect(w, r, next, http.StatusSeeOther)
+}
+
+func (a *DatabaseAdminAuth) renderLoginPage(w http.ResponseWriter, status int, next, errorMsg, infoMsg string) {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.WriteHeader(status)
+	_ = adminLoginTemplate.Execute(w, map[string]string{
+		"Action": a.prefix + "/login",
+		"Next":   next,
+		"Error":  strings.TrimSpace(errorMsg),
+		"Info":   strings.TrimSpace(infoMsg),
+	})
+}
+
+func (a *DatabaseAdminAuth) sanitizeNext(raw string) string {
+	fallback := a.prefix + "/"
+	value := strings.TrimSpace(raw)
+	if value == "" {
+		return fallback
+	}
+	if strings.Contains(value, "://") {
+		return fallback
+	}
+	if !strings.HasPrefix(value, a.prefix) {
+		return fallback
+	}
+	return value
+}
+
+func (a *DatabaseAdminAuth) bootstrapMode(ctx context.Context) (bool, error) {
+	users, tableReady, err := a.listUsers(ctx)
+	if err != nil {
+		return false, err
+	}
+	if !tableReady {
+		return true, nil
+	}
+	return len(users) == 0, nil
+}
+
+func (a *DatabaseAdminAuth) findUserByID(ctx context.Context, id string) (adminLoginUserRecord, bool, error) {
+	users, tableReady, err := a.listUsers(ctx)
+	if err != nil {
+		return adminLoginUserRecord{}, false, err
+	}
+	if !tableReady {
+		return adminLoginUserRecord{}, false, nil
+	}
+
+	target := strings.TrimSpace(id)
+	for _, user := range users {
+		if strings.TrimSpace(user.ID) == target {
+			return user, true, nil
+		}
+	}
+	return adminLoginUserRecord{}, false, nil
+}
+
+func (a *DatabaseAdminAuth) findUserByLogin(ctx context.Context, login string) (adminLoginUserRecord, bool, error) {
+	users, tableReady, err := a.listUsers(ctx)
+	if err != nil {
+		return adminLoginUserRecord{}, false, err
+	}
+	if !tableReady {
+		return adminLoginUserRecord{}, false, nil
+	}
+
+	target := strings.TrimSpace(login)
+	for _, user := range users {
+		if strings.EqualFold(strings.TrimSpace(user.Username), target) || strings.EqualFold(strings.TrimSpace(user.Email), target) {
+			return user, true, nil
+		}
+	}
+	return adminLoginUserRecord{}, false, nil
+}
+
+func (a *DatabaseAdminAuth) listUsers(ctx context.Context) ([]adminLoginUserRecord, bool, error) {
+	if a == nil || a.db == nil {
+		return nil, false, errors.New("admin database is not configured")
+	}
+
+	query := fmt.Sprintf("SELECT id, username, email, password_hash, is_superuser FROM %s", a.table)
+	rows, err := a.db.QueryContext(ctx, query)
+	if err != nil {
+		if isAdminUserTableMissing(err) {
+			return nil, false, nil
+		}
+		return nil, true, fmt.Errorf("query admin users: %w", err)
+	}
+	defer rows.Close()
+
+	users := make([]adminLoginUserRecord, 0, 8)
+	for rows.Next() {
+		var u adminLoginUserRecord
+		var superRaw interface{}
+		if err := rows.Scan(&u.ID, &u.Username, &u.Email, &u.PasswordHash, &superRaw); err != nil {
+			return nil, true, fmt.Errorf("scan admin user row: %w", err)
+		}
+		u.ID = strings.TrimSpace(u.ID)
+		u.Username = strings.TrimSpace(u.Username)
+		u.Email = strings.TrimSpace(u.Email)
+		u.IsSuperuser = parseAdminSuperuserValue(superRaw)
+		users = append(users, u)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, true, fmt.Errorf("iterate admin users: %w", err)
+	}
+
+	return users, true, nil
+}
+
+func parseAdminSuperuserValue(raw interface{}) bool {
+	switch v := raw.(type) {
+	case bool:
+		return v
+	case int:
+		return v != 0
+	case int8:
+		return v != 0
+	case int16:
+		return v != 0
+	case int32:
+		return v != 0
+	case int64:
+		return v != 0
+	case uint:
+		return v != 0
+	case uint8:
+		return v != 0
+	case uint16:
+		return v != 0
+	case uint32:
+		return v != 0
+	case uint64:
+		return v != 0
+	case []byte:
+		return parseAdminSuperuserString(string(v))
+	case string:
+		return parseAdminSuperuserString(v)
+	default:
+		return parseAdminSuperuserString(fmt.Sprintf("%v", raw))
+	}
+}
+
+func parseAdminSuperuserString(raw string) bool {
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case "1", "t", "true", "y", "yes", "on":
+		return true
+	default:
+		return false
+	}
+}
+
+func isAdminUserTableMissing(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "no such table") ||
+		strings.Contains(msg, "does not exist") ||
+		strings.Contains(msg, "unknown table") ||
+		strings.Contains(msg, "invalid object name") ||
+		strings.Contains(msg, "ora-00942")
+}

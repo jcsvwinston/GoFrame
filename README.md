@@ -69,6 +69,11 @@ If you do not need background jobs yet, run only the server.
 - API: `http://localhost:8080/api/health`
 - Admin: `http://localhost:8080/admin`
 
+Admin access defaults:
+
+- Bootstrap mode: if there are no rows in `goframe_admin_users`, `/admin` is accessible to help initial setup.
+- Protected mode: once at least one admin user exists (`goframe createuser`), `/admin` requires login at `/admin/login`.
+
 ## CLI Highlights
 
 GoFrame ships a broad set of framework commands, including:
