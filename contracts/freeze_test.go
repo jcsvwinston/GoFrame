@@ -2,6 +2,10 @@ package contracts
 
 import (
 	"bufio"
+	"go/ast"
+	"go/doc"
+	"go/parser"
+	"go/token"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -45,8 +49,31 @@ func TestContractFreeze_ConfigKeyPatterns_NoRemovals(t *testing.T) {
 	}
 }
 
+func TestContractFreeze_APIExportedSymbols_NoRemovals(t *testing.T) {
+	currentLines := stableAPISymbolBaselineLines(t)
+	if os.Getenv("GOFRAME_UPDATE_CONTRACT_BASELINE") == "1" {
+		writeBaselineLines(t, currentLines, "baseline", "api_exported_symbols.txt")
+	}
+
+	baseline := readBaselineLines(t, "baseline", "api_exported_symbols.txt")
+	current := toSet(currentLines)
+
+	missing := make([]string, 0)
+	for _, symbol := range baseline {
+		if _, ok := current[symbol]; !ok {
+			missing = append(missing, symbol)
+		}
+	}
+	sort.Strings(missing)
+	if len(missing) > 0 {
+		t.Fatalf("stable API contract regression: missing exported symbol(s): %s", strings.Join(missing, ", "))
+	}
+}
+
 func TestContractFreeze_BaselinesAreSortedUnique(t *testing.T) {
+	checkSortedUnique(t, readBaselineLines(t, "baseline", "api_exported_symbols.txt"), "api_exported_symbols.txt")
 	checkSortedUnique(t, readBaselineLines(t, "baseline", "cli_primary_commands.txt"), "cli_primary_commands.txt")
+	checkSortedUnique(t, readBaselineLines(t, "baseline", "cli_json_status_keys.txt"), "cli_json_status_keys.txt")
 	checkSortedUnique(t, readBaselineLines(t, "baseline", "config_key_patterns.txt"), "config_key_patterns.txt")
 }
 
@@ -66,11 +93,7 @@ func checkSortedUnique(t *testing.T, lines []string, name string) {
 
 func readBaselineLines(t *testing.T, rel ...string) []string {
 	t.Helper()
-	_, file, _, ok := runtime.Caller(0)
-	if !ok {
-		t.Fatal("unable to resolve current file path")
-	}
-	base := filepath.Join(filepath.Dir(file), filepath.Join(rel...))
+	base := baselinePath(t, rel...)
 	f, err := os.Open(base)
 	if err != nil {
 		t.Fatalf("open baseline %s: %v", base, err)
@@ -88,6 +111,181 @@ func readBaselineLines(t *testing.T, rel ...string) []string {
 	}
 	if err := sc.Err(); err != nil {
 		t.Fatalf("scan baseline %s: %v", base, err)
+	}
+	return out
+}
+
+func writeBaselineLines(t *testing.T, lines []string, rel ...string) {
+	t.Helper()
+	base := baselinePath(t, rel...)
+	if err := os.MkdirAll(filepath.Dir(base), 0o755); err != nil {
+		t.Fatalf("create baseline dir for %s: %v", base, err)
+	}
+	data := strings.Join(lines, "\n")
+	if data != "" {
+		data += "\n"
+	}
+	if err := os.WriteFile(base, []byte(data), 0o644); err != nil {
+		t.Fatalf("write baseline %s: %v", base, err)
+	}
+}
+
+func baselinePath(t *testing.T, rel ...string) string {
+	t.Helper()
+	_, file, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("unable to resolve current file path")
+	}
+	return filepath.Join(filepath.Dir(file), filepath.Join(rel...))
+}
+
+func stableAPISymbolBaselineLines(t *testing.T) []string {
+	t.Helper()
+	repoRoot := filepath.Dir(baselinePath(t))
+
+	packages := []struct {
+		importPath string
+		relative   string
+	}{
+		{importPath: "github.com/jcsvwinston/GoFrame/pkg/app", relative: "pkg/app"},
+		{importPath: "github.com/jcsvwinston/GoFrame/pkg/auth", relative: "pkg/auth"},
+		{importPath: "github.com/jcsvwinston/GoFrame/pkg/authz", relative: "pkg/authz"},
+		{importPath: "github.com/jcsvwinston/GoFrame/pkg/db", relative: "pkg/db"},
+		{importPath: "github.com/jcsvwinston/GoFrame/pkg/errors", relative: "pkg/errors"},
+		{importPath: "github.com/jcsvwinston/GoFrame/pkg/mail", relative: "pkg/mail"},
+		{importPath: "github.com/jcsvwinston/GoFrame/pkg/model", relative: "pkg/model"},
+		{importPath: "github.com/jcsvwinston/GoFrame/pkg/observe", relative: "pkg/observe"},
+		{importPath: "github.com/jcsvwinston/GoFrame/pkg/plugins", relative: "pkg/plugins"},
+		{importPath: "github.com/jcsvwinston/GoFrame/pkg/router", relative: "pkg/router"},
+		{importPath: "github.com/jcsvwinston/GoFrame/pkg/signals", relative: "pkg/signals"},
+		{importPath: "github.com/jcsvwinston/GoFrame/pkg/tasks", relative: "pkg/tasks"},
+		{importPath: "github.com/jcsvwinston/GoFrame/pkg/validate", relative: "pkg/validate"},
+	}
+
+	lines := make([]string, 0, 512)
+	for _, pkg := range packages {
+		pkgSymbols := exportedSymbolsForPackage(t, filepath.Join(repoRoot, pkg.relative))
+		for _, symbol := range pkgSymbols {
+			lines = append(lines, pkg.importPath+" "+symbol)
+		}
+	}
+	sort.Strings(lines)
+	return dedupeSorted(lines)
+}
+
+func exportedSymbolsForPackage(t *testing.T, dir string) []string {
+	t.Helper()
+	fset := token.NewFileSet()
+	pkgs, err := parser.ParseDir(fset, dir, func(fi os.FileInfo) bool {
+		name := fi.Name()
+		return strings.HasSuffix(name, ".go") && !strings.HasSuffix(name, "_test.go")
+	}, parser.ParseComments)
+	if err != nil {
+		t.Fatalf("parse package dir %s: %v", dir, err)
+	}
+	if len(pkgs) == 0 {
+		t.Fatalf("no package files found in %s", dir)
+	}
+
+	var target *ast.Package
+	for name, pkg := range pkgs {
+		if name == "main" {
+			continue
+		}
+		target = pkg
+		break
+	}
+	if target == nil {
+		for _, pkg := range pkgs {
+			target = pkg
+			break
+		}
+	}
+	if target == nil {
+		t.Fatalf("unable to resolve package in %s", dir)
+	}
+
+	docPkg := doc.New(target, "", doc.AllDecls)
+	symbols := make([]string, 0, 128)
+	for _, v := range docPkg.Vars {
+		for _, name := range v.Names {
+			if ast.IsExported(name) {
+				symbols = append(symbols, "var:"+name)
+			}
+		}
+	}
+	for _, c := range docPkg.Consts {
+		for _, name := range c.Names {
+			if ast.IsExported(name) {
+				symbols = append(symbols, "const:"+name)
+			}
+		}
+	}
+	for _, fn := range docPkg.Funcs {
+		if ast.IsExported(fn.Name) {
+			symbols = append(symbols, "func:"+fn.Name)
+		}
+	}
+	for _, typ := range docPkg.Types {
+		if !ast.IsExported(typ.Name) {
+			continue
+		}
+		symbols = append(symbols, "type:"+typ.Name)
+		symbols = append(symbols, exportedMembersFromTypeDecl(typ.Decl, typ.Name)...)
+		for _, method := range typ.Methods {
+			if ast.IsExported(method.Name) {
+				symbols = append(symbols, "method:"+typ.Name+"."+method.Name)
+			}
+		}
+	}
+	sort.Strings(symbols)
+	return dedupeSorted(symbols)
+}
+
+func exportedMembersFromTypeDecl(decl *ast.GenDecl, owner string) []string {
+	if decl == nil {
+		return nil
+	}
+	out := make([]string, 0, 16)
+	for _, spec := range decl.Specs {
+		typeSpec, ok := spec.(*ast.TypeSpec)
+		if !ok || typeSpec.Name.Name != owner {
+			continue
+		}
+		switch node := typeSpec.Type.(type) {
+		case *ast.StructType:
+			for _, field := range node.Fields.List {
+				for _, name := range field.Names {
+					if ast.IsExported(name.Name) {
+						out = append(out, "field:"+owner+"."+name.Name)
+					}
+				}
+			}
+		case *ast.InterfaceType:
+			for _, field := range node.Methods.List {
+				for _, name := range field.Names {
+					if ast.IsExported(name.Name) {
+						out = append(out, "iface-method:"+owner+"."+name.Name)
+					}
+				}
+			}
+		}
+	}
+	sort.Strings(out)
+	return dedupeSorted(out)
+}
+
+func dedupeSorted(items []string) []string {
+	if len(items) == 0 {
+		return items
+	}
+	out := make([]string, 0, len(items))
+	prev := ""
+	for i, item := range items {
+		if i == 0 || item != prev {
+			out = append(out, item)
+		}
+		prev = item
 	}
 	return out
 }

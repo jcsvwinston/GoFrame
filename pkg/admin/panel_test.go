@@ -484,6 +484,7 @@ func TestPanel_ListSessions_WithSessionManager(t *testing.T) {
 	})
 	panel.config.Session = sessionManager
 	panel.config.SessionStore = "memory"
+	panel.config.Environment = "production"
 	panel.config.SessionRuntime = auth.SessionRuntimeIdentity{
 		Pod:      "pod-1",
 		Host:     "node-1",
@@ -497,6 +498,7 @@ func TestPanel_ListSessions_WithSessionManager(t *testing.T) {
 		auth.SessionMetaPodKey:         "pod-2",
 		auth.SessionMetaHostKey:        "node-2",
 		auth.SessionMetaInstanceKey:    "pod-2@node-2",
+		auth.SessionMetaRemoteIPKey:    "198.51.100.10",
 		"user_id":                      "42",
 	}
 
@@ -535,6 +537,15 @@ func TestPanel_ListSessions_WithSessionManager(t *testing.T) {
 	}
 	if row["user"] != "42" {
 		t.Fatalf("expected user=42, got row=%#v", row)
+	}
+	if row["remote_ip"] != "198.51.100.10" {
+		t.Fatalf("expected remote_ip=198.51.100.10, got row=%#v", row)
+	}
+	if runtime, _ := resp["source_runtime"].(string); runtime != "kubernetes" {
+		t.Fatalf("expected source_runtime=kubernetes, got %q", runtime)
+	}
+	if env, _ := resp["source_env"].(string); env != "production" {
+		t.Fatalf("expected source_env=production, got %q", env)
 	}
 }
 
@@ -577,6 +588,54 @@ func TestPanel_SessionsCounterGrowsAcrossBrowsers(t *testing.T) {
 	current, _ := resp["current_active"].(float64)
 	if int(current) < 2 {
 		t.Fatalf("expected current_active >= 2 across browsers, got %v body=%s", current, mustJSON(resp))
+	}
+}
+
+func TestPanel_ListModels_IncludesDatabaseRuntimeSummary(t *testing.T) {
+	panel, cleanup := setupPanelForTest(t, db.EngineSQL)
+	defer cleanup()
+
+	panel.config.Environment = "staging"
+	panel.config.Databases = []DatabaseRuntimeInfo{
+		{Alias: "default", Engine: "sql", Dialect: "sqlite", IsDefault: true},
+		{Alias: "analytics", Engine: "sql", Dialect: "postgres", IsDefault: false},
+	}
+
+	srv := httptest.NewServer(panel.Handler())
+	defer srv.Close()
+
+	resp, status := doJSON(t, http.MethodGet, srv.URL+"/api/models", nil)
+	if status != http.StatusOK {
+		t.Fatalf("list models status=%d body=%s", status, mustJSON(resp))
+	}
+
+	runtime, ok := resp["runtime"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("expected runtime payload in /api/models response: %#v", resp)
+	}
+	if env, _ := runtime["environment"].(string); env != "staging" {
+		t.Fatalf("expected runtime.environment=staging, got %q", env)
+	}
+
+	databases, ok := runtime["databases"].([]interface{})
+	if !ok || len(databases) != 2 {
+		t.Fatalf("expected two runtime databases, got %#v", runtime["databases"])
+	}
+	first, _ := databases[0].(map[string]interface{})
+	if first["alias"] != "default" || first["dialect"] != "sqlite" {
+		t.Fatalf("unexpected first runtime database row: %#v", first)
+	}
+	models, ok := first["models"].([]interface{})
+	if !ok || len(models) == 0 {
+		t.Fatalf("expected runtime database models list, got %#v", first["models"])
+	}
+	if models[0] != "AdminUser" {
+		t.Fatalf("expected AdminUser in runtime database models list, got %#v", models)
+	}
+
+	engines, ok := runtime["engines"].([]interface{})
+	if !ok || len(engines) != 2 {
+		t.Fatalf("expected two runtime engines, got %#v", runtime["engines"])
 	}
 }
 

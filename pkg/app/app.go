@@ -132,6 +132,8 @@ func New(cfg *Config) (*App, error) {
 	adminPanel := admin.NewPanel(dbConn, reg, logger, admin.PanelConfig{
 		Prefix:         effective.AdminPrefix,
 		Title:          effective.AdminTitle,
+		Environment:    effective.Env,
+		Databases:      buildAdminDatabaseRuntimeInfo(effective, dbs, defaultAlias),
 		Auth:           admin.NewDatabaseAdminAuth(sqlDB, sessionManager, effective.AdminPrefix),
 		Session:        sessionManager,
 		SessionStore:   sessionStoreLabel,
@@ -401,6 +403,9 @@ func mergeDefaults(cfg *Config) *Config {
 	if merged.LogFormat == "" {
 		merged.LogFormat = base.LogFormat
 	}
+	if merged.Env == "" {
+		merged.Env = base.Env
+	}
 	if merged.RateLimitWindow == 0 {
 		merged.RateLimitWindow = base.RateLimitWindow
 	}
@@ -543,6 +548,49 @@ func openDatabases(cfg *Config, logger *slog.Logger) (string, map[string]*db.DB,
 		return "", nil, fmt.Errorf("default database alias %q is not configured", defaultAlias)
 	}
 	return defaultAlias, dbs, nil
+}
+
+func buildAdminDatabaseRuntimeInfo(cfg *Config, dbs map[string]*db.DB, defaultAlias string) []admin.DatabaseRuntimeInfo {
+	if cfg == nil || len(dbs) == 0 {
+		return []admin.DatabaseRuntimeInfo{}
+	}
+
+	aliases := make([]string, 0, len(dbs))
+	for alias := range dbs {
+		aliases = append(aliases, alias)
+	}
+	sort.Strings(aliases)
+
+	out := make([]admin.DatabaseRuntimeInfo, 0, len(aliases))
+	for _, alias := range aliases {
+		handle := dbs[alias]
+		dbCfg, _ := cfg.DatabaseByAlias(alias)
+		out = append(out, admin.DatabaseRuntimeInfo{
+			Alias:     alias,
+			Engine:    strings.TrimSpace(string(handle.Engine())),
+			Dialect:   detectDatabaseDialect(dbCfg.URL),
+			IsDefault: alias == defaultAlias,
+		})
+	}
+	return out
+}
+
+func detectDatabaseDialect(rawURL string) string {
+	lower := strings.ToLower(strings.TrimSpace(rawURL))
+	switch {
+	case strings.HasPrefix(lower, "postgres://"), strings.HasPrefix(lower, "postgresql://"):
+		return "postgres"
+	case strings.HasPrefix(lower, "mysql://"):
+		return "mysql"
+	case strings.HasPrefix(lower, "sqlserver://"), strings.HasPrefix(lower, "mssql://"):
+		return "sqlserver"
+	case strings.HasPrefix(lower, "oracle://"):
+		return "oracle"
+	case strings.HasPrefix(lower, "sqlite://"), strings.HasSuffix(lower, ".db"), strings.HasSuffix(lower, ".sqlite"), lower == ":memory:":
+		return "sqlite"
+	default:
+		return "unknown"
+	}
 }
 
 func closeDatabases(dbs map[string]*db.DB) error {

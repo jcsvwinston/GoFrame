@@ -35,6 +35,8 @@ type sessionOverviewResponse struct {
 	ActiveLastHour   int              `json:"active_last_hour"`
 	Sessions         []sessionRow     `json:"sessions"`
 	Telemetry        sessionTelemetry `json:"telemetry"`
+	SourceEnv        string           `json:"source_env,omitempty"`
+	SourceRuntime    string           `json:"source_runtime,omitempty"`
 	SourcePod        string           `json:"source_pod,omitempty"`
 	SourceHost       string           `json:"source_host,omitempty"`
 	SourceInstance   string           `json:"source_instance,omitempty"`
@@ -52,6 +54,7 @@ type sessionRow struct {
 	Pod         string `json:"pod,omitempty"`
 	Host        string `json:"host,omitempty"`
 	Instance    string `json:"instance,omitempty"`
+	RemoteIP    string `json:"remote_ip,omitempty"`
 	AgeSeconds  int64  `json:"age_seconds,omitempty"`
 	IdleSeconds int64  `json:"idle_seconds,omitempty"`
 
@@ -123,6 +126,8 @@ func (p *Panel) handleListSessions(w http.ResponseWriter, r *http.Request) {
 	}
 
 	resp.Enabled = true
+	resp.SourceEnv = strings.TrimSpace(p.config.Environment)
+	resp.SourceRuntime = classifyRuntime(p.config.SessionRuntime)
 	resp.SourcePod = p.config.SessionRuntime.Pod
 	resp.SourceHost = p.config.SessionRuntime.Host
 	resp.SourceInstance = p.config.SessionRuntime.Instance
@@ -212,6 +217,7 @@ func buildSessionRow(token string, deadline time.Time, values map[string]interfa
 		Pod:        valueAsString(values, auth.SessionMetaPodKey),
 		Host:       valueAsString(values, auth.SessionMetaHostKey),
 		Instance:   valueAsString(values, auth.SessionMetaInstanceKey),
+		RemoteIP:   valueAsString(values, auth.SessionMetaRemoteIPKey),
 		firstSeen:  firstSeen,
 		lastSeen:   lastSeen,
 		expiresAt:  expiresAt,
@@ -382,4 +388,11 @@ func normalizeSessionStoreLabel(raw string) string {
 		return "memory"
 	}
 	return value
+}
+
+func classifyRuntime(identity auth.SessionRuntimeIdentity) string {
+	if strings.TrimSpace(identity.Pod) != "" {
+		return "kubernetes"
+	}
+	return "standalone"
 }

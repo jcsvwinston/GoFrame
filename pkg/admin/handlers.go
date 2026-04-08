@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/url"
 	"reflect"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -30,15 +31,35 @@ func (p *Panel) handleListModels(w http.ResponseWriter, r *http.Request) {
 		Icon   string `json:"icon"`
 		Count  int64  `json:"count"`
 	}
+	type runtimeDatabaseInfo struct {
+		Alias      string   `json:"alias"`
+		Engine     string   `json:"engine"`
+		Dialect    string   `json:"dialect"`
+		IsDefault  bool     `json:"is_default"`
+		Models     []string `json:"models"`
+		ModelCount int      `json:"model_count"`
+	}
+	type runtimeInfo struct {
+		Environment   string                `json:"environment"`
+		Databases     []runtimeDatabaseInfo `json:"databases"`
+		Engines       []string              `json:"engines"`
+		ModelsTotal   int                   `json:"models_total"`
+		RecordsTotal  int64                 `json:"records_total"`
+		SessionsCount int                   `json:"sessions_active"`
+	}
 
 	models := p.registry.All()
 	result := make([]modelInfo, 0, len(models))
+	modelNames := make([]string, 0, len(models))
+	var recordsTotal int64
 	for _, m := range models {
 		count, err := p.modelCount(r.Context(), m)
 		if err != nil {
 			writeErr(w, fmt.Errorf("admin.ListModels count model=%s: %w", m.Name, err))
 			return
 		}
+		recordsTotal += count
+		modelNames = append(modelNames, m.Name)
 		result = append(result, modelInfo{
 			Name:   m.Name,
 			Plural: m.Plural,
@@ -47,10 +68,53 @@ func (p *Panel) handleListModels(w http.ResponseWriter, r *http.Request) {
 			Count:  count,
 		})
 	}
+	sort.Strings(modelNames)
+
+	sessionsCount := 0
+	if p.config.Session != nil {
+		if payloads, supported, err := allSessionPayloads(r.Context(), p.config.Session); err == nil && supported {
+			sessionsCount = len(payloads)
+		}
+	}
+
+	dbRuntime := make([]runtimeDatabaseInfo, 0, len(p.config.Databases))
+	enginesSeen := map[string]struct{}{}
+	for _, item := range p.config.Databases {
+		modelCopy := make([]string, len(modelNames))
+		copy(modelCopy, modelNames)
+		dbRuntime = append(dbRuntime, runtimeDatabaseInfo{
+			Alias:      item.Alias,
+			Engine:     item.Engine,
+			Dialect:    item.Dialect,
+			IsDefault:  item.IsDefault,
+			Models:     modelCopy,
+			ModelCount: len(modelCopy),
+		})
+		label := strings.TrimSpace(item.Dialect)
+		if label == "" {
+			label = strings.TrimSpace(item.Engine)
+		}
+		if label != "" {
+			enginesSeen[label] = struct{}{}
+		}
+	}
+	engines := make([]string, 0, len(enginesSeen))
+	for label := range enginesSeen {
+		engines = append(engines, label)
+	}
+	sort.Strings(engines)
 
 	writeJSON(w, http.StatusOK, map[string]interface{}{
 		"models": result,
 		"title":  p.config.Title,
+		"runtime": runtimeInfo{
+			Environment:   strings.TrimSpace(p.config.Environment),
+			Databases:     dbRuntime,
+			Engines:       engines,
+			ModelsTotal:   len(result),
+			RecordsTotal:  recordsTotal,
+			SessionsCount: sessionsCount,
+		},
 	})
 }
 

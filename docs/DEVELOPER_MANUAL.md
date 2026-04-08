@@ -361,6 +361,66 @@ Recommendation:
 - keep HTTP handlers in `internal/controllers` or `handlers`
 - keep business logic outside handlers
 
+## 9.1 Unified request context (`router.Context`)
+
+For a single handler entrypoint style, use `router.ContextHandler(...)`.
+It wraps `http.ResponseWriter` and `*http.Request` and provides:
+
+- unified parameter access: `Param`, `Query`, `Form`, `Value`
+- session helpers (when injected with `router.WithSession(...)`)
+- template bind and render helpers (`Set`, `BindData`, `HTML`)
+- typed responses (`JSON`, `XML`, `File`, `Download`, `NoContent`)
+
+Example:
+
+```go
+tpl, _ := template.ParseFS(templateFS, "templates/*.html")
+
+a.Router.Get("/users/{id}", router.ContextHandler(func(c *router.Context) {
+    userID := c.Param("id")
+    tenant := c.Value("tenant") // path -> query -> form
+
+    c.Set("Title", "User Detail")
+    _ = c.HTML(http.StatusOK, "user.html", map[string]interface{}{
+        "UserID": userID,
+        "Tenant": tenant,
+    })
+}, router.WithSession(a.Session), router.WithTemplates(tpl)))
+```
+
+## 9.2 RESTful resource routes (`Router.Resource`)
+
+For conventional CRUD routing, register one resource and let the router map
+common REST endpoints.
+
+```go
+a.Router.Resource("/users", router.ResourceHandlers{
+    List: func(w http.ResponseWriter, r *http.Request) {
+        router.JSON(w, http.StatusOK, map[string]string{"action": "list"})
+    },
+    Create: func(w http.ResponseWriter, r *http.Request) {
+        router.JSON(w, http.StatusCreated, map[string]string{"action": "create"})
+    },
+    Retrieve: func(w http.ResponseWriter, r *http.Request) {
+        router.JSON(w, http.StatusOK, map[string]string{"id": r.PathValue("id")})
+    },
+    Update: func(w http.ResponseWriter, r *http.Request) {
+        router.JSON(w, http.StatusOK, map[string]string{"action": "update", "id": r.PathValue("id")})
+    },
+    Delete: func(w http.ResponseWriter, r *http.Request) {
+        router.NoContent(w)
+    },
+})
+```
+
+Registered routes:
+
+- `GET /users/`
+- `POST /users/`
+- `GET /users/{id}`
+- `PUT /users/{id}`
+- `DELETE /users/{id}`
+
 ## 10. Admin Panel
 
 ## 10.1 Setup

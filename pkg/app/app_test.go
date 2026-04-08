@@ -579,3 +579,24 @@ func TestAppNew_TenantIsolationRequiresTenantAwareTemplate(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
+
+func TestDetectDatabaseDialect(t *testing.T) {
+	cases := []struct {
+		raw  string
+		want string
+	}{
+		{raw: "sqlite://app.db", want: "sqlite"},
+		{raw: "postgres://localhost/db", want: "postgres"},
+		{raw: "postgresql://localhost/db", want: "postgres"},
+		{raw: "mysql://localhost/db", want: "mysql"},
+		{raw: "sqlserver://localhost/db", want: "sqlserver"},
+		{raw: "mssql://localhost/db", want: "sqlserver"},
+		{raw: "oracle://localhost/db", want: "oracle"},
+		{raw: "custom://localhost/db", want: "unknown"},
+	}
+	for _, tc := range cases {
+		if got := detectDatabaseDialect(tc.raw); got != tc.want {
+			t.Fatalf("detectDatabaseDialect(%q)=%q want=%q", tc.raw, got, tc.want)
+		}
+	}
+}

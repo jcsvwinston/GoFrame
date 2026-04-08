@@ -28,6 +28,14 @@ type adminAuthContextKey struct{}
 
 const adminSessionTouchKey = "__goframe_admin_seen_at"
 
+// DatabaseRuntimeInfo describes one configured DB alias for admin observability.
+type DatabaseRuntimeInfo struct {
+	Alias     string `json:"alias"`
+	Engine    string `json:"engine"`
+	Dialect   string `json:"dialect"`
+	IsDefault bool   `json:"is_default"`
+}
+
 // AdminAuth is the interface for admin panel authentication and authorization.
 type AdminAuth interface {
 	Authenticate(r *http.Request) (*auth.User, error)
@@ -39,6 +47,8 @@ type AdminAuth interface {
 type PanelConfig struct {
 	Prefix         string // URL prefix (default "/admin")
 	Title          string // Site title shown in the UI
+	Environment    string
+	Databases      []DatabaseRuntimeInfo
 	Auth           AdminAuth
 	Session        *auth.SessionManager // optional session manager for admin telemetry
 	SessionStore   string               // configured session store label (memory|sql|redis)
@@ -185,6 +195,9 @@ func (p *Panel) touchAdminSession(r *http.Request) {
 		p.config.Session.Put(ctx, auth.SessionMetaFirstSeenAtKey, now)
 	}
 	p.config.Session.Put(ctx, auth.SessionMetaLastSeenAtKey, now)
+	if ip := auth.ClientIPFromRequest(r); ip != "" {
+		p.config.Session.Put(ctx, auth.SessionMetaRemoteIPKey, ip)
+	}
 
 	if pod := strings.TrimSpace(p.config.SessionRuntime.Pod); pod != "" {
 		p.config.Session.Put(ctx, auth.SessionMetaPodKey, pod)

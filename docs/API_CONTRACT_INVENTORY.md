@@ -24,7 +24,7 @@ Policy references:
 | `pkg/app` | `stable` | `Config`, `DefaultConfig`, `LoadConfig`, `New`, `App` lifecycle methods (`Run`, `Shutdown`, `RegisterModel`, `MountAdmin`, `OnShutdown`) | Core application bootstrap contract. |
 | `pkg/db` | `stable` + `experimental` | `db.New`, `db.DB`, migrator APIs (`NewMigrator`, migration lifecycle methods), SQL URL support | URL schemes `sqlite://`, `postgres://`/`postgresql://`, `mysql://` are `stable`; `sqlserver://`/`mssql://` and `oracle://` are `experimental` until lane promotion. |
 | `pkg/model` | `stable` | `BaseModel`, metadata extraction, registry, CRUD interfaces and hooks | Foundation for model/admin integration. |
-| `pkg/router` | `stable` | Router construction, middleware hooks, rendering/binding/pagination helpers | Request/response helper behavior is contract surface. |
+| `pkg/router` | `stable` | Router construction, middleware hooks, unified request context helpers (`Context`, `ContextHandler`), rendering/binding/pagination helpers | Request/response helper behavior is contract surface. |
 | `pkg/auth` | `stable` | JWT manager, claims context helpers, session manager/store APIs | Multi-store session surface is contracted (`memory`, `sql`, `redis`). |
 | `pkg/authz` | `stable` | Enforcer creation and authorization middleware helpers | Casbin-backed authz boundary for apps. |
 | `pkg/mail` | `stable` | Mail sender abstraction, provider registry (`RegisterProvider`), sender construction (`NewSender`) | Built-ins + external plugin/legacy bridge are supported. |
@@ -61,3 +61,19 @@ When changing any `stable` surface:
 1. update this inventory if contract shape changes,
 2. add/adjust compatibility tests,
 3. include migration notes in `CHANGELOG.md` if behavior is user-visible.
+
+## Freeze Enforcement
+
+Stable no-removal freeze is enforced in `contracts/freeze_test.go` with baselines under `contracts/baseline/`:
+
+- `cli_primary_commands.txt`
+- `cli_json_status_keys.txt` (stable command-status JSON envelope/data keys for automation-critical commands)
+- `config_key_patterns.txt`
+- `api_exported_symbols.txt` (stable packages only)
+
+Intentional baseline refresh workflow:
+
+```bash
+GOFRAME_UPDATE_CONTRACT_BASELINE=1 go test ./contracts -run '^TestContractFreeze_APIExportedSymbols_NoRemovals$' -count=1
+bash scripts/ci/check_contract_freeze.sh
+```

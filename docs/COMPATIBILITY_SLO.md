@@ -82,7 +82,7 @@ bash scripts/ci/run_exploratory_stability.sh --runs 10 --output docs/reports/exp
 ```
 
 2. Run compatibility harness for fixture applications.
-3. Run stable contract freeze validation (CLI/config no-removal baseline).
+3. Run stable contract freeze validation (CLI primary commands, CLI JSON status envelope keys, config keys, and stable API exported symbols no-removal baselines).
 4. Aggregate results into release artifacts.
 5. Validate against SLO thresholds before tagging.
 

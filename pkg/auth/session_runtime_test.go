@@ -48,6 +48,7 @@ func TestRuntimeMetadataMiddleware_UpdatesExistingSession(t *testing.T) {
 	})))
 
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.RemoteAddr = "203.0.113.10:4567"
 	req.AddCookie(&http.Cookie{Name: sm.SCS().Cookie.Name, Value: token})
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
@@ -76,6 +77,9 @@ func TestRuntimeMetadataMiddleware_UpdatesExistingSession(t *testing.T) {
 	if values[SessionMetaInstanceKey] != "pod-x@node-y" {
 		t.Fatalf("expected instance metadata pod-x@node-y, got %#v", values[SessionMetaInstanceKey])
 	}
+	if values[SessionMetaRemoteIPKey] != "203.0.113.10" {
+		t.Fatalf("expected remote ip metadata 203.0.113.10, got %#v", values[SessionMetaRemoteIPKey])
+	}
 	if _, ok := values[SessionMetaLastSeenAtKey]; !ok {
 		t.Fatalf("expected %s key in session values", SessionMetaLastSeenAtKey)
 	}
@@ -101,5 +105,27 @@ func TestRuntimeMetadataMiddleware_DoesNotCreateSessionForAnonymousRequest(t *te
 		if c.Name == sm.SCS().Cookie.Name {
 			t.Fatalf("did not expect session cookie to be issued for anonymous request")
 		}
+	}
+}
+
+func TestClientIPFromRequest(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.Header.Set("X-Forwarded-For", "198.51.100.8, 10.0.0.1")
+	req.RemoteAddr = "203.0.113.10:2222"
+	if got := ClientIPFromRequest(req); got != "198.51.100.8" {
+		t.Fatalf("expected x-forwarded-for first ip, got %q", got)
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/", nil)
+	req.Header.Set("X-Real-IP", "192.0.2.44")
+	req.RemoteAddr = "203.0.113.10:3333"
+	if got := ClientIPFromRequest(req); got != "192.0.2.44" {
+		t.Fatalf("expected x-real-ip, got %q", got)
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/", nil)
+	req.RemoteAddr = "203.0.113.10:4444"
+	if got := ClientIPFromRequest(req); got != "203.0.113.10" {
+		t.Fatalf("expected remote addr host, got %q", got)
 	}
 }

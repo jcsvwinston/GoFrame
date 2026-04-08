@@ -3,7 +3,7 @@ set -euo pipefail
 
 usage() {
   cat <<'USAGE'
-Validate stable contract freeze baselines (no removals) for CLI and config.
+Validate stable contract freeze baselines (no removals) for CLI contracts, config, and stable API symbols.
 
 Usage:
   bash scripts/ci/check_contract_freeze.sh
@@ -14,5 +14,10 @@ if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
   usage
   exit 0
 fi
+
+if [[ -z "${GOCACHE:-}" ]]; then
+  export GOCACHE="$(pwd)/.cache/go-build"
+fi
+mkdir -p "$GOCACHE"
 
 go test ./contracts -run '^TestContractFreeze_' -count=1 -v

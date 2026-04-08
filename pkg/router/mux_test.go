@@ -96,3 +96,24 @@ func TestMux_GroupRouteInheritsGroupMiddleware(t *testing.T) {
 		t.Fatalf("expected group middleware header, got %q", got)
 	}
 }
+
+func TestMux_MountExactPrefixRedirectsToCanonicalSubtree(t *testing.T) {
+	m := NewMux()
+	sub := NewMux()
+	sub.Get("/", func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+
+	m.Mount("/admin", sub)
+
+	req := httptest.NewRequest(http.MethodGet, "/admin", nil)
+	rec := httptest.NewRecorder()
+	m.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusTemporaryRedirect {
+		t.Fatalf("expected 307, got %d", rec.Code)
+	}
+	if got := rec.Header().Get("Location"); got != "/admin/" {
+		t.Fatalf("expected redirect location /admin/, got %q", got)
+	}
+}

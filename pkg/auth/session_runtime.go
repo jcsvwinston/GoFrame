@@ -2,6 +2,7 @@ package auth
 
 import (
 	"context"
+	"net"
 	"net/http"
 	"os"
 	"strings"
@@ -19,6 +20,8 @@ const (
 	SessionMetaHostKey = "__goframe_runtime_host"
 	// SessionMetaInstanceKey stores a composed runtime instance identifier.
 	SessionMetaInstanceKey = "__goframe_runtime_instance"
+	// SessionMetaRemoteIPKey stores the latest observed client IP for the session.
+	SessionMetaRemoteIPKey = "__goframe_remote_ip"
 )
 
 const defaultRuntimeMetadataInterval = 30 * time.Second
@@ -103,12 +106,46 @@ func RuntimeMetadataMiddleware(sm *SessionManager, identity SessionRuntimeIdenti
 					if identity.Instance != "" {
 						sm.Put(ctx, SessionMetaInstanceKey, identity.Instance)
 					}
+					if ip := ClientIPFromRequest(r); ip != "" {
+						sm.Put(ctx, SessionMetaRemoteIPKey, ip)
+					}
 				}
 			}
 
 			next.ServeHTTP(w, r)
 		})
 	}
+}
+
+// ClientIPFromRequest extracts the best-effort client IP from a request.
+// Priority:
+// 1) first entry in X-Forwarded-For
+// 2) X-Real-IP
+// 3) RemoteAddr host part
+func ClientIPFromRequest(r *http.Request) string {
+	if r == nil {
+		return ""
+	}
+
+	if xff := strings.TrimSpace(r.Header.Get("X-Forwarded-For")); xff != "" {
+		first := strings.TrimSpace(strings.Split(xff, ",")[0])
+		if first != "" {
+			return first
+		}
+	}
+	if xrip := strings.TrimSpace(r.Header.Get("X-Real-IP")); xrip != "" {
+		return xrip
+	}
+
+	remote := strings.TrimSpace(r.RemoteAddr)
+	if remote == "" {
+		return ""
+	}
+	host, _, err := net.SplitHostPort(remote)
+	if err == nil {
+		return strings.TrimSpace(host)
+	}
+	return remote
 }
 
 func shouldWriteRuntimeMetadata(sm *SessionManager, ctx context.Context, now time.Time, minInterval time.Duration) bool {

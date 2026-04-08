@@ -10,6 +10,13 @@ while in pre-1.0 mode (`v0.x.y`).
 
 ### Added
 
+- Unified request context helpers in `pkg/router`:
+  - `Context` wrapper for URL/query/form access, template bind/render, and typed responses (`JSON`, `XML`, `File`, `Download`)
+  - `ContextHandler` adapter for one-entrypoint handler style
+  - optional dependency injection via `router.WithSession(...)` and `router.WithTemplates(...)`
+- REST resource route helper in `pkg/router`:
+  - `Router.Resource("/users", router.ResourceHandlers{...})` for conventional CRUD route registration
+  - automatic mapping for list/create/retrieve/update/delete endpoints
 - `pkg/plugins` inventory and capability probe package to discover:
   - built-in mail providers as `mail.send` capability providers
   - generic external plugins (`goframe-plugin-<provider>`)
@@ -158,7 +165,7 @@ while in pre-1.0 mode (`v0.x.y`).
   - FK emitted as `fk:<table>.<column>`
   - index metadata emitted as `index`/`unique` (single-column) or named variants for composites.
 - New stable-contract freeze guardrails:
-  - baseline files under `contracts/baseline/` for CLI primary command names and config key patterns
+  - baseline files under `contracts/baseline/` for CLI primary command names, CLI JSON status envelope/data keys for automation-critical commands, config key patterns, and exported symbols from stable API packages
   - automated no-removal checks in `contracts/freeze_test.go`
   - CI/release integration via `scripts/ci/check_contract_freeze.sh` and required `contract-freeze` job.
 - Admin API hardening:

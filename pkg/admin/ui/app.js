@@ -27,6 +27,7 @@
 
   const state = {
     models: [],
+    runtime: {},
     currentModel: null,
     schema: null,
     page: 1,
@@ -231,6 +232,7 @@
   async function refreshModels(quiet) {
     const payload = await API.models();
     state.models = payload.models || [];
+    state.runtime = payload.runtime || {};
     els.siteTitle.textContent = payload.title || "GoFrame Admin";
     document.title = payload.title || "GoFrame Admin";
     renderModelNav();
@@ -380,9 +382,21 @@
   }
 
   function renderDashboard() {
-    const totalRecords = state.models.reduce(function (acc, model) {
-      return acc + Number(model.count || 0);
-    }, 0);
+    const runtime = state.runtime || {};
+    const totalRecords = Number(
+      runtime.records_total !== undefined
+        ? runtime.records_total
+        : state.models.reduce(function (acc, model) {
+            return acc + Number(model.count || 0);
+          }, 0),
+    );
+    const databases = Array.isArray(runtime.databases) ? runtime.databases : [];
+    const engines = Array.isArray(runtime.engines) ? runtime.engines : [];
+    const sessionsActive =
+      runtime.sessions_active === undefined || runtime.sessions_active === null
+        ? "-"
+        : String(Number(runtime.sessions_active));
+    const env = runtime.environment || "development";
 
     const cards = state.models
       .map(function (model) {
@@ -397,10 +411,33 @@
       .join("");
 
     els.app.innerHTML =
-      UI.sectionHead("Control center", `${state.models.length} models, ${totalRecords} records total`) +
+      UI.sectionHead("Control center", `${state.models.length} models, ${totalRecords} records total`, env) +
       `
+        <section class="detail-grid dashboard-metric-grid">
+          ${UI.kv("Configured databases", String(databases.length))}
+          ${UI.kv("Database engines", engines.length ? String(engines.length) : "-")}
+          ${UI.kv("Active sessions", sessionsActive)}
+          ${UI.kv("Runtime env", env)}
+        </section>
+
+        <section class="section-block">
+          <div class="section-block-head">
+            <h3>Database runtime</h3>
+            <p>Engines: ${escapeHtml(engines.join(", ") || "n/a")}</p>
+          </div>
+          <section class="cards dashboard-db-grid">
+            ${renderRuntimeDatabaseCards(databases)}
+          </section>
+        </section>
+
+        <section class="section-block">
+          <div class="section-block-head">
+            <h3>Registered models</h3>
+            <p>Clickable shortcuts to CRUD views</p>
+          </div>
         <section class="cards">
           ${cards || UI.empty("No models registered")}
+        </section>
         </section>
       `;
 
@@ -409,6 +446,38 @@
         navigate(card.getAttribute("data-hash"));
       });
     });
+  }
+
+  function renderRuntimeDatabaseCards(databases) {
+    if (!Array.isArray(databases) || databases.length === 0) {
+      return UI.empty("No database aliases configured");
+    }
+    return databases
+      .map(function (dbInfo) {
+        const models = Array.isArray(dbInfo.models) ? dbInfo.models : [];
+        const modelChips = models
+          .slice(0, 6)
+          .map(function (name) {
+            return `<span class="status-chip">${escapeHtml(name)}</span>`;
+          })
+          .join("");
+        const extra = models.length > 6 ? `<span class="status-chip">+${models.length - 6}</span>` : "";
+        return `
+          <article class="card card-static">
+            <p class="card-label">${escapeHtml(dbInfo.alias || "default")}${dbInfo.is_default ? " (default)" : ""}</p>
+            <p class="runtime-db-engine">${escapeHtml(dbInfo.dialect || dbInfo.engine || "unknown")}</p>
+            <div class="runtime-db-meta">
+              <span class="status-chip">Engine: ${escapeHtml(dbInfo.engine || "sql")}</span>
+              <span class="status-chip">Models: ${Number(dbInfo.model_count || models.length)}</span>
+            </div>
+            <div class="runtime-db-models">
+              ${modelChips || `<span class="status-chip">No models</span>`}
+              ${extra}
+            </div>
+          </article>
+        `;
+      })
+      .join("");
   }
 
   async function renderSessionsOverview() {
@@ -445,6 +514,9 @@
             ${UI.kv("Active (last 5m)", String(Number(payload.active_last_5m || 0)))}
             ${UI.kv("Active (last hour)", String(Number(payload.active_last_hour || 0)))}
             ${UI.kv("Store", payload.store || "memory")}
+            ${UI.kv("Runtime", payload.source_runtime || "-")}
+            ${UI.kv("Environment", payload.source_env || "-")}
+            ${UI.kv("Source instance", payload.source_instance || "-")}
             ${UI.kv("Source pod", payload.source_pod || "-")}
             ${UI.kv("Source host", payload.source_host || "-")}
           </section>
@@ -469,6 +541,7 @@
                   <th>User</th>
                   <th>Pod</th>
                   <th>Host</th>
+                  <th>IP</th>
                   <th>Last seen</th>
                   <th>Idle (s)</th>
                   <th>Expires</th>
@@ -559,7 +632,7 @@
 
   function renderSessionRows(rows) {
     if (!Array.isArray(rows) || rows.length === 0) {
-      return `<tr><td class="table-empty" colspan="7">No active sessions</td></tr>`;
+      return `<tr><td class="table-empty" colspan="8">No active sessions</td></tr>`;
     }
 
     return rows
@@ -572,6 +645,7 @@
             <td>${escapeHtml(row.user || "-")}</td>
             <td>${escapeHtml(runtimePod)}</td>
             <td>${escapeHtml(runtimeHost)}</td>
+            <td>${escapeHtml(row.remote_ip || "-")}</td>
             <td>${escapeHtml(formatTemporal(row.last_seen_at || ""))}</td>
             <td>${row.idle_seconds === undefined || row.idle_seconds === null ? "-" : escapeHtml(String(row.idle_seconds))}</td>
             <td>${escapeHtml(formatTemporal(row.expires_at || ""))}</td>

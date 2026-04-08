@@ -1,0 +1,212 @@
+package router
+
+import (
+	"encoding/json"
+	"encoding/xml"
+	"html/template"
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+
+	"github.com/jcsvwinston/GoFrame/pkg/auth"
+)
+
+func TestContextHandler_UnifiedAccess(t *testing.T) {
+	mux := NewMux()
+	mux.Post("/users/{id}", ContextHandler(func(c *Context) {
+		_ = c.JSON(http.StatusOK, map[string]string{
+			"id":         c.Param("id"),
+			"tenant":     c.Query("tenant"),
+			"title":      c.Form("title"),
+			"value_id":   c.Value("id"),
+			"value_ten":  c.Value("tenant"),
+			"value_form": c.Value("title"),
+		})
+	}))
+
+	req := httptest.NewRequest(http.MethodPost, "/users/42?tenant=acme", strings.NewReader("title=hello"))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", rec.Code)
+	}
+
+	var payload map[string]string
+	if err := json.NewDecoder(rec.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode payload: %v", err)
+	}
+
+	if payload["id"] != "42" {
+		t.Fatalf("expected id=42, got %q", payload["id"])
+	}
+	if payload["tenant"] != "acme" {
+		t.Fatalf("expected tenant=acme, got %q", payload["tenant"])
+	}
+	if payload["title"] != "hello" {
+		t.Fatalf("expected title=hello, got %q", payload["title"])
+	}
+	if payload["value_id"] != "42" || payload["value_ten"] != "acme" || payload["value_form"] != "hello" {
+		t.Fatalf("unexpected unified value resolution: %+v", payload)
+	}
+}
+
+func TestContext_HTMLWithBindings(t *testing.T) {
+	tpl := template.Must(template.New("page.html").Parse(`{{define "page.html"}}{{.Title}}|{{.ID}}|{{.State}}{{end}}`))
+
+	mux := NewMux()
+	mux.Get("/", ContextHandler(func(c *Context) {
+		c.Set("Title", "Dashboard")
+		c.BindData(map[string]interface{}{"State": "ok"})
+		if err := c.HTML(http.StatusCreated, "page.html", map[string]interface{}{"ID": 7}); err != nil {
+			t.Fatalf("render html: %v", err)
+		}
+	}, WithTemplates(tpl)))
+
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("expected status 201, got %d", rec.Code)
+	}
+	if ct := rec.Header().Get("Content-Type"); ct != "text/html; charset=utf-8" {
+		t.Fatalf("unexpected content type: %s", ct)
+	}
+	if body := strings.TrimSpace(rec.Body.String()); body != "Dashboard|7|ok" {
+		t.Fatalf("unexpected body: %q", body)
+	}
+}
+
+func TestContext_XML(t *testing.T) {
+	type payload struct {
+		XMLName xml.Name `xml:"health"`
+		Status  string   `xml:"status"`
+	}
+
+	mux := NewMux()
+	mux.Get("/xml", ContextHandler(func(c *Context) {
+		if err := c.XML(http.StatusOK, payload{Status: "ok"}); err != nil {
+			t.Fatalf("write xml: %v", err)
+		}
+	}))
+
+	req := httptest.NewRequest(http.MethodGet, "/xml", nil)
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", rec.Code)
+	}
+	if !strings.Contains(rec.Header().Get("Content-Type"), "application/xml") {
+		t.Fatalf("unexpected content type: %s", rec.Header().Get("Content-Type"))
+	}
+	if body := rec.Body.String(); !strings.Contains(body, "<status>ok</status>") {
+		t.Fatalf("unexpected xml body: %s", body)
+	}
+}
+
+func TestContext_Download(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "report.txt")
+	if err := os.WriteFile(path, []byte("report-content"), 0644); err != nil {
+		t.Fatalf("write temp file: %v", err)
+	}
+
+	mux := NewMux()
+	mux.Get("/download", ContextHandler(func(c *Context) {
+		if err := c.Download(path, "export.txt"); err != nil {
+			t.Fatalf("download file: %v", err)
+		}
+	}))
+
+	req := httptest.NewRequest(http.MethodGet, "/download", nil)
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", rec.Code)
+	}
+	if cd := rec.Header().Get("Content-Disposition"); !strings.Contains(cd, "attachment;") || !strings.Contains(cd, `filename="export.txt"`) {
+		t.Fatalf("unexpected content disposition: %s", cd)
+	}
+	if body := rec.Body.String(); body != "report-content" {
+		t.Fatalf("unexpected download body: %q", body)
+	}
+}
+
+func TestContext_SessionHelpers(t *testing.T) {
+	sessionManager := auth.NewSessionManager(auth.SessionConfig{})
+	opts := []ContextOption{WithSession(sessionManager)}
+
+	mux := NewMux()
+	mux.Use(sessionManager.Middleware())
+
+	mux.Get("/set", ContextHandler(func(c *Context) {
+		if err := c.SessionPutString("name", "alice"); err != nil {
+			t.Fatalf("session put: %v", err)
+		}
+		if err := c.NoContent(); err != nil {
+			t.Fatalf("no content: %v", err)
+		}
+	}, opts...))
+
+	mux.Get("/get", ContextHandler(func(c *Context) {
+		_ = c.JSON(http.StatusOK, map[string]string{
+			"name": c.SessionGetString("name"),
+		})
+	}, opts...))
+
+	setReq := httptest.NewRequest(http.MethodGet, "/set", nil)
+	setRec := httptest.NewRecorder()
+	mux.ServeHTTP(setRec, setReq)
+
+	if setRec.Code != http.StatusNoContent {
+		t.Fatalf("expected status 204, got %d", setRec.Code)
+	}
+
+	var sessionCookie *http.Cookie
+	for _, c := range setRec.Result().Cookies() {
+		if c.Name == sessionManager.SCS().Cookie.Name {
+			sessionCookie = c
+			break
+		}
+	}
+	if sessionCookie == nil {
+		t.Fatal("expected session cookie after /set")
+	}
+
+	getReq := httptest.NewRequest(http.MethodGet, "/get", nil)
+	getReq.AddCookie(sessionCookie)
+	getRec := httptest.NewRecorder()
+	mux.ServeHTTP(getRec, getReq)
+
+	if getRec.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", getRec.Code)
+	}
+
+	var payload map[string]string
+	if err := json.NewDecoder(getRec.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode payload: %v", err)
+	}
+	if payload["name"] != "alice" {
+		t.Fatalf("expected session value alice, got %q", payload["name"])
+	}
+}
+
+func TestContextHandler_NilHandler(t *testing.T) {
+	mux := NewMux()
+	mux.Get("/", ContextHandler(nil))
+
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("expected status 500, got %d", rec.Code)
+	}
+}

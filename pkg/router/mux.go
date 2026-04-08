@@ -204,9 +204,13 @@ func (m *Mux) Mount(pattern string, handler http.Handler) {
 	// Register subtree handler (with trailing slash).
 	m.mux.Handle(cleanPattern+"/", mounted)
 
-	// Also register exact match without trailing slash so that /admin is
-	// handled by the mounted sub-handler.
-	m.mux.Handle(cleanPattern, mounted)
+	// Register exact match without trailing slash and redirect to canonical
+	// subtree path ("/admin" -> "/admin/").
+	var exact http.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, cleanPattern+"/", http.StatusTemporaryRedirect)
+	})
+	exact = m.applyGroupMiddlewares(exact)
+	m.mux.Handle(cleanPattern, exact)
 
 	m.mu.Lock()
 	m.routes = append(m.routes, RouteEntry{

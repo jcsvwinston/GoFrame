@@ -53,6 +53,12 @@ bash scripts/ci/run_compatibility_harness.sh --enforce-threshold
 bash scripts/ci/check_contract_freeze.sh
 ```
 
+Validated baselines:
+- CLI primary command names
+- CLI JSON command-status envelope/data keys (automation paths)
+- Config key patterns
+- Exported symbols from stable API packages
+
 ## PostgreSQL required profile
 
 ```bash
