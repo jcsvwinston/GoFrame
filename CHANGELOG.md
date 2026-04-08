@@ -53,6 +53,7 @@ while in pre-1.0 mode (`v0.x.y`).
   - `GET /admin/api/live/ws` for non-blocking WebSocket event stream
   - bounded request ring buffer + in-memory session tracker + non-blocking subscriber drop policy
   - new `/admin#/live` view wired to snapshot + live stream
+  - live SQL sniffer from framework CRUD operations (`operation`, `query`, redacted `args`, `duration_ms`, `trace_id`) emitted to snapshot and WebSocket stream
 - Admin system pulse snapshot foundation:
   - `GET /admin/api/system/snapshot` for Go runtime + DB pool + startup environment telemetry
   - startup environment viewer with mandatory masking for `KEY|SECRET|PASSWORD|TOKEN`

@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/jcsvwinston/GoFrame/pkg/auth"
+	"github.com/jcsvwinston/GoFrame/pkg/model"
 	"github.com/jcsvwinston/GoFrame/pkg/observe"
 	"github.com/jcsvwinston/GoFrame/pkg/router"
 	"golang.org/x/net/websocket"
@@ -20,16 +21,19 @@ import (
 
 const (
 	defaultLiveRequestBufferSize = 256
+	defaultLiveSQLBufferSize     = 256
 	defaultLiveSubscriberBuffer  = 128
 	defaultLiveSessionTTL        = 30 * time.Minute
 	defaultLiveListLimit         = 50
 	maxLiveListLimit             = 1000
+	maxLiveSQLArgs               = 16
 )
 
 type liveTrafficObservedKey struct{}
 
 type liveRuntime struct {
 	requests *requestRingBuffer
+	sql      *sqlQueryRingBuffer
 	bus      *liveEventBus
 	sessions *liveSessionStore
 }
@@ -39,9 +43,11 @@ type liveSnapshotResponse struct {
 	GeneratedAt   string                 `json:"generated_at"`
 	Limit         int                    `json:"limit"`
 	Requests      []liveRequestEvent     `json:"requests"`
+	Queries       []liveSQLEvent         `json:"queries"`
 	Sessions      []liveSessionActivity  `json:"sessions"`
 	Stream        liveStreamStats        `json:"stream"`
 	RequestBuffer liveRequestBufferStats `json:"request_buffer"`
+	SQLBuffer     liveRequestBufferStats `json:"sql_buffer"`
 }
 
 type liveRequestBufferStats struct {
@@ -80,16 +86,38 @@ type liveSessionActivity struct {
 	TraceID      string `json:"trace_id,omitempty"`
 }
 
+type liveSQLEvent struct {
+	Timestamp  string   `json:"timestamp"`
+	ModelName  string   `json:"model_name,omitempty"`
+	Operation  string   `json:"operation"`
+	Query      string   `json:"query"`
+	Args       []string `json:"args,omitempty"`
+	DurationMS int64    `json:"duration_ms"`
+	Error      string   `json:"error,omitempty"`
+	RequestID  string   `json:"request_id,omitempty"`
+	TraceID    string   `json:"trace_id,omitempty"`
+	UserID     string   `json:"user_id,omitempty"`
+}
+
 type liveEventEnvelope struct {
 	Type      string               `json:"type"`
 	Timestamp string               `json:"timestamp"`
 	Request   *liveRequestEvent    `json:"request,omitempty"`
 	Session   *liveSessionActivity `json:"session,omitempty"`
+	SQL       *liveSQLEvent        `json:"sql,omitempty"`
 }
 
 type requestRingBuffer struct {
 	mu       sync.RWMutex
 	events   []liveRequestEvent
+	head     int
+	size     int
+	capacity int
+}
+
+type sqlQueryRingBuffer struct {
+	mu       sync.RWMutex
+	events   []liveSQLEvent
 	head     int
 	size     int
 	capacity int
@@ -113,6 +141,7 @@ type liveSessionStore struct {
 func newLiveRuntime() *liveRuntime {
 	return &liveRuntime{
 		requests: newRequestRingBuffer(defaultLiveRequestBufferSize),
+		sql:      newSQLQueryRingBuffer(defaultLiveSQLBufferSize),
 		bus:      newLiveEventBus(defaultLiveSubscriberBuffer),
 		sessions: newLiveSessionStore(defaultLiveSessionTTL),
 	}
@@ -124,6 +153,16 @@ func newRequestRingBuffer(capacity int) *requestRingBuffer {
 	}
 	return &requestRingBuffer{
 		events:   make([]liveRequestEvent, capacity),
+		capacity: capacity,
+	}
+}
+
+func newSQLQueryRingBuffer(capacity int) *sqlQueryRingBuffer {
+	if capacity <= 0 {
+		capacity = defaultLiveSQLBufferSize
+	}
+	return &sqlQueryRingBuffer{
+		events:   make([]liveSQLEvent, capacity),
 		capacity: capacity,
 	}
 }
@@ -159,6 +198,45 @@ func (rb *requestRingBuffer) latest(limit int) []liveRequestEvent {
 }
 
 func (rb *requestRingBuffer) stats() liveRequestBufferStats {
+	rb.mu.RLock()
+	defer rb.mu.RUnlock()
+	return liveRequestBufferStats{
+		Capacity: rb.capacity,
+		Stored:   rb.size,
+	}
+}
+
+func (rb *sqlQueryRingBuffer) push(event liveSQLEvent) {
+	rb.mu.Lock()
+	defer rb.mu.Unlock()
+
+	rb.events[rb.head] = event
+	rb.head = (rb.head + 1) % rb.capacity
+	if rb.size < rb.capacity {
+		rb.size++
+	}
+}
+
+func (rb *sqlQueryRingBuffer) latest(limit int) []liveSQLEvent {
+	rb.mu.RLock()
+	defer rb.mu.RUnlock()
+
+	if rb.size == 0 || limit <= 0 {
+		return []liveSQLEvent{}
+	}
+	if limit > rb.size {
+		limit = rb.size
+	}
+
+	out := make([]liveSQLEvent, 0, limit)
+	for i := 0; i < limit; i++ {
+		idx := (rb.head - 1 - i + rb.capacity) % rb.capacity
+		out = append(out, rb.events[idx])
+	}
+	return out
+}
+
+func (rb *sqlQueryRingBuffer) stats() liveRequestBufferStats {
 	rb.mu.RLock()
 	defer rb.mu.RUnlock()
 	return liveRequestBufferStats{
@@ -372,6 +450,83 @@ func (p *Panel) recordLiveRequest(r *http.Request, status int, duration time.Dur
 	p.recordLiveSessionActivity(r, now, event.TraceID)
 }
 
+func (p *Panel) onModelSQLQuery(ctx context.Context, queryEvent model.SQLQueryEvent) {
+	if p == nil || p.live == nil {
+		return
+	}
+	now := time.Now().UTC()
+	event := liveSQLEvent{
+		Timestamp:  now.Format(time.RFC3339),
+		ModelName:  strings.TrimSpace(queryEvent.ModelName),
+		Operation:  truncateText(strings.TrimSpace(queryEvent.Operation), 64),
+		Query:      truncateText(compactSQL(queryEvent.Query), 640),
+		Args:       sanitizeLiveSQLArgs(queryEvent.Args),
+		DurationMS: queryEvent.Duration.Milliseconds(),
+		RequestID:  strings.TrimSpace(observe.RequestIDFromCtx(ctx)),
+		TraceID:    strings.TrimSpace(observe.TraceIDFromCtx(ctx)),
+		UserID:     strings.TrimSpace(observe.UserIDFromCtx(ctx)),
+	}
+	if queryEvent.Error != nil {
+		event.Error = truncateText(queryEvent.Error.Error(), 220)
+	}
+	p.live.sql.push(event)
+	p.live.bus.publish(liveEventEnvelope{
+		Type:      "db.query",
+		Timestamp: event.Timestamp,
+		SQL:       &event,
+	})
+}
+
+func compactSQL(query string) string {
+	if strings.TrimSpace(query) == "" {
+		return ""
+	}
+	parts := strings.Fields(query)
+	return strings.Join(parts, " ")
+}
+
+func sanitizeLiveSQLArgs(args []interface{}) []string {
+	if len(args) == 0 {
+		return []string{}
+	}
+	limit := len(args)
+	if limit > maxLiveSQLArgs {
+		limit = maxLiveSQLArgs
+	}
+	out := make([]string, 0, limit+1)
+	for _, arg := range args[:limit] {
+		out = append(out, sanitizeLiveSQLArg(arg))
+	}
+	if len(args) > limit {
+		out = append(out, fmt.Sprintf("...(+%d more)", len(args)-limit))
+	}
+	return out
+}
+
+func sanitizeLiveSQLArg(arg interface{}) string {
+	switch v := arg.(type) {
+	case nil:
+		return "null"
+	case bool:
+		if v {
+			return "bool:true"
+		}
+		return "bool:false"
+	case int, int8, int16, int32, int64,
+		uint, uint8, uint16, uint32, uint64,
+		float32, float64:
+		return fmt.Sprintf("%v", v)
+	case time.Time:
+		return "time:" + v.UTC().Format(time.RFC3339)
+	case []byte:
+		return fmt.Sprintf("bytes(%d):***", len(v))
+	case string:
+		return fmt.Sprintf("string(%d):***", len(v))
+	default:
+		return "<redacted>"
+	}
+}
+
 func (p *Panel) recordLiveSessionActivity(r *http.Request, now time.Time, traceID string) {
 	if p == nil || p.live == nil || r == nil {
 		return
@@ -519,6 +674,7 @@ func (p *Panel) handleLiveSnapshot(w http.ResponseWriter, r *http.Request) {
 		GeneratedAt: now.Format(time.RFC3339),
 		Limit:       limit,
 		Requests:    []liveRequestEvent{},
+		Queries:     []liveSQLEvent{},
 		Sessions:    []liveSessionActivity{},
 	}
 	if p == nil || p.live == nil {
@@ -527,9 +683,11 @@ func (p *Panel) handleLiveSnapshot(w http.ResponseWriter, r *http.Request) {
 	}
 
 	resp.Requests = p.live.requests.latest(limit)
+	resp.Queries = p.live.sql.latest(limit)
 	resp.Sessions = p.live.sessions.snapshot(limit)
 	resp.Stream = p.live.bus.stats()
 	resp.RequestBuffer = p.live.requests.stats()
+	resp.SQLBuffer = p.live.sql.stats()
 	writeJSON(w, http.StatusOK, resp)
 }
 

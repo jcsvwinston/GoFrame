@@ -628,8 +628,10 @@
       const payload = await API.liveSnapshot(80);
       const stream = payload.stream || {};
       const requests = Array.isArray(payload.requests) ? payload.requests : [];
+      const queries = Array.isArray(payload.queries) ? payload.queries : [];
       const sessions = Array.isArray(payload.sessions) ? payload.sessions : [];
       const buffer = payload.request_buffer || {};
+      const sqlBuffer = payload.sql_buffer || {};
 
       els.app.innerHTML =
         UI.sectionHead("Live runtime", "In-memory request/session inspector", liveStreamConnected ? "Stream connected" : "Stream offline") +
@@ -639,6 +641,7 @@
             ${UI.kv("Published events", String(Number(stream.published || 0)))}
             ${UI.kv("Dropped events", String(Number(stream.dropped || 0)))}
             ${UI.kv("Buffered requests", `${Number(buffer.stored || requests.length)}/${Number(buffer.capacity || requests.length)}`)}
+            ${UI.kv("Buffered SQL queries", `${Number(sqlBuffer.stored || queries.length)}/${Number(sqlBuffer.capacity || queries.length)}`)}
             ${UI.kv("Tracked sessions", String(sessions.length))}
             ${UI.kv("Generated", formatTemporal(payload.generated_at))}
           </section>
@@ -673,6 +676,31 @@
                 </thead>
                 <tbody>
                   ${renderLiveRequestRows(requests)}
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+          <section class="section-block">
+            <div class="section-block-head">
+              <h3>Live SQL sniffer</h3>
+              <p>Non-persistent SQL ring buffer</p>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Time</th>
+                    <th>Model</th>
+                    <th>Operation</th>
+                    <th>Duration (ms)</th>
+                    <th>Args</th>
+                    <th>Trace</th>
+                    <th>Query</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${renderLiveSQLRows(queries)}
                 </tbody>
               </table>
             </div>
@@ -985,6 +1013,8 @@
         let summary = "-";
         if (event.request && event.request.path) {
           summary = `${escapeHtml(event.request.method || "")} ${escapeHtml(event.request.path || "")} · ${escapeHtml(String(event.request.status || ""))}`;
+        } else if (event.sql && event.sql.query) {
+          summary = `${escapeHtml(event.sql.operation || "query")} · ${escapeHtml(shortenSQL(event.sql.query || ""))}`;
         } else if (event.session && event.session.last_route) {
           summary = `${escapeHtml(event.session.user_id || "-")} · ${escapeHtml(event.session.last_route || "")}`;
         }
@@ -1046,12 +1076,45 @@
       .join("");
   }
 
+  function renderLiveSQLRows(rows) {
+    if (!Array.isArray(rows) || rows.length === 0) {
+      return `<tr><td class="table-empty" colspan="7">No recent SQL queries</td></tr>`;
+    }
+    return rows
+      .map(function (row) {
+        const args = Array.isArray(row.args) && row.args.length > 0 ? row.args.join(", ") : "-";
+        return `
+          <tr>
+            <td>${escapeHtml(formatTemporal(row.timestamp || ""))}</td>
+            <td>${escapeHtml(row.model_name || "-")}</td>
+            <td>${escapeHtml(row.operation || "-")}</td>
+            <td>${escapeHtml(String(row.duration_ms || 0))}</td>
+            <td>${escapeHtml(args)}</td>
+            <td>${escapeHtml(shortenTrace(row.trace_id || ""))}</td>
+            <td title="${escapeHtml(row.query || "")}">
+              ${escapeHtml(shortenSQL(row.query || ""))}
+              ${row.error ? `<div class="status-chip">error: ${escapeHtml(row.error)}</div>` : ""}
+            </td>
+          </tr>
+        `;
+      })
+      .join("");
+  }
+
   function shortenTrace(value) {
     const text = String(value || "").trim();
     if (text.length <= 12) {
       return text || "-";
     }
     return text.slice(0, 12) + "...";
+  }
+
+  function shortenSQL(value) {
+    const text = String(value || "").trim();
+    if (text.length <= 120) {
+      return text || "-";
+    }
+    return text.slice(0, 120) + "...";
   }
 
   function renderSessionChartCard(title, subtitle, points) {

@@ -446,6 +446,7 @@ Configuration:
   - telemetry windows (real-time, last hour, current day)
 - live runtime inspector dashboard:
   - in-memory recent HTTP request ring buffer
+  - in-memory recent SQL query ring buffer (operation, query, redacted args, duration, trace)
   - in-memory active session tracker (`last_route`, `ip`, `user_agent`, `trace_id`)
   - non-blocking WebSocket stream for live admin telemetry events
 - system pulse dashboard:

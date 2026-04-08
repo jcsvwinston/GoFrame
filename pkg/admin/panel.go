@@ -114,6 +114,7 @@ func (p *Panel) getCRUD(meta *model.ModelMeta) (model.CRUDOperator, error) {
 		return nil, fmt.Errorf("admin.getCRUD model=%s: %w", meta.Name, err)
 	}
 	c := model.NewCRUD(sqlDB, meta, p.bus)
+	c.SetSQLQueryObserver(p.onModelSQLQuery)
 
 	p.cruds[meta.Name] = c
 	return c, nil

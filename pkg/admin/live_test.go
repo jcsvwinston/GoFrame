@@ -1,6 +1,7 @@
 package admin
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -8,6 +9,7 @@ import (
 	"time"
 
 	"github.com/jcsvwinston/GoFrame/pkg/db"
+	"github.com/jcsvwinston/GoFrame/pkg/model"
 	"github.com/jcsvwinston/GoFrame/pkg/observe"
 )
 
@@ -123,6 +125,13 @@ func TestPanelLiveSnapshotEndpoint(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/health?password=secret", nil)
 	req = req.WithContext(observe.CtxWithRequestID(req.Context(), "req-2"))
 	panel.recordLiveRequest(req, http.StatusOK, 12*time.Millisecond)
+	panel.onModelSQLQuery(observe.CtxWithTraceID(context.Background(), "trace-2"), model.SQLQueryEvent{
+		ModelName: "AdminUser",
+		Operation: "select.list",
+		Query:     "SELECT id, email FROM admin_users WHERE email = ? LIMIT ?",
+		Args:      []interface{}{"admin@example.com", 25},
+		Duration:  9 * time.Millisecond,
+	})
 
 	h := panel.Handler()
 	rr := httptest.NewRecorder()
@@ -142,8 +151,50 @@ func TestPanelLiveSnapshotEndpoint(t *testing.T) {
 	if len(payload.Requests) == 0 {
 		t.Fatalf("expected at least one request event")
 	}
+	if len(payload.Queries) == 0 {
+		t.Fatalf("expected at least one sql query event")
+	}
+	if payload.SQLBuffer.Stored == 0 {
+		t.Fatalf("expected sql buffer to store events")
+	}
+	if len(payload.Queries[0].Args) == 0 || payload.Queries[0].Args[0] != "string(17):***" {
+		t.Fatalf("expected redacted string sql args, got %#v", payload.Queries[0].Args)
+	}
 	if payload.Stream.Published == 0 {
 		t.Fatalf("expected published events > 0")
+	}
+}
+
+func TestPanelOnModelSQLQueryPublishesEvent(t *testing.T) {
+	panel, cleanup := setupPanelForTest(t, db.EngineSQL)
+	defer cleanup()
+
+	busCh, unsubscribe := panel.live.bus.subscribe()
+	defer unsubscribe()
+
+	ctx := observe.CtxWithRequestID(context.Background(), "req-sql-1")
+	ctx = observe.CtxWithTraceID(ctx, "trace-sql-1")
+	panel.onModelSQLQuery(ctx, model.SQLQueryEvent{
+		ModelName: "AdminUser",
+		Operation: "update",
+		Query:     "UPDATE admin_users SET name = ? WHERE id = ?",
+		Args:      []interface{}{"Alice", 7},
+		Duration:  7 * time.Millisecond,
+	})
+
+	select {
+	case event := <-busCh:
+		if event.Type != "db.query" {
+			t.Fatalf("expected db.query event type, got %q", event.Type)
+		}
+		if event.SQL == nil || event.SQL.TraceID != "trace-sql-1" {
+			t.Fatalf("expected sql event with trace id, got %#v", event.SQL)
+		}
+		if len(event.SQL.Args) == 0 || event.SQL.Args[0] != "string(5):***" {
+			t.Fatalf("expected first arg redacted, got %#v", event.SQL.Args)
+		}
+	case <-time.After(500 * time.Millisecond):
+		t.Fatal("expected sql live event on bus")
 	}
 }
 

@@ -38,15 +38,37 @@ type PaginatedResult struct {
 // It uses reflection to create model instances dynamically so the admin panel can
 // operate on any registered model without compile-time type knowledge.
 type CRUD struct {
-	db   *sql.DB
-	meta *ModelMeta
-	bus  *signals.Bus
+	db          *sql.DB
+	meta        *ModelMeta
+	bus         *signals.Bus
+	sqlObserver SQLQueryObserver
 }
+
+// SQLQueryEvent represents one SQL operation executed by CRUD.
+// Values in Args are raw runtime arguments from the query execution call site.
+type SQLQueryEvent struct {
+	ModelName string
+	Operation string
+	Query     string
+	Args      []interface{}
+	Duration  time.Duration
+	Error     error
+}
+
+// SQLQueryObserver receives SQLQueryEvent notifications emitted by CRUD operations.
+// It is optional and disabled by default.
+type SQLQueryObserver func(ctx context.Context, event SQLQueryEvent)
 
 // NewCRUD creates a CRUD operator for the given model metadata.
 // The signals bus is optional (pass nil to disable signal emission).
 func NewCRUD(db *sql.DB, meta *ModelMeta, bus *signals.Bus) *CRUD {
 	return &CRUD{db: db, meta: meta, bus: bus}
+}
+
+// SetSQLQueryObserver registers a SQL observer for this CRUD instance.
+// Passing nil disables SQL observation.
+func (c *CRUD) SetSQLQueryObserver(observer SQLQueryObserver) {
+	c.sqlObserver = observer
 }
 
 // FindAll retrieves a paginated, searchable, filterable list of records.
@@ -69,8 +91,24 @@ func (c *CRUD) FindAll(ctx context.Context, opts QueryOpts) (*PaginatedResult, e
 	}
 
 	var total int64
-	if err := c.db.QueryRowContext(ctx, countSQL, whereArgs...).Scan(&total); err != nil {
+	countRows, err := c.queryContext(ctx, "select.count", countSQL, whereArgs...)
+	if err != nil {
 		return nil, fmt.Errorf("model.CRUD.FindAll count model=%s: %w", c.meta.Name, err)
+	}
+	if !countRows.Next() {
+		_ = countRows.Close()
+		return nil, fmt.Errorf("model.CRUD.FindAll count model=%s: no rows returned", c.meta.Name)
+	}
+	if err := countRows.Scan(&total); err != nil {
+		_ = countRows.Close()
+		return nil, fmt.Errorf("model.CRUD.FindAll count model=%s scan: %w", c.meta.Name, err)
+	}
+	if err := countRows.Err(); err != nil {
+		_ = countRows.Close()
+		return nil, fmt.Errorf("model.CRUD.FindAll count model=%s rows: %w", c.meta.Name, err)
+	}
+	if err := countRows.Close(); err != nil {
+		return nil, fmt.Errorf("model.CRUD.FindAll count model=%s close: %w", c.meta.Name, err)
 	}
 
 	columns := c.selectedColumns(opts.Fields)
@@ -97,7 +135,7 @@ func (c *CRUD) FindAll(ctx context.Context, opts QueryOpts) (*PaginatedResult, e
 	args = append(args, whereArgs...)
 	args = append(args, opts.PageSize, offset)
 
-	rows, err := c.db.QueryContext(ctx, querySQL, args...)
+	rows, err := c.queryContext(ctx, "select.list", querySQL, args...)
 	if err != nil {
 		return nil, fmt.Errorf("model.CRUD.FindAll model=%s query: %w", c.meta.Name, err)
 	}
@@ -135,7 +173,7 @@ func (c *CRUD) FindByID(ctx context.Context, id interface{}) (interface{}, error
 	}
 	querySQL += " LIMIT 1"
 
-	rows, err := c.db.QueryContext(ctx, querySQL, args...)
+	rows, err := c.queryContext(ctx, "select.one", querySQL, args...)
 	if err != nil {
 		return nil, fmt.Errorf("model.CRUD.FindByID model=%s id=%v query: %w", c.meta.Name, id, err)
 	}
@@ -184,7 +222,7 @@ func (c *CRUD) Create(ctx context.Context, entity interface{}) error {
 		placeholders(len(columns)),
 	)
 
-	res, err := c.db.ExecContext(ctx, querySQL, args...)
+	res, err := c.execContext(ctx, "insert", querySQL, args...)
 	if err != nil {
 		return fmt.Errorf("model.CRUD.Create model=%s: %w", c.meta.Name, err)
 	}
@@ -247,7 +285,7 @@ func (c *CRUD) Update(ctx context.Context, id interface{}, updates map[string]in
 		querySQL += " AND deleted_at IS NULL"
 	}
 
-	res, err := c.db.ExecContext(ctx, querySQL, args...)
+	res, err := c.execContext(ctx, "update", querySQL, args...)
 	if err != nil {
 		return fmt.Errorf("model.CRUD.Update model=%s id=%v: %w", c.meta.Name, id, err)
 	}
@@ -301,7 +339,11 @@ func (c *CRUD) Delete(ctx context.Context, id interface{}) error {
 		args = []interface{}{id}
 	}
 
-	res, err := c.db.ExecContext(ctx, querySQL, args...)
+	op := "delete"
+	if c.hasDeletedAt() {
+		op = "soft_delete"
+	}
+	res, err := c.execContext(ctx, op, querySQL, args...)
 	if err != nil {
 		return fmt.Errorf("model.CRUD.Delete model=%s id=%v: %w", c.meta.Name, id, err)
 	}
@@ -591,6 +633,38 @@ func placeholders(n int) string {
 		parts[i] = "?"
 	}
 	return strings.Join(parts, ", ")
+}
+
+func (c *CRUD) execContext(ctx context.Context, operation, query string, args ...interface{}) (sql.Result, error) {
+	started := time.Now()
+	res, err := c.db.ExecContext(ctx, query, args...)
+	c.observeSQL(ctx, operation, query, args, started, err)
+	return res, err
+}
+
+func (c *CRUD) queryContext(ctx context.Context, operation, query string, args ...interface{}) (*sql.Rows, error) {
+	started := time.Now()
+	rows, err := c.db.QueryContext(ctx, query, args...)
+	c.observeSQL(ctx, operation, query, args, started, err)
+	return rows, err
+}
+
+func (c *CRUD) observeSQL(ctx context.Context, operation, query string, args []interface{}, started time.Time, err error) {
+	if c == nil || c.sqlObserver == nil {
+		return
+	}
+	argsCopy := make([]interface{}, len(args))
+	copy(argsCopy, args)
+
+	event := SQLQueryEvent{
+		ModelName: c.meta.Name,
+		Operation: strings.TrimSpace(operation),
+		Query:     query,
+		Args:      argsCopy,
+		Duration:  time.Since(started),
+		Error:     err,
+	}
+	c.sqlObserver(ctx, event)
 }
 
 func dedupeStrings(in []string) []string {
