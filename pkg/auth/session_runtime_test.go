@@ -24,6 +24,32 @@ func TestDetectSessionRuntimeIdentity(t *testing.T) {
 	}
 }
 
+func TestDetectSessionRuntimeIdentity_StandaloneDoesNotUseHostnameAsPod(t *testing.T) {
+	t.Setenv("POD_NAME", "")
+	t.Setenv("K8S_POD_NAME", "")
+	t.Setenv("POD", "")
+	t.Setenv("POD_NAMESPACE", "")
+	t.Setenv("NODE_NAME", "")
+	t.Setenv("K8S_NODE_NAME", "")
+	t.Setenv("POD_NODE_NAME", "")
+	t.Setenv("HOST_NODE_NAME", "")
+	t.Setenv("KUBERNETES_SERVICE_HOST", "")
+	t.Setenv("KUBERNETES_PORT", "")
+	t.Setenv("HOSTNAME", "dev-host-01")
+	t.Setenv("GOFRAME_INSTANCE_ID", "")
+
+	identity := DetectSessionRuntimeIdentity()
+	if identity.Pod != "" {
+		t.Fatalf("expected empty pod in standalone runtime, got %q", identity.Pod)
+	}
+	if identity.Host == "" {
+		t.Fatal("expected non-empty host in standalone runtime")
+	}
+	if identity.Instance == "" {
+		t.Fatal("expected non-empty instance in standalone runtime")
+	}
+}
+
 func TestRuntimeMetadataMiddleware_UpdatesExistingSession(t *testing.T) {
 	sm := NewSessionManager(SessionConfig{
 		Lifetime: time.Hour,

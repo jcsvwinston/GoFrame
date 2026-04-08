@@ -242,6 +242,21 @@ func TestAppNew_UnsupportedSessionStore(t *testing.T) {
 	}
 }
 
+func TestAppNew_AdminClusterEnabledRequiresRedisURL(t *testing.T) {
+	cfg := testAppConfig()
+	cfg.AdminClusterEnabled = true
+	cfg.RedisURL = ""
+	cfg.AdminClusterRedisURL = ""
+
+	_, err := New(cfg)
+	if err == nil {
+		t.Fatal("expected admin cluster redis configuration error")
+	}
+	if !strings.Contains(err.Error(), "admin live cluster enabled but redis url is empty") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
 func TestAppNew_SQLSessionStorePersistsAcrossRequests(t *testing.T) {
 	cfg := testAppConfig()
 	cfg.SessionStore = "sql"

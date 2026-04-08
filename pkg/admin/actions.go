@@ -24,7 +24,13 @@ func (p *Panel) handleExportCSV(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	crud, err := p.getCRUD(meta)
+	databaseAlias, err := p.requestDatabaseAlias(r)
+	if err != nil {
+		writeErr(w, gferrors.BadRequest(err.Error()))
+		return
+	}
+
+	crud, err := p.getCRUD(meta, databaseAlias)
 	if err != nil {
 		writeErr(w, err)
 		return

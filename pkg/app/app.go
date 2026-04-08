@@ -129,18 +129,36 @@ func New(cfg *Config) (*App, error) {
 	if sessionStoreLabel == "" {
 		sessionStoreLabel = "memory"
 	}
+	adminClusterRedisURL := strings.TrimSpace(effective.AdminClusterRedisURL)
+	if adminClusterRedisURL == "" {
+		adminClusterRedisURL = strings.TrimSpace(effective.RedisURL)
+	}
 	adminPanel := admin.NewPanel(dbConn, reg, logger, admin.PanelConfig{
-		Prefix:          effective.AdminPrefix,
-		Title:           effective.AdminTitle,
-		Environment:     effective.Env,
-		RedisURL:        effective.RedisURL,
-		Databases:       buildAdminDatabaseRuntimeInfo(effective, dbs, defaultAlias),
-		DatabaseHandles: dbs,
-		Auth:            admin.NewDatabaseAdminAuth(sqlDB, sessionManager, effective.AdminPrefix),
-		Session:         sessionManager,
-		SessionStore:    sessionStoreLabel,
-		SessionRuntime:  sessionRuntimeIdentity,
+		Prefix:              effective.AdminPrefix,
+		Title:               effective.AdminTitle,
+		Environment:         effective.Env,
+		RedisURL:            effective.RedisURL,
+		LiveExcludePatterns: append([]string(nil), effective.AdminLiveExcludePatterns...),
+		LiveClusterEnabled:  effective.AdminClusterEnabled,
+		LiveClusterRedisURL: adminClusterRedisURL,
+		LiveClusterChannel:  effective.AdminClusterChannel,
+		LiveClusterNodeID:   effective.AdminClusterNodeID,
+		LiveClusterToken:    effective.AdminClusterToken,
+		Databases:           buildAdminDatabaseRuntimeInfo(effective, dbs, defaultAlias),
+		DatabaseHandles:     dbs,
+		Auth:                admin.NewDatabaseAdminAuth(sqlDB, sessionManager, effective.AdminPrefix),
+		Session:             sessionManager,
+		SessionStore:        sessionStoreLabel,
+		SessionRuntime:      sessionRuntimeIdentity,
 	})
+	if err := adminPanel.EnableLiveClusterRelay(); err != nil {
+		if sessionStoreShutdown != nil {
+			_ = sessionStoreShutdown(context.Background())
+		}
+		_ = closeDatabases(dbs)
+		_ = telemetryShutdown(context.Background())
+		return nil, wrapOp("New admin live cluster", err)
+	}
 	r.Use(adminPanel.LiveTrafficMiddleware())
 
 	a := &App{
@@ -167,6 +185,9 @@ func New(cfg *Config) (*App, error) {
 	if sessionStoreShutdown != nil {
 		a.OnShutdown(sessionStoreShutdown)
 	}
+	a.OnShutdown(func(ctx context.Context) error {
+		return a.Admin.Close(ctx)
+	})
 
 	if err := a.MountAdmin(); err != nil {
 		_ = a.Shutdown(context.Background())
@@ -387,6 +408,9 @@ func mergeDefaults(cfg *Config) *Config {
 	}
 	if merged.AdminTitle == "" {
 		merged.AdminTitle = base.AdminTitle
+	}
+	if merged.AdminClusterChannel == "" {
+		merged.AdminClusterChannel = base.AdminClusterChannel
 	}
 	if merged.MailDriver == "" {
 		merged.MailDriver = base.MailDriver

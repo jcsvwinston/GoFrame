@@ -36,10 +36,16 @@ type SessionRuntimeIdentity struct {
 // DetectSessionRuntimeIdentity infers pod and host identifiers from common
 // Kubernetes/runtime environment variables.
 func DetectSessionRuntimeIdentity() SessionRuntimeIdentity {
+	kubernetes := isLikelyKubernetesRuntime()
+
 	pod := firstNonEmpty(
 		os.Getenv("POD_NAME"),
-		os.Getenv("HOSTNAME"),
+		os.Getenv("K8S_POD_NAME"),
+		os.Getenv("POD"),
 	)
+	if pod == "" && kubernetes {
+		pod = strings.TrimSpace(os.Getenv("HOSTNAME"))
+	}
 
 	host := firstNonEmpty(
 		os.Getenv("NODE_NAME"),
@@ -47,11 +53,18 @@ func DetectSessionRuntimeIdentity() SessionRuntimeIdentity {
 		os.Getenv("POD_NODE_NAME"),
 		os.Getenv("HOST_NODE_NAME"),
 	)
+	if host == "" && !kubernetes {
+		host = strings.TrimSpace(os.Getenv("HOSTNAME"))
+	}
 	if host == "" {
 		resolved, err := os.Hostname()
 		if err == nil {
 			host = strings.TrimSpace(resolved)
 		}
+	}
+	if kubernetes && pod != "" && host == pod {
+		// Avoid misleading duplicate pod/host values when node identity is unavailable.
+		host = ""
 	}
 
 	instance := strings.TrimSpace(os.Getenv("GOFRAME_INSTANCE_ID"))
@@ -71,6 +84,18 @@ func DetectSessionRuntimeIdentity() SessionRuntimeIdentity {
 		Host:     host,
 		Instance: instance,
 	}
+}
+
+func isLikelyKubernetesRuntime() bool {
+	return firstNonEmpty(
+		os.Getenv("KUBERNETES_SERVICE_HOST"),
+		os.Getenv("KUBERNETES_PORT"),
+		os.Getenv("POD_NAME"),
+		os.Getenv("POD_NAMESPACE"),
+		os.Getenv("NODE_NAME"),
+		os.Getenv("K8S_NODE_NAME"),
+		os.Getenv("K8S_POD_NAME"),
+	) != ""
 }
 
 // RuntimeMetadataMiddleware updates runtime metadata fields in existing sessions

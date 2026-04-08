@@ -2,9 +2,11 @@ package admin
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/url"
+	"path"
 	"sort"
 	"strconv"
 	"strings"
@@ -13,6 +15,7 @@ import (
 	"time"
 
 	"github.com/jcsvwinston/GoFrame/pkg/auth"
+	gferrors "github.com/jcsvwinston/GoFrame/pkg/errors"
 	"github.com/jcsvwinston/GoFrame/pkg/model"
 	"github.com/jcsvwinston/GoFrame/pkg/observe"
 	"github.com/jcsvwinston/GoFrame/pkg/router"
@@ -39,15 +42,21 @@ type liveRuntime struct {
 }
 
 type liveSnapshotResponse struct {
-	Enabled       bool                   `json:"enabled"`
-	GeneratedAt   string                 `json:"generated_at"`
-	Limit         int                    `json:"limit"`
-	Requests      []liveRequestEvent     `json:"requests"`
-	Queries       []liveSQLEvent         `json:"queries"`
-	Sessions      []liveSessionActivity  `json:"sessions"`
-	Stream        liveStreamStats        `json:"stream"`
-	RequestBuffer liveRequestBufferStats `json:"request_buffer"`
-	SQLBuffer     liveRequestBufferStats `json:"sql_buffer"`
+	Enabled         bool                   `json:"enabled"`
+	GeneratedAt     string                 `json:"generated_at"`
+	Limit           int                    `json:"limit"`
+	NodeFilter      string                 `json:"node_filter,omitempty"`
+	RequestLimit    int                    `json:"request_limit"`
+	SQLLimit        int                    `json:"sql_limit"`
+	SessionLimit    int                    `json:"session_limit"`
+	ExcludePatterns []string               `json:"exclude_patterns"`
+	Requests        []liveRequestEvent     `json:"requests"`
+	Queries         []liveSQLEvent         `json:"queries"`
+	Sessions        []liveSessionActivity  `json:"sessions"`
+	Stream          liveStreamStats        `json:"stream"`
+	RequestBuffer   liveRequestBufferStats `json:"request_buffer"`
+	SQLBuffer       liveRequestBufferStats `json:"sql_buffer"`
+	Cluster         liveClusterSnapshot    `json:"cluster"`
 }
 
 type liveRequestBufferStats struct {
@@ -62,6 +71,7 @@ type liveStreamStats struct {
 }
 
 type liveRequestEvent struct {
+	NodeID         string `json:"node_id,omitempty"`
 	Timestamp      string `json:"timestamp"`
 	Method         string `json:"method"`
 	Path           string `json:"path"`
@@ -76,6 +86,7 @@ type liveRequestEvent struct {
 }
 
 type liveSessionActivity struct {
+	NodeID       string `json:"node_id,omitempty"`
 	SessionToken string `json:"session_token,omitempty"`
 	TokenShort   string `json:"token_short"`
 	UserID       string `json:"user_id,omitempty"`
@@ -87,6 +98,7 @@ type liveSessionActivity struct {
 }
 
 type liveSQLEvent struct {
+	NodeID     string   `json:"node_id,omitempty"`
 	Timestamp  string   `json:"timestamp"`
 	ModelName  string   `json:"model_name,omitempty"`
 	Operation  string   `json:"operation"`
@@ -100,11 +112,24 @@ type liveSQLEvent struct {
 }
 
 type liveEventEnvelope struct {
+	NodeID    string               `json:"node_id,omitempty"`
 	Type      string               `json:"type"`
 	Timestamp string               `json:"timestamp"`
 	Request   *liveRequestEvent    `json:"request,omitempty"`
 	Session   *liveSessionActivity `json:"session,omitempty"`
 	SQL       *liveSQLEvent        `json:"sql,omitempty"`
+}
+
+type liveClusterSnapshot struct {
+	Enabled   bool   `json:"enabled"`
+	Connected bool   `json:"connected"`
+	NodeID    string `json:"node_id,omitempty"`
+	Channel   string `json:"channel,omitempty"`
+	Reason    string `json:"reason,omitempty"`
+	Published uint64 `json:"published"`
+	Dropped   uint64 `json:"dropped"`
+	Received  uint64 `json:"received"`
+	Ignored   uint64 `json:"ignored"`
 }
 
 type requestRingBuffer struct {
@@ -193,6 +218,37 @@ func (rb *requestRingBuffer) latest(limit int) []liveRequestEvent {
 	for i := 0; i < limit; i++ {
 		idx := (rb.head - 1 - i + rb.capacity) % rb.capacity
 		out = append(out, rb.events[idx])
+	}
+	return out
+}
+
+func (rb *requestRingBuffer) latestFiltered(limit int, patterns []string) []liveRequestEvent {
+	return rb.latestFilteredByNode(limit, patterns, "")
+}
+
+func (rb *requestRingBuffer) latestFilteredByNode(limit int, patterns []string, nodeID string) []liveRequestEvent {
+	rb.mu.RLock()
+	defer rb.mu.RUnlock()
+
+	if rb.size == 0 || limit <= 0 {
+		return []liveRequestEvent{}
+	}
+	if limit > rb.size {
+		limit = rb.size
+	}
+
+	targetNode := strings.TrimSpace(nodeID)
+	out := make([]liveRequestEvent, 0, limit)
+	for i := 0; i < rb.size && len(out) < limit; i++ {
+		idx := (rb.head - 1 - i + rb.capacity) % rb.capacity
+		row := rb.events[idx]
+		if shouldExcludeLivePath(row.Path, patterns) {
+			continue
+		}
+		if targetNode != "" && !strings.EqualFold(strings.TrimSpace(row.NodeID), targetNode) {
+			continue
+		}
+		out = append(out, row)
 	}
 	return out
 }
@@ -392,6 +448,10 @@ func (p *Panel) liveTrafficMiddleware(next http.Handler) http.Handler {
 			next.ServeHTTP(w, r)
 			return
 		}
+		if shouldExcludeLivePath(r.URL.Path, p.liveExcludePatterns()) {
+			next.ServeHTTP(w, r.WithContext(contextWithLiveObserved(r)))
+			return
+		}
 		if isWebSocketUpgrade(r) {
 			next.ServeHTTP(w, r.WithContext(contextWithLiveObserved(r)))
 			return
@@ -428,6 +488,7 @@ func (p *Panel) recordLiveRequest(r *http.Request, status int, duration time.Dur
 	now := time.Now().UTC()
 	ctx := r.Context()
 	event := liveRequestEvent{
+		NodeID:         p.liveNodeID(),
 		Timestamp:      now.Format(time.RFC3339),
 		Method:         r.Method,
 		Path:           truncateText(r.URL.Path, 240),
@@ -441,11 +502,14 @@ func (p *Panel) recordLiveRequest(r *http.Request, status int, duration time.Dur
 		PayloadPreview: livePayloadPreview(r),
 	}
 	p.live.requests.push(event)
-	p.live.bus.publish(liveEventEnvelope{
+	envelope := liveEventEnvelope{
+		NodeID:    event.NodeID,
 		Type:      "http.request",
 		Timestamp: event.Timestamp,
 		Request:   &event,
-	})
+	}
+	p.live.bus.publish(envelope)
+	p.publishLiveClusterEvent(envelope)
 
 	p.recordLiveSessionActivity(r, now, event.TraceID)
 }
@@ -456,6 +520,7 @@ func (p *Panel) onModelSQLQuery(ctx context.Context, queryEvent model.SQLQueryEv
 	}
 	now := time.Now().UTC()
 	event := liveSQLEvent{
+		NodeID:     p.liveNodeID(),
 		Timestamp:  now.Format(time.RFC3339),
 		ModelName:  strings.TrimSpace(queryEvent.ModelName),
 		Operation:  truncateText(strings.TrimSpace(queryEvent.Operation), 64),
@@ -470,11 +535,14 @@ func (p *Panel) onModelSQLQuery(ctx context.Context, queryEvent model.SQLQueryEv
 		event.Error = truncateText(queryEvent.Error.Error(), 220)
 	}
 	p.live.sql.push(event)
-	p.live.bus.publish(liveEventEnvelope{
+	envelope := liveEventEnvelope{
+		NodeID:    event.NodeID,
 		Type:      "db.query",
 		Timestamp: event.Timestamp,
 		SQL:       &event,
-	})
+	}
+	p.live.bus.publish(envelope)
+	p.publishLiveClusterEvent(envelope)
 }
 
 func compactSQL(query string) string {
@@ -538,6 +606,7 @@ func (p *Panel) recordLiveSessionActivity(r *http.Request, now time.Time, traceI
 	}
 
 	activity := liveSessionActivity{
+		NodeID:       p.liveNodeID(),
 		SessionToken: token,
 		TokenShort:   shortenToken(token),
 		UserID:       strings.TrimSpace(observe.UserIDFromCtx(r.Context())),
@@ -557,11 +626,14 @@ func (p *Panel) recordLiveSessionActivity(r *http.Request, now time.Time, traceI
 	}
 
 	p.live.sessions.upsert(key, activity)
-	p.live.bus.publish(liveEventEnvelope{
+	envelope := liveEventEnvelope{
+		NodeID:    activity.NodeID,
 		Type:      "session.activity",
 		Timestamp: activity.LastSeenAt,
 		Session:   &activity,
-	})
+	}
+	p.live.bus.publish(envelope)
+	p.publishLiveClusterEvent(envelope)
 }
 
 func liveSessionKey(sm *auth.SessionManager, ctx context.Context) (key string, token string) {
@@ -642,13 +714,21 @@ func truncateText(value string, maxLen int) string {
 }
 
 func parseLiveListLimit(r *http.Request, fallback int) int {
+	return parseLiveListLimitByKey(r, "limit", fallback)
+}
+
+func parseLiveListLimitByKey(r *http.Request, key string, fallback int) int {
 	if fallback <= 0 {
 		fallback = defaultLiveListLimit
 	}
 	if r == nil {
 		return fallback
 	}
-	raw := strings.TrimSpace(r.URL.Query().Get("limit"))
+	trimmedKey := strings.TrimSpace(key)
+	if trimmedKey == "" {
+		trimmedKey = "limit"
+	}
+	raw := strings.TrimSpace(r.URL.Query().Get(trimmedKey))
 	if raw == "" {
 		return fallback
 	}
@@ -662,33 +742,276 @@ func parseLiveListLimit(r *http.Request, fallback int) int {
 	return value
 }
 
+func normalizeLiveExcludePatterns(adminPrefix string, patterns []string) []string {
+	out := make([]string, 0, len(patterns)+1)
+	seen := map[string]struct{}{}
+
+	for _, pattern := range patterns {
+		normalized := normalizeLiveExcludePattern(pattern)
+		if normalized == "" {
+			continue
+		}
+		if _, ok := seen[normalized]; ok {
+			continue
+		}
+		seen[normalized] = struct{}{}
+		out = append(out, normalized)
+	}
+
+	if len(out) == 0 {
+		prefix := strings.TrimSpace(adminPrefix)
+		if prefix == "" {
+			prefix = "/admin"
+		}
+		out = append(out, prefix)
+	}
+	sort.Strings(out)
+	return out
+}
+
+func normalizeLiveExcludePattern(pattern string) string {
+	return strings.TrimSpace(pattern)
+}
+
+func (p *Panel) liveExcludePatterns() []string {
+	if p == nil {
+		return []string{}
+	}
+	p.liveExcludeMu.RLock()
+	defer p.liveExcludeMu.RUnlock()
+
+	out := make([]string, len(p.liveExcludes))
+	copy(out, p.liveExcludes)
+	return out
+}
+
+func (p *Panel) addLiveExcludePattern(pattern string) ([]string, error) {
+	if p == nil {
+		return nil, fmt.Errorf("admin panel not initialized")
+	}
+	normalized := normalizeLiveExcludePattern(pattern)
+	if normalized == "" {
+		return nil, fmt.Errorf("pattern is required")
+	}
+	if len(normalized) > 240 {
+		return nil, fmt.Errorf("pattern exceeds 240 characters")
+	}
+
+	p.liveExcludeMu.Lock()
+	defer p.liveExcludeMu.Unlock()
+	for _, item := range p.liveExcludes {
+		if item == normalized {
+			out := make([]string, len(p.liveExcludes))
+			copy(out, p.liveExcludes)
+			return out, nil
+		}
+	}
+	p.liveExcludes = append(p.liveExcludes, normalized)
+	sort.Strings(p.liveExcludes)
+
+	out := make([]string, len(p.liveExcludes))
+	copy(out, p.liveExcludes)
+	return out, nil
+}
+
+func (p *Panel) removeLiveExcludePattern(pattern string) ([]string, error) {
+	if p == nil {
+		return nil, fmt.Errorf("admin panel not initialized")
+	}
+	normalized := normalizeLiveExcludePattern(pattern)
+	if normalized == "" {
+		return nil, fmt.Errorf("pattern is required")
+	}
+
+	p.liveExcludeMu.Lock()
+	defer p.liveExcludeMu.Unlock()
+	idx := -1
+	for i, item := range p.liveExcludes {
+		if item == normalized {
+			idx = i
+			break
+		}
+	}
+	if idx < 0 {
+		return nil, fmt.Errorf("pattern %q not found", normalized)
+	}
+	p.liveExcludes = append(p.liveExcludes[:idx], p.liveExcludes[idx+1:]...)
+	out := make([]string, len(p.liveExcludes))
+	copy(out, p.liveExcludes)
+	return out, nil
+}
+
+func shouldExcludeLivePath(requestPath string, patterns []string) bool {
+	pathValue := strings.TrimSpace(requestPath)
+	if pathValue == "" {
+		return false
+	}
+	for _, pattern := range patterns {
+		pattern = strings.TrimSpace(pattern)
+		if pattern == "" {
+			continue
+		}
+		if pattern == "*" {
+			return true
+		}
+		if strings.HasSuffix(pattern, "/*") {
+			prefix := strings.TrimSuffix(pattern, "/*")
+			if prefix == "" || prefix == "/" {
+				return true
+			}
+			if pathValue == prefix || strings.HasPrefix(pathValue, prefix+"/") {
+				return true
+			}
+		}
+		if strings.Contains(pattern, "*") || strings.Contains(pattern, "?") {
+			if matched, _ := path.Match(pattern, pathValue); matched {
+				return true
+			}
+			continue
+		}
+
+		trimmed := strings.TrimRight(pattern, "/")
+		if trimmed == "" {
+			trimmed = pattern
+		}
+		if pathValue == pattern || pathValue == trimmed || strings.HasPrefix(pathValue, trimmed+"/") {
+			return true
+		}
+	}
+	return false
+}
+
 func (p *Panel) handleLiveSnapshot(w http.ResponseWriter, r *http.Request) {
 	if !p.authorizeAction(w, r, "*", "live_traffic") {
 		return
 	}
 	now := time.Now().UTC()
 	limit := parseLiveListLimit(r, defaultLiveListLimit)
+	nodeFilter := strings.TrimSpace(r.URL.Query().Get("node"))
+	requestLimit := parseLiveListLimitByKey(r, "requests_limit", limit)
+	sqlLimit := parseLiveListLimitByKey(r, "sql_limit", limit)
+	sessionLimit := parseLiveListLimitByKey(r, "sessions_limit", limit)
 
 	resp := liveSnapshotResponse{
-		Enabled:     p != nil && p.live != nil,
-		GeneratedAt: now.Format(time.RFC3339),
-		Limit:       limit,
-		Requests:    []liveRequestEvent{},
-		Queries:     []liveSQLEvent{},
-		Sessions:    []liveSessionActivity{},
+		Enabled:         p != nil && p.live != nil,
+		GeneratedAt:     now.Format(time.RFC3339),
+		Limit:           limit,
+		NodeFilter:      nodeFilter,
+		RequestLimit:    requestLimit,
+		SQLLimit:        sqlLimit,
+		SessionLimit:    sessionLimit,
+		ExcludePatterns: []string{},
+		Requests:        []liveRequestEvent{},
+		Queries:         []liveSQLEvent{},
+		Sessions:        []liveSessionActivity{},
+		Cluster:         p.liveClusterSnapshot(),
 	}
 	if p == nil || p.live == nil {
 		writeJSON(w, http.StatusOK, resp)
 		return
 	}
 
-	resp.Requests = p.live.requests.latest(limit)
-	resp.Queries = p.live.sql.latest(limit)
-	resp.Sessions = p.live.sessions.snapshot(limit)
+	resp.ExcludePatterns = p.liveExcludePatterns()
+	resp.Requests = p.live.requests.latestFilteredByNode(requestLimit, resp.ExcludePatterns, nodeFilter)
+	resp.Queries = filterLiveSQLByNode(p.live.sql.latest(sqlLimit), nodeFilter, sqlLimit)
+	resp.Sessions = filterLiveSessionsByNode(p.live.sessions.snapshot(sessionLimit), nodeFilter, sessionLimit)
 	resp.Stream = p.live.bus.stats()
 	resp.RequestBuffer = p.live.requests.stats()
 	resp.SQLBuffer = p.live.sql.stats()
 	writeJSON(w, http.StatusOK, resp)
+}
+
+func filterLiveSQLByNode(rows []liveSQLEvent, nodeID string, limit int) []liveSQLEvent {
+	if len(rows) == 0 || limit <= 0 {
+		return []liveSQLEvent{}
+	}
+	targetNode := strings.TrimSpace(nodeID)
+	if targetNode == "" {
+		return rows
+	}
+	out := make([]liveSQLEvent, 0, len(rows))
+	for _, row := range rows {
+		if !strings.EqualFold(strings.TrimSpace(row.NodeID), targetNode) {
+			continue
+		}
+		out = append(out, row)
+		if len(out) >= limit {
+			break
+		}
+	}
+	return out
+}
+
+func filterLiveSessionsByNode(rows []liveSessionActivity, nodeID string, limit int) []liveSessionActivity {
+	if len(rows) == 0 || limit <= 0 {
+		return []liveSessionActivity{}
+	}
+	targetNode := strings.TrimSpace(nodeID)
+	if targetNode == "" {
+		return rows
+	}
+	out := make([]liveSessionActivity, 0, len(rows))
+	for _, row := range rows {
+		if !strings.EqualFold(strings.TrimSpace(row.NodeID), targetNode) {
+			continue
+		}
+		out = append(out, row)
+		if len(out) >= limit {
+			break
+		}
+	}
+	return out
+}
+
+func (p *Panel) handleListLiveExcludePatterns(w http.ResponseWriter, r *http.Request) {
+	if !p.authorizeAction(w, r, "*", "live_traffic") {
+		return
+	}
+	patterns := p.liveExcludePatterns()
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"patterns": patterns,
+		"count":    len(patterns),
+	})
+}
+
+func (p *Panel) handleAddLiveExcludePattern(w http.ResponseWriter, r *http.Request) {
+	if !p.authorizeAction(w, r, "*", "live_traffic") {
+		return
+	}
+	var payload struct {
+		Pattern string `json:"pattern"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+		writeErr(w, gferrors.BadRequest("invalid JSON"))
+		return
+	}
+	patterns, err := p.addLiveExcludePattern(payload.Pattern)
+	if err != nil {
+		writeErr(w, gferrors.BadRequest(err.Error()))
+		return
+	}
+	writeJSON(w, http.StatusCreated, map[string]interface{}{
+		"updated":  true,
+		"patterns": patterns,
+		"count":    len(patterns),
+	})
+}
+
+func (p *Panel) handleDeleteLiveExcludePattern(w http.ResponseWriter, r *http.Request) {
+	if !p.authorizeAction(w, r, "*", "live_traffic") {
+		return
+	}
+	pattern := strings.TrimSpace(r.URL.Query().Get("pattern"))
+	patterns, err := p.removeLiveExcludePattern(pattern)
+	if err != nil {
+		writeErr(w, gferrors.BadRequest(err.Error()))
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"updated":  true,
+		"patterns": patterns,
+		"count":    len(patterns),
+	})
 }
 
 func (p *Panel) handleLiveWS(w http.ResponseWriter, r *http.Request) {

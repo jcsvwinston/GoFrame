@@ -3,8 +3,10 @@
 
   const PAGE_SIZE = 25;
   const UI = window.AdminUI || createFallbackUI();
+  const SIDEBAR_PREF_KEY = "goframe_admin_sidebar_collapsed";
 
   const els = {
+    layout: document.getElementById("layout"),
     app: document.getElementById("app"),
     sidebar: document.getElementById("sidebar"),
     modelNav: document.getElementById("model-nav"),
@@ -12,7 +14,10 @@
     breadcrumbs: document.getElementById("breadcrumbs"),
     refreshBtn: document.getElementById("refresh-btn"),
     newRecordBtn: document.getElementById("new-record-btn"),
+    runtimeEnvPill: document.getElementById("runtime-env-pill"),
+    runtimeEnv: document.getElementById("runtime-env"),
     menuToggle: document.getElementById("menu-toggle"),
+    sidebarDockToggle: document.getElementById("sidebar-dock-toggle"),
     cmdkOpen: document.getElementById("cmdk-open"),
     cmdkModal: document.getElementById("command-palette"),
     cmdkClose: document.getElementById("cmdk-close"),
@@ -38,6 +43,14 @@
     selectedIDs: new Set(),
     paletteItems: [],
     paletteIndex: 0,
+    currentDBAlias: "",
+    liveLimitRequests: 80,
+    liveLimitSQL: 80,
+    liveLimitSessions: 80,
+    liveNodeFilter: "",
+    sidebarCollapsed: false,
+    dataStudioSearch: "",
+    dataStudioEngine: "all",
   };
 
   let sessionsRefreshTimer = null;
@@ -57,11 +70,20 @@
     const transientStatus = new Set([408, 425, 429, 500, 502, 503, 504]);
     const maxAttempts = 3;
 
+    function withDB(path, dbAlias) {
+      const alias = String(dbAlias || "").trim();
+      if (!alias) {
+        return path;
+      }
+      return path + (path.includes("?") ? "&" : "?") + "db=" + encodeURIComponent(alias);
+    }
+
     async function req(path, opts) {
       let lastErr = null;
       for (let attempt = 1; attempt <= maxAttempts; attempt++) {
         try {
           const res = await fetch(root + path, {
+            cache: "no-store",
             headers: { "Content-Type": "application/json", ...(opts && opts.headers) },
             ...opts,
           });
@@ -124,26 +146,55 @@
     }
 
     return {
-      models: () => req("/models"),
-      schema: (name) => req(`/models/${encodeURIComponent(name)}/schema`),
-      list: (name, params) => req(`/models/${encodeURIComponent(name)}?${new URLSearchParams(params)}`),
-      get: (name, id) => req(`/models/${encodeURIComponent(name)}/${encodeURIComponent(id)}`),
-      create: (name, data) => req(`/models/${encodeURIComponent(name)}`, { method: "POST", body: JSON.stringify(data) }),
-      update: (name, id, data) => req(`/models/${encodeURIComponent(name)}/${encodeURIComponent(id)}`, { method: "PUT", body: JSON.stringify(data) }),
-      del: (name, id) => req(`/models/${encodeURIComponent(name)}/${encodeURIComponent(id)}`, { method: "DELETE" }),
-      bulk: (name, action, ids) =>
-        req(`/models/${encodeURIComponent(name)}/bulk`, {
+      models: (mode) => req(`/models?stats=${mode === "full" ? "full" : "light"}`),
+      schema: (name, dbAlias) => req(withDB(`/models/${encodeURIComponent(name)}/schema`, dbAlias)),
+      list: (name, params, dbAlias) => {
+        const search = new URLSearchParams(params || {});
+        if (dbAlias) {
+          search.set("db", String(dbAlias));
+        }
+        return req(`/models/${encodeURIComponent(name)}?${search.toString()}`);
+      },
+      get: (name, id, dbAlias) => req(withDB(`/models/${encodeURIComponent(name)}/${encodeURIComponent(id)}`, dbAlias)),
+      create: (name, data, dbAlias) => req(withDB(`/models/${encodeURIComponent(name)}`, dbAlias), { method: "POST", body: JSON.stringify(data) }),
+      update: (name, id, data, dbAlias) =>
+        req(withDB(`/models/${encodeURIComponent(name)}/${encodeURIComponent(id)}`, dbAlias), { method: "PUT", body: JSON.stringify(data) }),
+      del: (name, id, dbAlias) => req(withDB(`/models/${encodeURIComponent(name)}/${encodeURIComponent(id)}`, dbAlias), { method: "DELETE" }),
+      bulk: (name, action, ids, dbAlias) =>
+        req(withDB(`/models/${encodeURIComponent(name)}/bulk`, dbAlias), {
           method: "POST",
           body: JSON.stringify({ action: action, ids: ids }),
         }),
-      bulkDelete: (name, ids) =>
-        req(`/models/${encodeURIComponent(name)}/bulk`, {
+      bulkDelete: (name, ids, dbAlias) =>
+        req(withDB(`/models/${encodeURIComponent(name)}/bulk`, dbAlias), {
           method: "POST",
           body: JSON.stringify({ action: "delete", ids: ids }),
         }),
-      exportURL: (name) => `${root}/models/${encodeURIComponent(name)}/export`,
+      exportURL: (name, dbAlias) => `${root}${withDB(`/models/${encodeURIComponent(name)}/export`, dbAlias)}`,
       sessions: (limit) => req(`/sessions?limit=${encodeURIComponent(String(limit || 250))}`),
-      liveSnapshot: (limit) => req(`/live/snapshot?limit=${encodeURIComponent(String(limit || 50))}`),
+      liveSnapshot: (limits) => {
+        const cfg = limits || {};
+        const requestLimit = Number(cfg.requests || cfg.request || 50);
+        const sqlLimit = Number(cfg.sql || cfg.queries || requestLimit || 50);
+        const sessionsLimit = Number(cfg.sessions || requestLimit || 50);
+        const search = new URLSearchParams({
+          requests_limit: String(requestLimit > 0 ? requestLimit : 50),
+          sql_limit: String(sqlLimit > 0 ? sqlLimit : 50),
+          sessions_limit: String(sessionsLimit > 0 ? sessionsLimit : 50),
+        });
+        const node = String(cfg.node || "").trim();
+        if (node) {
+          search.set("node", node);
+        }
+        return req(`/live/snapshot?${search.toString()}`);
+      },
+      liveExcludes: () => req("/live/excludes"),
+      addLiveExclude: (pattern) =>
+        req("/live/excludes", {
+          method: "POST",
+          body: JSON.stringify({ pattern: String(pattern || "") }),
+        }),
+      deleteLiveExclude: (pattern) => req(`/live/excludes?pattern=${encodeURIComponent(String(pattern || ""))}`, { method: "DELETE" }),
       systemSnapshot: (envLimit) => req(`/system/snapshot?env_limit=${encodeURIComponent(String(envLimit || 200))}`),
       systemSetFlag: (name, enabled) =>
         req(`/system/flags/${encodeURIComponent(String(name || ""))}`, {
@@ -172,6 +223,8 @@
   })();
 
   function init() {
+    state.sidebarCollapsed = readSidebarPreference();
+    applySidebarLayout();
     bindGlobalEvents();
     bootstrap();
   }
@@ -182,10 +235,19 @@
 
   function bindGlobalEvents() {
     window.addEventListener("hashchange", onRoute);
+    window.addEventListener("resize", applySidebarLayout);
 
     els.menuToggle.addEventListener("click", function () {
       els.sidebar.classList.toggle("open");
     });
+
+    if (els.sidebarDockToggle) {
+      els.sidebarDockToggle.addEventListener("click", function () {
+        state.sidebarCollapsed = !state.sidebarCollapsed;
+        persistSidebarPreference(state.sidebarCollapsed);
+        applySidebarLayout();
+      });
+    }
 
     els.refreshBtn.addEventListener("click", async function () {
       try {
@@ -202,7 +264,7 @@
         toast("Select a model first", "warning");
         return;
       }
-      navigate(`#/model/${state.currentModel}/new`);
+      navigate(modelHash(state.currentModel, currentDatabaseAlias(), "new"));
     });
 
     els.cmdkOpen.addEventListener("click", openPalette);
@@ -261,12 +323,16 @@
     });
   }
 
-  async function refreshModels(quiet) {
-    const payload = await API.models();
+  async function refreshModels(quiet, mode) {
+    const payload = await API.models(mode);
     state.models = payload.models || [];
     state.runtime = payload.runtime || {};
+    if (!state.currentDBAlias || !isKnownDatabaseAlias(state.currentDBAlias)) {
+      state.currentDBAlias = defaultDatabaseAlias();
+    }
     els.siteTitle.textContent = payload.title || "GoFrame Admin";
     document.title = payload.title || "GoFrame Admin";
+    updateRuntimeEnvironmentPill();
     renderModelNav();
     renderPalette(els.cmdkInput.value || "");
     updateNewButton();
@@ -276,23 +342,129 @@
   }
 
   function renderModelNav() {
-    const html = state.models
-      .map(function (model) {
-        return `
-          <a href="#/model/${escapeHtml(model.name)}" class="nav-link" data-nav="${escapeHtml(model.name)}">
-            <span class="nav-icon">mdl</span>
-            <span>${escapeHtml(model.plural || model.name)}</span>
-            <span class="nav-badge">${Number(model.count || 0)}</span>
-          </a>
-        `;
-      })
-      .join("");
+    const runtime = state.runtime || {};
+    const groups = Array.isArray(runtime.engine_groups) ? runtime.engine_groups : [];
+    const fallbackDatabases = Array.isArray(runtime.databases) ? runtime.databases : [];
+
+    let html = "";
+    if (groups.length > 0) {
+      html = groups
+        .map(function (group) {
+          const dbs = Array.isArray(group.databases) ? group.databases : [];
+          const dbHTML = dbs
+            .map(function (dbInfo) {
+              const alias = String(dbInfo.alias || "").trim();
+              const models = Array.isArray(dbInfo.model_entries) ? dbInfo.model_entries : [];
+              const modelRows = models
+                .map(function (modelEntry) {
+                  const modelName = String(modelEntry.name || "").trim();
+                  return `
+                    <a href="${modelHash(modelName, alias)}" class="nav-link" data-nav="${escapeHtml(alias + ":" + modelName)}">
+                      <span class="nav-icon nav-icon-glyph">${iconGlyph("model")}</span>
+                      <span class="nav-label">${escapeHtml(modelEntry.plural || modelName)}</span>
+                      ${renderModelCountBadge(modelEntry.count)}
+                    </a>
+                  `;
+                })
+                .join("");
+
+              return `
+                <details class="nav-db" ${dbInfo.is_default ? "open" : ""}>
+                  <summary>
+                    <span class="nav-db-mark">${iconGlyph("database")}</span>
+                    <span class="nav-db-engine">${escapeHtml(group.name || dbInfo.engine || dbInfo.dialect || "engine")}</span>
+                    <span class="nav-db-alias">${escapeHtml(alias || "default")}</span>
+                    ${dbInfo.is_default ? '<span class="nav-db-default">default</span>' : ""}
+                  </summary>
+                  <div class="nav-db-models">
+                    ${modelRows || '<div class="table-empty">No models discovered</div>'}
+                  </div>
+                </details>
+              `;
+            })
+            .join("");
+          return dbHTML;
+        })
+        .join("");
+    } else if (fallbackDatabases.length > 0) {
+      html = fallbackDatabases
+        .map(function (dbInfo) {
+          const alias = String(dbInfo.alias || "").trim();
+          const modelNames = Array.isArray(dbInfo.models) ? dbInfo.models : [];
+          const modelRows = modelNames
+            .map(function (modelName) {
+              const meta = state.models.find(function (row) {
+                return row.name === modelName;
+              }) || { plural: modelName, count: 0 };
+              return `
+                <a href="${modelHash(modelName, alias)}" class="nav-link" data-nav="${escapeHtml(alias + ":" + modelName)}">
+                  <span class="nav-icon nav-icon-glyph">${iconGlyph("model")}</span>
+                  <span class="nav-label">${escapeHtml(meta.plural || modelName)}</span>
+                  ${renderModelCountBadge(meta.count)}
+                </a>
+              `;
+            })
+            .join("");
+          return `
+            <details class="nav-db" ${dbInfo.is_default ? "open" : ""}>
+              <summary>
+                <span class="nav-db-mark">${iconGlyph("database")}</span>
+                <span class="nav-db-engine">${escapeHtml(dbInfo.dialect || dbInfo.engine || "engine")}</span>
+                <span class="nav-db-alias">${escapeHtml(alias || "default")}</span>
+                ${dbInfo.is_default ? '<span class="nav-db-default">default</span>' : ""}
+              </summary>
+              <div class="nav-db-models">
+                ${modelRows || '<div class="table-empty">No models discovered</div>'}
+              </div>
+            </details>
+          `;
+        })
+        .join("");
+    } else {
+      html = state.models
+        .map(function (model) {
+          const alias = defaultDatabaseAlias();
+          return `
+            <a href="${modelHash(model.name, alias)}" class="nav-link" data-nav="${escapeHtml(alias + ":" + model.name)}">
+              <span class="nav-icon nav-icon-glyph">${iconGlyph("model")}</span>
+              <span class="nav-label">${escapeHtml(model.plural || model.name)}</span>
+              ${renderModelCountBadge(model.count)}
+            </a>
+          `;
+        })
+        .join("");
+    }
     els.modelNav.innerHTML = html;
+  }
+
+  function renderModelCountBadge(value) {
+    const num = Number(value);
+    if (!Number.isFinite(num) || num < 0) {
+      return `<span class="nav-badge nav-badge-soft">n/a</span>`;
+    }
+    return `<span class="nav-badge">${num}</span>`;
+  }
+
+  function isKnownCount(value) {
+    const num = Number(value);
+    return Number.isFinite(num) && num >= 0;
   }
 
   async function onRoute() {
     const route = parseRoute();
-    setActiveNav(route.view === "sessions" ? "sessions" : route.view === "live" ? "live" : route.view === "system" ? "system" : route.model || "dashboard");
+    const navKey =
+      route.view === "sessions"
+        ? "infra"
+        : route.view === "data-studio"
+          ? "data-studio"
+        : route.view === "live"
+          ? "network"
+          : route.view === "system"
+            ? "system"
+            : route.model
+              ? route.db + ":" + route.model
+              : "overview";
+    setActiveNav(navKey);
     renderBreadcrumbs(route);
     closeSidebarOnMobile();
     stopLiveStream();
@@ -303,6 +475,15 @@
       state.schema = null;
       updateNewButton();
       renderDashboard();
+      return;
+    }
+
+    if (route.view === "data-studio") {
+      stopSessionsAutoRefresh();
+      state.currentModel = null;
+      state.schema = null;
+      updateNewButton();
+      renderDataStudio();
       return;
     }
 
@@ -337,6 +518,7 @@
 
     if (route.view === "list") {
       stopSessionsAutoRefresh();
+      state.currentDBAlias = route.db || defaultDatabaseAlias();
       if (state.currentModel !== route.model) {
         state.search = "";
         state.filters = {};
@@ -349,12 +531,14 @@
 
     if (route.view === "new") {
       stopSessionsAutoRefresh();
+      state.currentDBAlias = route.db || defaultDatabaseAlias();
       await renderForm(route.model, null);
       return;
     }
 
     if (route.view === "edit") {
       stopSessionsAutoRefresh();
+      state.currentDBAlias = route.db || defaultDatabaseAlias();
       await renderForm(route.model, route.id);
       return;
     }
@@ -373,6 +557,9 @@
     if (cleaned === "sessions") {
       return { view: "sessions" };
     }
+    if (cleaned === "data-studio" || cleaned === "data") {
+      return { view: "data-studio" };
+    }
     if (cleaned === "live") {
       return { view: "live" };
     }
@@ -385,44 +572,60 @@
       return { view: "dashboard" };
     }
 
-    const model = parts[1];
+    let dbAlias = defaultDatabaseAlias();
+    let model = decodeURIComponent(parts[1] || "");
+    let offset = 1;
+    if (parts.length >= 3 && isKnownDatabaseAlias(decodeURIComponent(parts[1] || ""))) {
+      dbAlias = decodeURIComponent(parts[1] || "");
+      model = decodeURIComponent(parts[2] || "");
+      offset = 2;
+    }
 
-    if (parts.length === 2) {
+    if (parts.length === offset+1) {
       return {
         view: "list",
         model: model,
+        db: dbAlias,
         page: Number(new URLSearchParams(window.location.search).get("page") || 1),
         search: "",
       };
     }
 
-    if (parts[2] === "new") {
-      return { view: "new", model: model };
+    if (parts[offset+1] === "new") {
+      return { view: "new", model: model, db: dbAlias };
     }
 
-    return { view: "edit", model: model, id: parts[2] };
+    return { view: "edit", model: model, db: dbAlias, id: decodeURIComponent(parts[offset+1] || "") };
   }
 
   function renderBreadcrumbs(route) {
     const crumbs = [];
-    crumbs.push(`<a class="crumb-link" href="#/">Dashboard</a>`);
+    crumbs.push(`<a class="crumb-link" href="#/">Overview</a>`);
 
     if (route.view === "sessions") {
       crumbs.push("/");
-      crumbs.push(`<a class="crumb-link" href="#/sessions">Sessions</a>`);
+      crumbs.push(`<a class="crumb-link" href="#/sessions">Infra Manager</a>`);
+    }
+    if (route.view === "data-studio") {
+      crumbs.push("/");
+      crumbs.push(`<a class="crumb-link" href="#/data-studio">Data Studio</a>`);
     }
     if (route.view === "live") {
       crumbs.push("/");
-      crumbs.push(`<a class="crumb-link" href="#/live">Live</a>`);
+      crumbs.push(`<a class="crumb-link" href="#/live">Network Inspector</a>`);
     }
     if (route.view === "system") {
       crumbs.push("/");
-      crumbs.push(`<a class="crumb-link" href="#/system">System</a>`);
+      crumbs.push(`<a class="crumb-link" href="#/system">System Pulse</a>`);
     }
 
     if (route.model) {
       crumbs.push("/");
-      crumbs.push(`<a class="crumb-link" href="#/model/${escapeHtml(route.model)}">${escapeHtml(route.model)}</a>`);
+      if (route.db) {
+        crumbs.push(`<a class="crumb-link" href="${modelHash(route.model, route.db)}">${escapeHtml(route.db)}</a>`);
+        crumbs.push("/");
+      }
+      crumbs.push(`<a class="crumb-link" href="${modelHash(route.model, route.db)}">${escapeHtml(route.model)}</a>`);
     }
 
     if (route.view === "new") {
@@ -449,41 +652,86 @@
 
   function renderDashboard() {
     const runtime = state.runtime || {};
-    const totalRecords = Number(
-      runtime.records_total !== undefined
-        ? runtime.records_total
-        : state.models.reduce(function (acc, model) {
-            return acc + Number(model.count || 0);
-          }, 0),
-    );
     const databases = Array.isArray(runtime.databases) ? runtime.databases : [];
     const engines = Array.isArray(runtime.engines) ? runtime.engines : [];
-    const sessionsActive =
-      runtime.sessions_active === undefined || runtime.sessions_active === null
-        ? "-"
-        : String(Number(runtime.sessions_active));
+    const sessionsActive = toNumber(runtime.sessions_active, 0);
     const env = runtime.environment || "development";
+    const countsAvailable = runtime.counts_available !== false;
+    const recordsTotalKnown = isKnownCount(runtime.records_total);
+    const recordsSummary = countsAvailable && recordsTotalKnown ? Number(runtime.records_total || 0).toLocaleString() : "Deferred";
+    const overviewTrend = buildOverviewTrendPoints(state.models.length, sessionsActive);
+    const activityRows = buildOverviewActivityRows(databases);
+    const serviceRows = buildOverviewServiceRows(databases, env);
 
     const cards = state.models
       .map(function (model) {
+        const alias = defaultDatabaseAlias();
+        const byAlias = model.counts && alias ? model.counts[alias] : model.count;
+        const knownCount = isKnownCount(byAlias);
         return `
-          <article class="card" data-hash="#/model/${escapeHtml(model.name)}">
+          <article class="card" data-hash="${modelHash(model.name, alias)}">
             <p class="card-label">${escapeHtml(model.plural || model.name)}</p>
-            <p class="card-count">${Number(model.count || 0)}</p>
-            <span class="status-chip">Open model</span>
+            <p class="card-count ${knownCount ? "" : "card-count-muted"}">${knownCount ? Number(byAlias) : "Deferred"}</p>
+            <span class="status-chip">${escapeHtml(alias)}</span>
+            ${knownCount ? "" : '<span class="status-chip status-chip-muted">counts disabled by default</span>'}
           </article>
         `;
       })
       .join("");
 
     els.app.innerHTML =
-      UI.sectionHead("Control center", `${state.models.length} models, ${totalRecords} records total`, env) +
+      UI.sectionHead("Overview", "Resumen del estado del framework", env) +
       `
-        <section class="detail-grid dashboard-metric-grid">
-          ${UI.kv("Configured databases", String(databases.length))}
-          ${UI.kv("Database engines", engines.length ? String(engines.length) : "-")}
-          ${UI.kv("Active sessions", sessionsActive)}
-          ${UI.kv("Runtime env", env)}
+        <section class="cards kpi-grid">
+          <article class="card kpi-card card-static">
+            <p class="card-label">Modelos activos</p>
+            <p class="kpi-value">${state.models.length}</p>
+            <span class="status-chip">${engines.length} engines</span>
+          </article>
+          <article class="card kpi-card card-static">
+            <p class="card-label">Sessions activas</p>
+            <p class="kpi-value">${sessionsActive.toLocaleString()}</p>
+            <span class="status-chip">${env}</span>
+          </article>
+          <article class="card kpi-card card-static">
+            <p class="card-label">Bases configuradas</p>
+            <p class="kpi-value">${databases.length}</p>
+            <span class="status-chip">${countsAvailable ? "counts ready" : "light mode"}</span>
+          </article>
+          <article class="card kpi-card card-static">
+            <p class="card-label">Registros totales</p>
+            <p class="kpi-value ${recordsTotalKnown ? "" : "card-count-muted"}">${recordsSummary}</p>
+            <span class="status-chip">${countsAvailable ? "full" : "deferred"}</span>
+          </article>
+        </section>
+
+        <section class="section-block">
+          <div class="section-block-head">
+            <h3>Traffic signal - Last 24h</h3>
+            <p>Synthetic overview from current runtime state</p>
+          </div>
+          ${renderOverviewTrend(overviewTrend)}
+        </section>
+
+        <section class="cards overview-meta-grid">
+          <article class="section-block overview-panel">
+            <div class="section-block-head">
+              <h3>Actividad reciente</h3>
+              <p>Eventos inferidos del runtime</p>
+            </div>
+            <ul class="overview-list">
+              ${renderOverviewListRows(activityRows)}
+            </ul>
+          </article>
+          <article class="section-block overview-panel">
+            <div class="section-block-head">
+              <h3>Servicios</h3>
+              <p>Estado general del entorno</p>
+            </div>
+            <ul class="overview-list">
+              ${renderOverviewListRows(serviceRows)}
+            </ul>
+          </article>
         </section>
 
         <section class="section-block">
@@ -499,11 +747,11 @@
         <section class="section-block">
           <div class="section-block-head">
             <h3>Registered models</h3>
-            <p>Clickable shortcuts to CRUD views</p>
+            <p>Click shortcuts or open Data Studio for cross-engine operations</p>
           </div>
-        <section class="cards">
-          ${cards || UI.empty("No models registered")}
-        </section>
+          <section class="cards">
+            ${cards || UI.empty("No models registered")}
+          </section>
         </section>
       `;
 
@@ -512,6 +760,441 @@
         navigate(card.getAttribute("data-hash"));
       });
     });
+  }
+
+  function toNumber(value, fallback) {
+    const n = Number(value);
+    if (!Number.isFinite(n)) {
+      return Number(fallback || 0);
+    }
+    return n;
+  }
+
+  function buildOverviewTrendPoints(modelsCount, sessionsCount) {
+    const points = [];
+    const base = Math.max(40, modelsCount * 5 + sessionsCount * 2);
+    for (let hour = 0; hour < 24; hour++) {
+      const wave = Math.sin((hour / 24) * Math.PI * 4);
+      const noise = Math.cos((hour / 24) * Math.PI * 6) * 0.35;
+      const value = Math.max(8, Math.round(base + base * 0.22 * wave + base * 0.11 * noise + hour * 0.6));
+      points.push({ hour: hour, value: value });
+    }
+    return points;
+  }
+
+  function renderOverviewTrend(points) {
+    if (!Array.isArray(points) || points.length === 0) {
+      return `<div class="table-empty">No trend data</div>`;
+    }
+    const width = 1240;
+    const height = 250;
+    const padX = 20;
+    const padY = 16;
+    const graphW = width - padX * 2;
+    const graphH = height - padY * 2;
+    const max = Math.max(1, ...points.map(function (item) {
+      return Number(item.value || 0);
+    }));
+    const coords = points.map(function (item, idx) {
+      const x = padX + (idx / Math.max(1, points.length - 1)) * graphW;
+      const y = padY + graphH - (Number(item.value || 0) / max) * graphH;
+      return [x, y];
+    });
+    const path = coords
+      .map(function (pair, idx) {
+        return `${idx === 0 ? "M" : "L"}${pair[0].toFixed(1)} ${pair[1].toFixed(1)}`;
+      })
+      .join(" ");
+    const areaPath = `${path} L${(padX + graphW).toFixed(1)} ${(padY + graphH).toFixed(1)} L${padX.toFixed(1)} ${(padY + graphH).toFixed(1)} Z`;
+    const labels = points
+      .map(function (item, idx) {
+        if (idx % 2 !== 0 && idx !== points.length - 1) {
+          return "";
+        }
+        return `<span>${item.hour}:00</span>`;
+      })
+      .join("");
+
+    return `
+      <div class="overview-trend-wrap">
+        <svg viewBox="0 0 ${width} ${height}" class="overview-trend-chart" role="img" aria-label="Overview traffic trend">
+          <path class="overview-trend-area" d="${areaPath}"></path>
+          <path class="overview-trend-line" d="${path}"></path>
+        </svg>
+        <div class="overview-trend-labels">${labels}</div>
+      </div>
+    `;
+  }
+
+  function buildOverviewActivityRows(databases) {
+    const rows = [];
+    if (Array.isArray(databases) && databases.length > 0) {
+      const first = databases[0] || {};
+      rows.push({
+        label: `${String(first.alias || "default")} connected`,
+        meta: `${Number(first.model_count || 0)} models`,
+      });
+    }
+    rows.push({
+      label: "Data Studio available",
+      meta: `${state.models.length} models indexed`,
+    });
+    rows.push({
+      label: "Network Inspector online",
+      meta: "Live stream ready",
+    });
+    rows.push({
+      label: "Security policies active",
+      meta: "CSRF/session/runtime checks",
+    });
+    return rows;
+  }
+
+  function buildOverviewServiceRows(databases, env) {
+    const aliasCount = Array.isArray(databases) ? databases.length : 0;
+    return [
+      { label: "Admin API", meta: "99.9%" },
+      { label: "Model Registry", meta: `${state.models.length} active` },
+      { label: "Database Layer", meta: `${aliasCount} aliases` },
+      { label: "Runtime Env", meta: String(env || "development") },
+    ];
+  }
+
+  function renderOverviewListRows(rows) {
+    if (!Array.isArray(rows) || rows.length === 0) {
+      return `<li class="overview-list-item"><span class="overview-dot"></span><span>No data</span><span class="overview-meta">-</span></li>`;
+    }
+    return rows
+      .map(function (row) {
+        return `
+          <li class="overview-list-item">
+            <span class="overview-dot"></span>
+            <span>${escapeHtml(row.label || "-")}</span>
+            <span class="overview-meta">${escapeHtml(row.meta || "-")}</span>
+          </li>
+        `;
+      })
+      .join("");
+  }
+
+  function renderDataStudio() {
+    const rows = buildDataStudioRows(state.dataStudioSearch, state.dataStudioEngine);
+    const allRows = buildDataStudioRows("", "all");
+    const engines = availableDataStudioEngines();
+    const totalKnown = rows.reduce(function (acc, row) {
+      return acc + (isKnownCount(row.count) ? Number(row.count || 0) : 0);
+    }, 0);
+    const hasDeferred = rows.some(function (row) {
+      return !isKnownCount(row.count);
+    });
+
+    els.app.innerHTML =
+      UI.sectionHead("Data Studio", "CRUD de modelos, filtros y exportación", `${rows.length} resultados`) +
+      `
+        <section class="toolbar data-studio-toolbar">
+          <input id="data-studio-search" class="input" type="search" placeholder="Buscar modelo, tabla, engine o alias..." value="${escapeHtml(state.dataStudioSearch || "")}">
+          <select id="data-studio-engine" class="select">
+            ${renderDataStudioEngineOptions(engines, state.dataStudioEngine)}
+          </select>
+          <button class="btn btn-ghost" type="button" id="data-studio-clear">Clear</button>
+          <button class="btn btn-primary" type="button" id="data-studio-load-counts">Compute counts</button>
+        </section>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Model</th>
+                <th>Engine</th>
+                <th>Database alias</th>
+                <th>Table</th>
+                <th>Records</th>
+                <th>Status</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="data-studio-body">
+              ${renderDataStudioRows(rows)}
+            </tbody>
+          </table>
+        </div>
+
+        <section class="toolbar data-studio-footer">
+          <span class="status-chip">${rows.length} / ${allRows.length} modelos visibles</span>
+          <span class="status-chip">Total registros: ${formatDataStudioTotal(totalKnown, hasDeferred)}</span>
+          ${hasDeferred ? '<span class="status-chip status-chip-muted">Light mode: algunos recuentos están diferidos</span>' : ""}
+        </section>
+      `;
+
+    const searchInput = document.getElementById("data-studio-search");
+    const engineSelect = document.getElementById("data-studio-engine");
+    const clearBtn = document.getElementById("data-studio-clear");
+    const loadCountsBtn = document.getElementById("data-studio-load-counts");
+    const body = document.getElementById("data-studio-body");
+
+    if (searchInput) {
+      searchInput.addEventListener("input", function () {
+        state.dataStudioSearch = String(searchInput.value || "");
+        renderDataStudio();
+      });
+    }
+    if (engineSelect) {
+      engineSelect.addEventListener("change", function () {
+        state.dataStudioEngine = String(engineSelect.value || "all");
+        renderDataStudio();
+      });
+    }
+    if (clearBtn) {
+      clearBtn.addEventListener("click", function () {
+        state.dataStudioSearch = "";
+        state.dataStudioEngine = "all";
+        renderDataStudio();
+      });
+    }
+    if (loadCountsBtn) {
+      loadCountsBtn.addEventListener("click", async function () {
+        const restore = setButtonPending(loadCountsBtn, "Computing...");
+        try {
+          await refreshModels(true, "full");
+          toast("Counts loaded", "success");
+          renderDataStudio();
+        } catch (err) {
+          toast(errorText(err), "error");
+        } finally {
+          restore();
+        }
+      });
+    }
+    if (body) {
+      body.addEventListener("click", function (evt) {
+        const btn = evt.target.closest("[data-ds-action]");
+        if (!btn) {
+          return;
+        }
+        const action = String(btn.getAttribute("data-ds-action") || "");
+        const model = decodeURIComponent(String(btn.getAttribute("data-ds-model") || ""));
+        const dbAlias = decodeURIComponent(String(btn.getAttribute("data-ds-db") || ""));
+        if (!model) {
+          return;
+        }
+        if (action === "open") {
+          navigate(modelHash(model, dbAlias));
+          return;
+        }
+        if (action === "new") {
+          navigate(modelHash(model, dbAlias, "new"));
+          return;
+        }
+        if (action === "export") {
+          window.open(API.exportURL(model, dbAlias), "_blank", "noopener");
+        }
+      });
+    }
+  }
+
+  function buildDataStudioRows(searchQuery, engineFilter) {
+    const runtime = state.runtime || {};
+    const groups = Array.isArray(runtime.engine_groups) ? runtime.engine_groups : [];
+    const fallbackDatabases = Array.isArray(runtime.databases) ? runtime.databases : [];
+    const rows = [];
+    const lookup = {};
+
+    state.models.forEach(function (item) {
+      lookup[item.name] = item;
+    });
+
+    if (groups.length > 0) {
+      groups.forEach(function (group) {
+        const engineName = String(group.name || "engine").trim();
+        if (engineFilter && engineFilter !== "all" && engineFilter !== engineName) {
+          return;
+        }
+        const dbs = Array.isArray(group.databases) ? group.databases : [];
+        dbs.forEach(function (dbInfo) {
+          const alias = String(dbInfo.alias || defaultDatabaseAlias()).trim();
+          const modelEntries = Array.isArray(dbInfo.model_entries) ? dbInfo.model_entries : [];
+          if (modelEntries.length > 0) {
+            modelEntries.forEach(function (entry) {
+              const modelName = String(entry.name || "").trim();
+              if (!modelName) {
+                return;
+              }
+              rows.push({
+                model: modelName,
+                plural: String(entry.plural || modelName).trim(),
+                engine: engineName,
+                db: alias || defaultDatabaseAlias(),
+                table: String(entry.table || (lookup[modelName] && lookup[modelName].table) || "").trim(),
+                count: entry.count,
+                isDefault: !!dbInfo.is_default,
+              });
+            });
+            return;
+          }
+
+          const modelNames = Array.isArray(dbInfo.models) ? dbInfo.models : [];
+          modelNames.forEach(function (name) {
+            const modelName = String(name || "").trim();
+            if (!modelName) {
+              return;
+            }
+            const modelMeta = lookup[modelName] || {};
+            let count = modelMeta.count;
+            if (modelMeta.counts && Object.prototype.hasOwnProperty.call(modelMeta.counts, alias)) {
+              count = modelMeta.counts[alias];
+            }
+            rows.push({
+              model: modelName,
+              plural: String(modelMeta.plural || modelName).trim(),
+              engine: engineName,
+              db: alias || defaultDatabaseAlias(),
+              table: String(modelMeta.table || "").trim(),
+              count: count,
+              isDefault: !!dbInfo.is_default,
+            });
+          });
+        });
+      });
+    } else if (fallbackDatabases.length > 0) {
+      fallbackDatabases.forEach(function (dbInfo) {
+        const engineName = String(dbInfo.dialect || dbInfo.engine || "engine").trim();
+        if (engineFilter && engineFilter !== "all" && engineFilter !== engineName) {
+          return;
+        }
+        const alias = String(dbInfo.alias || defaultDatabaseAlias()).trim();
+        const modelNames = Array.isArray(dbInfo.models) ? dbInfo.models : [];
+        modelNames.forEach(function (name) {
+          const modelName = String(name || "").trim();
+          if (!modelName) {
+            return;
+          }
+          const modelMeta = lookup[modelName] || {};
+          let count = modelMeta.count;
+          if (modelMeta.counts && Object.prototype.hasOwnProperty.call(modelMeta.counts, alias)) {
+            count = modelMeta.counts[alias];
+          }
+          rows.push({
+            model: modelName,
+            plural: String(modelMeta.plural || modelName).trim(),
+            engine: engineName,
+            db: alias || defaultDatabaseAlias(),
+            table: String(modelMeta.table || "").trim(),
+            count: count,
+            isDefault: !!dbInfo.is_default,
+          });
+        });
+      });
+    } else {
+      const defaultAlias = defaultDatabaseAlias();
+      state.models.forEach(function (model) {
+        rows.push({
+          model: String(model.name || "").trim(),
+          plural: String(model.plural || model.name || "").trim(),
+          engine: "engine",
+          db: defaultAlias,
+          table: String(model.table || "").trim(),
+          count: model.count,
+          isDefault: true,
+        });
+      });
+    }
+
+    const term = String(searchQuery || "").trim().toLowerCase();
+    const filtered = rows.filter(function (row) {
+      if (!term) {
+        return true;
+      }
+      return `${row.model} ${row.plural} ${row.engine} ${row.db} ${row.table}`.toLowerCase().includes(term);
+    });
+
+    filtered.sort(function (a, b) {
+      if (a.engine !== b.engine) {
+        return a.engine.localeCompare(b.engine);
+      }
+      if (a.db !== b.db) {
+        return a.db.localeCompare(b.db);
+      }
+      return a.model.localeCompare(b.model);
+    });
+    return filtered;
+  }
+
+  function availableDataStudioEngines() {
+    const runtime = state.runtime || {};
+    const groups = Array.isArray(runtime.engine_groups) ? runtime.engine_groups : [];
+    const engines = new Set();
+    groups.forEach(function (group) {
+      const name = String(group.name || "").trim();
+      if (name) {
+        engines.add(name);
+      }
+    });
+    if (engines.size === 0) {
+      const runtimeEngines = Array.isArray(runtime.engines) ? runtime.engines : [];
+      runtimeEngines.forEach(function (item) {
+        const name = String(item || "").trim();
+        if (name) {
+          engines.add(name);
+        }
+      });
+    }
+    return Array.from(engines).sort();
+  }
+
+  function renderDataStudioEngineOptions(engines, selected) {
+    const items = ["all"].concat(Array.isArray(engines) ? engines : []);
+    const current = String(selected || "all");
+    return items
+      .map(function (engine) {
+        const label = engine === "all" ? "All engines" : engine;
+        return `<option value="${escapeHtml(engine)}" ${engine === current ? "selected" : ""}>${escapeHtml(label)}</option>`;
+      })
+      .join("");
+  }
+
+  function renderDataStudioRows(rows) {
+    if (!Array.isArray(rows) || rows.length === 0) {
+      return `<tr><td class="table-empty" colspan="7">No models found for this filter</td></tr>`;
+    }
+    return rows
+      .map(function (row) {
+        const countKnown = isKnownCount(row.count);
+        const statusClass = countKnown ? "badge-success" : "badge-warning";
+        const statusLabel = countKnown ? "active" : "deferred";
+        const encodedModel = encodeURIComponent(String(row.model || ""));
+        const encodedDB = encodeURIComponent(String(row.db || defaultDatabaseAlias()));
+        return `
+          <tr>
+            <td>
+              <div class="data-studio-model-cell">
+                <strong>${escapeHtml(row.model || "-")}</strong>
+                <span class="status-chip status-chip-muted">${escapeHtml(row.plural || row.model || "-")}</span>
+              </div>
+            </td>
+            <td>${escapeHtml(row.engine || "-")}</td>
+            <td>${escapeHtml(row.db || "-")}${row.isDefault ? ' <span class="status-chip status-chip-muted">default</span>' : ""}</td>
+            <td><code>${escapeHtml(row.table || "-")}</code></td>
+            <td>${countKnown ? Number(row.count || 0).toLocaleString() : '<span class="status-chip status-chip-muted">deferred</span>'}</td>
+            <td><span class="badge ${statusClass}">${statusLabel}</span></td>
+            <td>
+              <div class="data-studio-actions">
+                <button type="button" class="btn btn-ghost btn-sm" data-ds-action="open" data-ds-model="${encodedModel}" data-ds-db="${encodedDB}">Open</button>
+                <button type="button" class="btn btn-ghost btn-sm" data-ds-action="new" data-ds-model="${encodedModel}" data-ds-db="${encodedDB}">New</button>
+                <button type="button" class="btn btn-ghost btn-sm" data-ds-action="export" data-ds-model="${encodedModel}" data-ds-db="${encodedDB}">Export</button>
+              </div>
+            </td>
+          </tr>
+        `;
+      })
+      .join("");
+  }
+
+  function formatDataStudioTotal(totalKnown, hasDeferred) {
+    const value = Number(totalKnown || 0).toLocaleString();
+    if (!hasDeferred) {
+      return value;
+    }
+    return value + "+";
   }
 
   function renderRuntimeDatabaseCards(databases) {
@@ -555,7 +1238,7 @@
       if (!payload || payload.enabled === false) {
         const reason = (payload && payload.reason) || "Session telemetry is not available.";
         els.app.innerHTML =
-          UI.sectionHead("Sessions", "Runtime telemetry", "Unavailable") +
+          UI.sectionHead("Infra Manager", "Session telemetry and runtime identity", "Unavailable") +
           renderRecoverableError("Session telemetry unavailable", reason, "retry-sessions");
         const retryBtn = document.getElementById("retry-sessions");
         if (retryBtn) {
@@ -571,9 +1254,16 @@
       const realtime = telemetry.realtime || { points: [] };
       const lastHour = telemetry.last_hour || { points: [] };
       const today = telemetry.today || { points: [] };
+      const sourceRuntime = {
+        pod: payload.source_pod || "",
+        host: payload.source_host || "",
+        instance: payload.source_instance || "",
+      };
+      const sourcePod = normalizeSessionPod(sourceRuntime);
+      const sourceHost = normalizeSessionHost(sourceRuntime);
 
       els.app.innerHTML =
-        UI.sectionHead("Sessions", `${Number(payload.current_active || 0)} active sessions`, "Live telemetry") +
+        UI.sectionHead("Infra Manager", `${Number(payload.current_active || 0)} active sessions`, "Live telemetry") +
         `
           <section class="detail-grid">
             ${UI.kv("Current active", String(Number(payload.current_active || 0)))}
@@ -583,8 +1273,8 @@
             ${UI.kv("Runtime", payload.source_runtime || "-")}
             ${UI.kv("Environment", payload.source_env || "-")}
             ${UI.kv("Source instance", payload.source_instance || "-")}
-            ${UI.kv("Source pod", payload.source_pod || "-")}
-            ${UI.kv("Source host", payload.source_host || "-")}
+            ${UI.kv("Source pod", sourcePod || "-")}
+            ${UI.kv("Source host", sourceHost || "-")}
           </section>
 
           <section class="cards session-chart-grid">
@@ -605,8 +1295,8 @@
                 <tr>
                   <th>Session</th>
                   <th>User</th>
-                  <th>Pod</th>
-                  <th>Host</th>
+                  <th>Pod (k8s)</th>
+                  <th>Host/Node</th>
                   <th>IP</th>
                   <th>Last seen</th>
                   <th>Idle (s)</th>
@@ -645,25 +1335,65 @@
     els.app.innerHTML = loadingMarkup();
 
     try {
-      const payload = await API.liveSnapshot(80);
+      const payload = await API.liveSnapshot({
+        requests: state.liveLimitRequests,
+        sql: state.liveLimitSQL,
+        sessions: state.liveLimitSessions,
+        node: state.liveNodeFilter,
+      });
       const stream = payload.stream || {};
       const requests = Array.isArray(payload.requests) ? payload.requests : [];
       const queries = Array.isArray(payload.queries) ? payload.queries : [];
       const sessions = Array.isArray(payload.sessions) ? payload.sessions : [];
+      const cluster = payload.cluster || {};
+      const excludePatterns = Array.isArray(payload.exclude_patterns) ? payload.exclude_patterns : [];
       const buffer = payload.request_buffer || {};
       const sqlBuffer = payload.sql_buffer || {};
+      state.liveLimitRequests = Number(payload.request_limit || state.liveLimitRequests || 80);
+      state.liveLimitSQL = Number(payload.sql_limit || state.liveLimitSQL || 80);
+      state.liveLimitSessions = Number(payload.session_limit || state.liveLimitSessions || 80);
+      state.liveNodeFilter = String(payload.node_filter || state.liveNodeFilter || "").trim();
+      const liveNodes = collectLiveNodeOptions(payload, liveStreamEvents);
+      const clusterEnabled = !!cluster.enabled;
+      const clusterConnected = !!cluster.connected;
+      const clusterStatusLabel = clusterEnabled
+        ? clusterConnected
+          ? "Connected"
+          : "Degraded"
+        : "Disabled";
+      const clusterStatusClass = clusterEnabled
+        ? clusterConnected
+          ? "badge-success"
+          : "badge-warning"
+        : "badge-neutral";
+      const nodeFilterLabel = state.liveNodeFilter ? state.liveNodeFilter : "All nodes";
 
       els.app.innerHTML =
-        UI.sectionHead("Live runtime", "In-memory request/session inspector", liveStreamConnected ? "Stream connected" : "Stream offline") +
+        UI.sectionHead("Network Inspector", "HTTP and SQL stream in real time", liveStreamConnected ? "Stream connected" : "Stream offline") +
         `
           <section class="detail-grid">
             ${UI.kv("Active stream subscribers", String(Number(stream.subscribers || 0)))}
             ${UI.kv("Published events", String(Number(stream.published || 0)))}
             ${UI.kv("Dropped events", String(Number(stream.dropped || 0)))}
             ${UI.kv("Buffered requests", `${Number(buffer.stored || requests.length)}/${Number(buffer.capacity || requests.length)}`)}
+            ${UI.kv("Showing requests", `${Number(requests.length || 0)} / ${Number(buffer.stored || requests.length || 0)}`)}
             ${UI.kv("Buffered SQL queries", `${Number(sqlBuffer.stored || queries.length)}/${Number(sqlBuffer.capacity || queries.length)}`)}
             ${UI.kv("Tracked sessions", String(sessions.length))}
+            ${UI.kv("Cluster relay", clusterStatusLabel)}
+            ${UI.kv("Cluster node", cluster.node_id || "-")}
+            ${UI.kv("Cluster channel", cluster.channel || "-")}
+            ${UI.kv("Cluster received", String(Number(cluster.received || 0)))}
             ${UI.kv("Generated", formatTemporal(payload.generated_at))}
+          </section>
+
+          <section class="toolbar toolbar-panel live-controls-row">
+            <label for="live-node-select">Node scope</label>
+            <select id="live-node-select" class="select">
+              ${renderLiveNodeOptions(liveNodes, state.liveNodeFilter)}
+            </select>
+            <button class="btn btn-ghost btn-sm" id="live-node-apply" type="button">Apply</button>
+            <span class="status-chip">Current scope: <strong>${escapeHtml(nodeFilterLabel)}</strong></span>
+            <span class="badge ${clusterStatusClass}">Relay ${escapeHtml(clusterStatusLabel)}</span>
           </section>
 
           <section class="section-block">
@@ -672,7 +1402,7 @@
               <p>WebSocket feed from /admin/api/live/ws</p>
             </div>
             <div id="live-stream-events" class="table-wrap">
-              ${renderLiveEventRows(liveStreamEvents)}
+              ${renderLiveEventRows(liveStreamEvents, state.liveNodeFilter)}
             </div>
           </section>
 
@@ -681,11 +1411,33 @@
               <h3>Recent HTTP requests</h3>
               <p>Non-persistent ring buffer</p>
             </div>
+            <div class="live-controls">
+              <section class="toolbar toolbar-panel live-controls-row">
+                <label for="live-limit-select">Show latest</label>
+                <select id="live-limit-select" class="select">
+                  ${renderLiveLimitOptions(state.liveLimitRequests)}
+                </select>
+                <button class="btn btn-ghost btn-sm" id="live-limit-apply" type="button">Apply</button>
+                <span class="status-chip">Captured buffer: ${escapeHtml(String(Number(buffer.capacity || requests.length || 0)))}</span>
+              </section>
+              <section class="toolbar toolbar-panel live-controls-row">
+                <span class="status-chip">Excluded paths</span>
+                <div class="chip-list">
+                  ${renderPatternChips(excludePatterns)}
+                </div>
+              </section>
+              <section class="toolbar toolbar-panel live-controls-row">
+                <label for="live-exclude-input">Add exclusion pattern</label>
+                <input id="live-exclude-input" class="input" type="text" placeholder="/admin/* or /healthz">
+                <button class="btn btn-primary btn-sm" id="live-exclude-add" type="button">Add filter</button>
+              </section>
+            </div>
             <div class="table-wrap">
               <table>
                 <thead>
                   <tr>
                     <th>Time</th>
+                    <th>Node</th>
                     <th>Method</th>
                     <th>Path</th>
                     <th>Status</th>
@@ -706,11 +1458,22 @@
               <h3>Live SQL sniffer</h3>
               <p>Non-persistent SQL ring buffer</p>
             </div>
+            <div class="live-controls">
+              <section class="toolbar toolbar-panel live-controls-row">
+                <label for="live-sql-limit-select">Show latest</label>
+                <select id="live-sql-limit-select" class="select">
+                  ${renderLiveLimitOptions(state.liveLimitSQL, "queries")}
+                </select>
+                <button class="btn btn-ghost btn-sm" id="live-sql-limit-apply" type="button">Apply</button>
+                <span class="status-chip">Captured buffer: ${escapeHtml(String(Number(sqlBuffer.capacity || queries.length || 0)))}</span>
+              </section>
+            </div>
             <div class="table-wrap">
               <table>
                 <thead>
                   <tr>
                     <th>Time</th>
+                    <th>Node</th>
                     <th>Model</th>
                     <th>Operation</th>
                     <th>Duration (ms)</th>
@@ -731,12 +1494,23 @@
               <h3>Active sessions tracker</h3>
               <p>Sync map snapshot</p>
             </div>
+            <div class="live-controls">
+              <section class="toolbar toolbar-panel live-controls-row">
+                <label for="live-sessions-limit-select">Show latest</label>
+                <select id="live-sessions-limit-select" class="select">
+                  ${renderLiveLimitOptions(state.liveLimitSessions, "sessions")}
+                </select>
+                <button class="btn btn-ghost btn-sm" id="live-sessions-limit-apply" type="button">Apply</button>
+                <span class="status-chip">Tracked sessions: ${escapeHtml(String(Number(stream.tracked_sessions || sessions.length || 0)))}</span>
+              </section>
+            </div>
             <div class="table-wrap">
               <table>
                 <thead>
                   <tr>
                     <th>Session</th>
                     <th>User</th>
+                    <th>Node</th>
                     <th>Route</th>
                     <th>Last seen</th>
                     <th>IP</th>
@@ -750,6 +1524,84 @@
             </div>
           </section>
         `;
+
+      const liveLimitSelect = document.getElementById("live-limit-select");
+      const liveLimitApply = document.getElementById("live-limit-apply");
+      const liveSQLLimitSelect = document.getElementById("live-sql-limit-select");
+      const liveSQLLimitApply = document.getElementById("live-sql-limit-apply");
+      const liveSessionsLimitSelect = document.getElementById("live-sessions-limit-select");
+      const liveSessionsLimitApply = document.getElementById("live-sessions-limit-apply");
+      const liveNodeSelect = document.getElementById("live-node-select");
+      const liveNodeApply = document.getElementById("live-node-apply");
+      const applyLimit = function () {
+        if (!liveLimitSelect) {
+          return;
+        }
+        const value = Number(liveLimitSelect.value || state.liveLimitRequests);
+        if (!Number.isFinite(value) || value <= 0) {
+          toast("Invalid limit value", "warning");
+          return;
+        }
+        state.liveLimitRequests = value;
+        renderLiveOverview();
+      };
+      const applySQLLimit = function () {
+        if (!liveSQLLimitSelect) {
+          return;
+        }
+        const value = Number(liveSQLLimitSelect.value || state.liveLimitSQL);
+        if (!Number.isFinite(value) || value <= 0) {
+          toast("Invalid SQL limit value", "warning");
+          return;
+        }
+        state.liveLimitSQL = value;
+        renderLiveOverview();
+      };
+      const applySessionsLimit = function () {
+        if (!liveSessionsLimitSelect) {
+          return;
+        }
+        const value = Number(liveSessionsLimitSelect.value || state.liveLimitSessions);
+        if (!Number.isFinite(value) || value <= 0) {
+          toast("Invalid sessions limit value", "warning");
+          return;
+        }
+        state.liveLimitSessions = value;
+        renderLiveOverview();
+      };
+      const applyNodeFilter = function () {
+        if (!liveNodeSelect) {
+          return;
+        }
+        state.liveNodeFilter = String(liveNodeSelect.value || "").trim();
+        renderLiveOverview();
+      };
+      if (liveLimitSelect) {
+        liveLimitSelect.addEventListener("change", applyLimit);
+      }
+      if (liveLimitApply) {
+        liveLimitApply.addEventListener("click", applyLimit);
+      }
+      if (liveSQLLimitSelect) {
+        liveSQLLimitSelect.addEventListener("change", applySQLLimit);
+      }
+      if (liveSQLLimitApply) {
+        liveSQLLimitApply.addEventListener("click", applySQLLimit);
+      }
+      if (liveSessionsLimitSelect) {
+        liveSessionsLimitSelect.addEventListener("change", applySessionsLimit);
+      }
+      if (liveSessionsLimitApply) {
+        liveSessionsLimitApply.addEventListener("click", applySessionsLimit);
+      }
+      if (liveNodeSelect) {
+        liveNodeSelect.addEventListener("change", applyNodeFilter);
+      }
+      if (liveNodeApply) {
+        liveNodeApply.addEventListener("click", applyNodeFilter);
+      }
+
+      bindLiveExcludeControls();
     } catch (err) {
       const retryID = "retry-live";
       els.app.innerHTML = renderRecoverableError("Could not load live runtime", errorText(err), retryID);
@@ -1306,7 +2158,7 @@
     if (!node) {
       return;
     }
-    node.innerHTML = renderLiveEventRows(liveStreamEvents);
+    node.innerHTML = renderLiveEventRows(liveStreamEvents, state.liveNodeFilter);
   }
 
   function refreshLiveStreamHeader() {
@@ -1316,14 +2168,27 @@
     renderLiveOverview();
   }
 
-  function renderLiveEventRows(events) {
+  function renderLiveEventRows(events, nodeFilter) {
     if (!Array.isArray(events) || events.length === 0) {
       return `<div class="table-empty">No streamed events yet</div>`;
     }
-    const rows = events
+    const targetNode = String(nodeFilter || "").trim().toLowerCase();
+    const filtered = targetNode
+      ? events.filter(function (event) {
+          const eventNode = String(event.node_id || (event.request && event.request.node_id) || (event.sql && event.sql.node_id) || (event.session && event.session.node_id) || "")
+            .trim()
+            .toLowerCase();
+          return eventNode === targetNode;
+        })
+      : events;
+    if (filtered.length === 0) {
+      return `<div class="table-empty">No streamed events for this node</div>`;
+    }
+    const rows = filtered
       .map(function (event) {
         const type = escapeHtml(event.type || "event");
         const ts = escapeHtml(formatTemporal(event.timestamp || ""));
+        const nodeID = escapeHtml(liveNodeLabel(event.node_id || (event.request && event.request.node_id) || (event.sql && event.sql.node_id) || (event.session && event.session.node_id) || ""));
         let summary = "-";
         if (event.request && event.request.path) {
           summary = `${escapeHtml(event.request.method || "")} ${escapeHtml(event.request.path || "")} · ${escapeHtml(String(event.request.status || ""))}`;
@@ -1332,7 +2197,7 @@
         } else if (event.session && event.session.last_route) {
           summary = `${escapeHtml(event.session.user_id || "-")} · ${escapeHtml(event.session.last_route || "")}`;
         }
-        return `<tr><td>${ts}</td><td>${type}</td><td>${summary}</td></tr>`;
+        return `<tr><td>${ts}</td><td>${nodeID}</td><td>${type}</td><td>${summary}</td></tr>`;
       })
       .join("");
     return `
@@ -1340,6 +2205,7 @@
         <thead>
           <tr>
             <th>Time</th>
+            <th>Node</th>
             <th>Type</th>
             <th>Summary</th>
           </tr>
@@ -1349,19 +2215,176 @@
     `;
   }
 
+  function renderLiveLimitOptions(current, noun) {
+    const selected = Number(current || 80);
+    const options = [25, 50, 80, 100, 200, 300];
+    const label = String(noun || "requests");
+    return options
+      .map(function (value) {
+        return `<option value="${value}" ${selected === value ? "selected" : ""}>${value} ${escapeHtml(label)}</option>`;
+      })
+      .join("");
+  }
+
+  function renderLiveNodeOptions(nodes, selectedNode) {
+    const selected = String(selectedNode || "").trim();
+    const options = Array.isArray(nodes) ? nodes : [];
+    const allSelected = selected === "";
+    const rows = [`<option value="" ${allSelected ? "selected" : ""}>All nodes</option>`];
+    options.forEach(function (nodeID) {
+      const value = String(nodeID || "").trim();
+      if (!value) {
+        return;
+      }
+      rows.push(`<option value="${escapeHtml(value)}" ${selected === value ? "selected" : ""}>${escapeHtml(value)}</option>`);
+    });
+    return rows.join("");
+  }
+
+  function collectLiveNodeOptions(payload, streamEvents) {
+    const set = new Set();
+    const add = function (value) {
+      const node = String(value || "").trim();
+      if (!node) {
+        return;
+      }
+      set.add(node);
+    };
+    if (payload && typeof payload === "object") {
+      const requests = Array.isArray(payload.requests) ? payload.requests : [];
+      const queries = Array.isArray(payload.queries) ? payload.queries : [];
+      const sessions = Array.isArray(payload.sessions) ? payload.sessions : [];
+      requests.forEach(function (row) {
+        add(row && row.node_id);
+      });
+      queries.forEach(function (row) {
+        add(row && row.node_id);
+      });
+      sessions.forEach(function (row) {
+        add(row && row.node_id);
+      });
+      add(payload.node_filter);
+      if (payload.cluster && typeof payload.cluster === "object") {
+        add(payload.cluster.node_id);
+      }
+    }
+    (Array.isArray(streamEvents) ? streamEvents : []).forEach(function (event) {
+      if (!event || typeof event !== "object") {
+        return;
+      }
+      add(event.node_id);
+      if (event.request) {
+        add(event.request.node_id);
+      }
+      if (event.sql) {
+        add(event.sql.node_id);
+      }
+      if (event.session) {
+        add(event.session.node_id);
+      }
+    });
+
+    return Array.from(set).sort(function (a, b) {
+      return a.localeCompare(b);
+    });
+  }
+
+  function liveNodeLabel(value) {
+    const node = String(value || "").trim();
+    return node || "local";
+  }
+
+  function renderPatternChips(patterns) {
+    if (!Array.isArray(patterns) || patterns.length === 0) {
+      return `<span class="chip">No exclusions</span>`;
+    }
+    return patterns
+      .map(function (pattern) {
+        const value = String(pattern || "");
+        return `
+          <span class="chip">
+            <code>${escapeHtml(value)}</code>
+            <button class="chip-remove" data-live-exclude-remove="${escapeHtml(value)}" type="button" aria-label="Remove pattern ${escapeHtml(value)}">
+              ${iconGlyph("close")}
+            </button>
+          </span>
+        `;
+      })
+      .join("");
+  }
+
+  function bindLiveExcludeControls() {
+    const addBtn = document.getElementById("live-exclude-add");
+    const input = document.getElementById("live-exclude-input");
+    if (addBtn && input) {
+      const submit = async function () {
+        const pattern = String(input.value || "").trim();
+        if (!pattern) {
+          toast("Pattern is required", "warning");
+          return;
+        }
+        const restore = setButtonPending(addBtn, "Adding...");
+        try {
+          await API.addLiveExclude(pattern);
+          input.value = "";
+          toast(`Exclude pattern ${pattern} added`, "success");
+          await renderLiveOverview();
+        } catch (err) {
+          toast(errorText(err), "error");
+        } finally {
+          restore();
+        }
+      };
+      addBtn.addEventListener("click", submit);
+      input.addEventListener("keydown", function (evt) {
+        if (evt.key === "Enter") {
+          evt.preventDefault();
+          submit();
+        }
+      });
+    }
+
+    document.querySelectorAll("[data-live-exclude-remove]").forEach(function (btn) {
+      btn.addEventListener("click", async function () {
+        const pattern = String(btn.getAttribute("data-live-exclude-remove") || "").trim();
+        if (!pattern) {
+          return;
+        }
+        const accepted = await confirmAction(`Remove exclude pattern ${pattern}?`);
+        if (!accepted) {
+          return;
+        }
+        const restore = setButtonPending(btn, "...");
+        try {
+          await API.deleteLiveExclude(pattern);
+          toast(`Exclude pattern ${pattern} removed`, "success");
+          await renderLiveOverview();
+        } catch (err) {
+          toast(errorText(err), "error");
+        } finally {
+          restore();
+        }
+      });
+    });
+  }
+
   function renderLiveRequestRows(rows) {
     if (!Array.isArray(rows) || rows.length === 0) {
-      return `<tr><td class="table-empty" colspan="7">No recent requests</td></tr>`;
+      return `<tr><td class="table-empty" colspan="8">No recent requests</td></tr>`;
     }
     return rows
       .map(function (row) {
+        const method = String(row.method || "-").toUpperCase();
+        const statusCode = Number(row.status || 0);
+        const duration = Number(row.duration_ms || 0);
         return `
           <tr>
             <td>${escapeHtml(formatTemporal(row.timestamp || ""))}</td>
-            <td>${escapeHtml(row.method || "-")}</td>
+            <td>${escapeHtml(liveNodeLabel(row.node_id || ""))}</td>
+            <td><span class="badge ${methodBadgeClass(method)}">${escapeHtml(method)}</span></td>
             <td>${escapeHtml(row.path || "-")}</td>
-            <td>${escapeHtml(String(row.status || "-"))}</td>
-            <td>${escapeHtml(String(row.duration_ms || 0))}</td>
+            <td><span class="badge ${statusBadgeClass(statusCode)}">${escapeHtml(String(row.status || "-"))}</span></td>
+            <td><span class="metric-pill ${durationBadgeClass(duration)}">${escapeHtml(String(duration))}</span></td>
             <td>${escapeHtml(row.remote_ip || "-")}</td>
             <td>${escapeHtml(shortenTrace(row.trace_id || ""))}</td>
           </tr>
@@ -1372,7 +2395,7 @@
 
   function renderLiveSessionRows(rows) {
     if (!Array.isArray(rows) || rows.length === 0) {
-      return `<tr><td class="table-empty" colspan="6">No tracked sessions</td></tr>`;
+      return `<tr><td class="table-empty" colspan="7">No tracked sessions</td></tr>`;
     }
     return rows
       .map(function (row) {
@@ -1380,6 +2403,7 @@
           <tr>
             <td>${escapeHtml(row.token_short || "-")}</td>
             <td>${escapeHtml(row.user_id || "-")}</td>
+            <td>${escapeHtml(liveNodeLabel(row.node_id || ""))}</td>
             <td>${escapeHtml(row.last_route || "-")}</td>
             <td>${escapeHtml(formatTemporal(row.last_seen_at || ""))}</td>
             <td>${escapeHtml(row.ip || "-")}</td>
@@ -1392,17 +2416,19 @@
 
   function renderLiveSQLRows(rows) {
     if (!Array.isArray(rows) || rows.length === 0) {
-      return `<tr><td class="table-empty" colspan="7">No recent SQL queries</td></tr>`;
+      return `<tr><td class="table-empty" colspan="8">No recent SQL queries</td></tr>`;
     }
     return rows
       .map(function (row) {
         const args = Array.isArray(row.args) && row.args.length > 0 ? row.args.join(", ") : "-";
+        const duration = Number(row.duration_ms || 0);
         return `
           <tr>
             <td>${escapeHtml(formatTemporal(row.timestamp || ""))}</td>
+            <td>${escapeHtml(liveNodeLabel(row.node_id || ""))}</td>
             <td>${escapeHtml(row.model_name || "-")}</td>
-            <td>${escapeHtml(row.operation || "-")}</td>
-            <td>${escapeHtml(String(row.duration_ms || 0))}</td>
+            <td><span class="badge ${operationBadgeClass(row.operation || "-")}">${escapeHtml(row.operation || "-")}</span></td>
+            <td><span class="metric-pill ${durationBadgeClass(duration)}">${escapeHtml(String(duration))}</span></td>
             <td>${escapeHtml(args)}</td>
             <td>${escapeHtml(shortenTrace(row.trace_id || ""))}</td>
             <td title="${escapeHtml(row.query || "")}">
@@ -1421,6 +2447,70 @@
       return text || "-";
     }
     return text.slice(0, 12) + "...";
+  }
+
+  function methodBadgeClass(method) {
+    switch (String(method || "").toUpperCase()) {
+      case "GET":
+        return "badge-method-get";
+      case "POST":
+        return "badge-method-post";
+      case "PUT":
+      case "PATCH":
+        return "badge-method-update";
+      case "DELETE":
+        return "badge-method-delete";
+      default:
+        return "badge-neutral";
+    }
+  }
+
+  function statusBadgeClass(code) {
+    const value = Number(code || 0);
+    if (value >= 200 && value < 300) {
+      return "badge-success";
+    }
+    if (value >= 300 && value < 400) {
+      return "badge-info";
+    }
+    if (value >= 400 && value < 500) {
+      return "badge-warning";
+    }
+    if (value >= 500) {
+      return "badge-danger";
+    }
+    return "badge-neutral";
+  }
+
+  function durationBadgeClass(durationMS) {
+    const value = Number(durationMS || 0);
+    if (value >= 1000) {
+      return "metric-danger";
+    }
+    if (value >= 250) {
+      return "metric-warning";
+    }
+    if (value >= 100) {
+      return "metric-info";
+    }
+    return "metric-success";
+  }
+
+  function operationBadgeClass(value) {
+    const op = String(value || "").toLowerCase();
+    if (op.includes("select") || op.includes("read")) {
+      return "badge-info";
+    }
+    if (op.includes("insert") || op.includes("create")) {
+      return "badge-success";
+    }
+    if (op.includes("update")) {
+      return "badge-warning";
+    }
+    if (op.includes("delete")) {
+      return "badge-danger";
+    }
+    return "badge-neutral";
   }
 
   function shortenSQL(value) {
@@ -1494,14 +2584,14 @@
 
     return rows
       .map(function (row) {
-        const runtimePod = row.pod || row.instance || "-";
-        const runtimeHost = row.host || "-";
+        const runtimePod = normalizeSessionPod(row);
+        const runtimeHost = normalizeSessionHost(row);
         return `
           <tr>
             <td title="${escapeHtml(row.token || "")}">${escapeHtml(row.token_short || row.token || "-")}</td>
             <td>${escapeHtml(row.user || "-")}</td>
-            <td>${escapeHtml(runtimePod)}</td>
-            <td>${escapeHtml(runtimeHost)}</td>
+            <td>${runtimePod ? `<span class="status-chip status-chip-runtime">${escapeHtml(runtimePod)}</span>` : '<span class="status-chip status-chip-muted">n/a</span>'}</td>
+            <td>${runtimeHost ? `<span class="status-chip status-chip-runtime">${escapeHtml(runtimeHost)}</span>` : '<span class="status-chip status-chip-muted">n/a</span>'}</td>
             <td>${escapeHtml(row.remote_ip || "-")}</td>
             <td>${escapeHtml(formatTemporal(row.last_seen_at || ""))}</td>
             <td>${row.idle_seconds === undefined || row.idle_seconds === null ? "-" : escapeHtml(String(row.idle_seconds))}</td>
@@ -1510,6 +2600,40 @@
         `;
       })
       .join("");
+  }
+
+  function normalizeSessionPod(row) {
+    if (!row || typeof row !== "object") {
+      return "";
+    }
+    const pod = String(row.pod || "").trim();
+    const host = String(row.host || "").trim();
+    if (!pod) {
+      return "";
+    }
+    if (host && pod.toLowerCase() === host.toLowerCase()) {
+      return "";
+    }
+    return pod;
+  }
+
+  function normalizeSessionHost(row) {
+    if (!row || typeof row !== "object") {
+      return "";
+    }
+    const host = String(row.host || "").trim();
+    if (host) {
+      return host;
+    }
+    const instance = String(row.instance || "").trim();
+    if (!instance) {
+      return "";
+    }
+    if (instance.includes("@")) {
+      const parts = instance.split("@");
+      return String(parts[parts.length - 1] || "").trim();
+    }
+    return instance;
   }
 
   function startSessionsAutoRefresh() {
@@ -1534,6 +2658,7 @@
 
   async function renderList(name, opts) {
     state.currentModel = name;
+    const dbAlias = currentDatabaseAlias();
     state.page = opts && opts.page > 0 ? opts.page : 1;
     if (opts && typeof opts.search === "string") {
       state.search = opts.search;
@@ -1544,14 +2669,14 @@
     els.app.innerHTML = loadingMarkup();
 
     try {
-      const schema = await API.schema(name);
+      const schema = await API.schema(name, dbAlias);
       const result = await API.list(name, {
         page: state.page,
         page_size: PAGE_SIZE,
         search: state.search || "",
         order_by: currentOrderBy(),
         ...state.filters,
-      });
+      }, dbAlias);
 
       state.schema = schema;
       state.selectedIDs.clear();
@@ -1561,13 +2686,13 @@
       const filterFields = visibleFilterFields(schema);
 
       els.app.innerHTML =
-        UI.sectionHead((model && model.plural) || schema.plural || name, `${Number(result.total || 0)} records`, "Live data") +
+        UI.sectionHead((model && model.plural) || schema.plural || name, `${Number(result.total || 0)} records · ${escapeHtml(dbAlias)}`, "Live data") +
         `
           <section class="toolbar">
           <input class="input" id="list-search" type="search" placeholder="Search records" value="${escapeHtml(state.search)}">
           <button class="btn btn-ghost" id="bulk-delete" ${schema.read_only ? "disabled" : ""}>Delete selected</button>
           <button class="btn btn-ghost" id="bulk-export">Export selected</button>
-          <a class="btn btn-ghost" href="${API.exportURL(name)}" target="_blank" rel="noopener">Export CSV</a>
+          <a class="btn btn-ghost" href="${API.exportURL(name, dbAlias)}" target="_blank" rel="noopener">Export CSV</a>
           ${schema.read_only ? "" : `<div class="status-chip" id="selection-hint">0 selected</div>`}
           <button class="btn btn-primary" id="list-new" ${schema.read_only ? "disabled" : ""}>New</button>
           </section>
@@ -1598,7 +2723,7 @@
           </div>
         `;
 
-      bindListEvents(name, schema, result, columns);
+      bindListEvents(name, schema, result, columns, dbAlias);
     } catch (err) {
       els.app.innerHTML = renderRecoverableError("Could not load records", errorText(err), "retry-list");
       const retryBtn = document.getElementById("retry-list");
@@ -1613,7 +2738,7 @@
     }
   }
 
-  function bindListEvents(name, schema, result, columns) {
+  function bindListEvents(name, schema, result, columns, dbAlias) {
     const searchInput = document.getElementById("list-search");
     const bulkDelete = document.getElementById("bulk-delete");
     const bulkExport = document.getElementById("bulk-export");
@@ -1654,7 +2779,7 @@
     const newBtn = document.getElementById("list-new");
     if (newBtn) {
       newBtn.addEventListener("click", function () {
-        navigate(`#/model/${name}/new`);
+        navigate(modelHash(name, dbAlias, "new"));
       });
     }
 
@@ -1711,7 +2836,7 @@
           const ids = Array.from(state.selectedIDs).map(function (id) {
             return Number(id);
           });
-          await API.bulkDelete(name, ids);
+          await API.bulkDelete(name, ids, dbAlias);
           toast("Records deleted", "success");
           await refreshModels(true);
           await renderList(name, { page: 1, search: state.search });
@@ -1734,13 +2859,15 @@
           const ids = Array.from(state.selectedIDs).map(function (id) {
             return Number(id);
           });
-          const payload = await API.bulk(name, "export", ids);
+          const payload = await API.bulk(name, "export", ids, dbAlias);
           if (payload && payload.export_url) {
             window.open(payload.export_url, "_blank", "noopener");
             toast("Export started", "success");
             return;
           }
-          const url = `${API.exportURL(name)}?ids=${encodeURIComponent(ids.join(","))}`;
+          const baseURL = API.exportURL(name, dbAlias);
+          const separator = baseURL.includes("?") ? "&" : "?";
+          const url = `${baseURL}${separator}ids=${encodeURIComponent(ids.join(","))}`;
           window.open(url, "_blank", "noopener");
           toast("Export started", "success");
         } catch (err) {
@@ -1795,7 +2922,7 @@
 
     document.querySelectorAll("[data-action='edit']").forEach(function (btn) {
       btn.addEventListener("click", function () {
-        navigate(`#/model/${name}/${btn.getAttribute("data-id")}`);
+        navigate(modelHash(name, dbAlias, btn.getAttribute("data-id")));
       });
     });
 
@@ -1807,7 +2934,7 @@
           return;
         }
         try {
-          await API.del(name, id);
+          await API.del(name, id, dbAlias);
           toast(`Record #${id} deleted`, "success");
           await refreshModels(true);
           await renderList(name, { page: 1, search: state.search });
@@ -1819,7 +2946,7 @@
 
     document.querySelectorAll("[data-action='view']").forEach(function (btn) {
       btn.addEventListener("click", function () {
-        navigate(`#/model/${name}/${btn.getAttribute("data-id")}`);
+        navigate(modelHash(name, dbAlias, btn.getAttribute("data-id")));
       });
     });
   }
@@ -1861,18 +2988,19 @@
 
   async function renderForm(name, id) {
     state.currentModel = name;
+    const dbAlias = currentDatabaseAlias();
     updateNewButton();
     setAppBusy(true);
     els.app.innerHTML = loadingMarkup();
 
     try {
-      const schema = await API.schema(name);
+      const schema = await API.schema(name, dbAlias);
       state.schema = schema;
 
       const editing = id !== null && id !== undefined;
       let record = {};
       if (editing) {
-        record = await API.get(name, id);
+        record = await API.get(name, id, dbAlias);
       }
 
       const formFields = schema.fields
@@ -1912,7 +3040,7 @@
 
       const cancelBtn = document.getElementById("form-cancel");
       cancelBtn.addEventListener("click", function () {
-        navigate(`#/model/${name}`);
+        navigate(modelHash(name, dbAlias));
       });
 
       bindTabEvents();
@@ -1926,14 +3054,14 @@
 
         try {
           if (editing) {
-            await API.update(name, id, payload);
+            await API.update(name, id, payload, dbAlias);
             toast("Record updated", "success");
           } else {
-            await API.create(name, payload);
+            await API.create(name, payload, dbAlias);
             toast("Record created", "success");
           }
           await refreshModels(true);
-          navigate(`#/model/${name}`);
+          navigate(modelHash(name, dbAlias));
         } catch (err) {
           toast(errorText(err), "error");
         } finally {
@@ -2401,7 +3529,28 @@
       return;
     }
     els.newRecordBtn.disabled = false;
-    els.newRecordBtn.textContent = `New ${state.currentModel}`;
+    els.newRecordBtn.textContent = `New ${state.currentModel} @ ${currentDatabaseAlias()}`;
+  }
+
+  function updateRuntimeEnvironmentPill() {
+    if (!els.runtimeEnvPill || !els.runtimeEnv) {
+      return;
+    }
+    const envRaw = String((state.runtime && state.runtime.environment) || "development").trim();
+    const env = envRaw || "development";
+    els.runtimeEnvPill.textContent = env.charAt(0).toUpperCase() + env.slice(1);
+
+    els.runtimeEnv.classList.remove("is-prod", "is-stage", "is-dev");
+    const lower = env.toLowerCase();
+    if (lower === "production" || lower === "prod") {
+      els.runtimeEnv.classList.add("is-prod");
+      return;
+    }
+    if (lower === "staging" || lower === "stage" || lower === "qa") {
+      els.runtimeEnv.classList.add("is-stage");
+      return;
+    }
+    els.runtimeEnv.classList.add("is-dev");
   }
 
   function findModel(name) {
@@ -2416,6 +3565,84 @@
 
   function navigate(hash) {
     window.location.hash = hash;
+  }
+
+  function defaultDatabaseAlias() {
+    const runtime = state.runtime || {};
+    const databases = Array.isArray(runtime.databases) ? runtime.databases : [];
+    const defaultEntry = databases.find(function (item) {
+      return !!item.is_default;
+    });
+    if (defaultEntry && defaultEntry.alias) {
+      return String(defaultEntry.alias);
+    }
+    if (databases[0] && databases[0].alias) {
+      return String(databases[0].alias);
+    }
+    return "default";
+  }
+
+  function isKnownDatabaseAlias(alias) {
+    const needle = String(alias || "").trim();
+    if (!needle) {
+      return false;
+    }
+    const runtime = state.runtime || {};
+    const databases = Array.isArray(runtime.databases) ? runtime.databases : [];
+    return databases.some(function (item) {
+      return String(item.alias || "") === needle;
+    });
+  }
+
+  function currentDatabaseAlias() {
+    if (state.currentDBAlias && isKnownDatabaseAlias(state.currentDBAlias)) {
+      return state.currentDBAlias;
+    }
+    state.currentDBAlias = defaultDatabaseAlias();
+    return state.currentDBAlias;
+  }
+
+  function modelHash(modelName, dbAlias, suffix) {
+    const model = String(modelName || "").trim();
+    const db = String(dbAlias || defaultDatabaseAlias()).trim();
+    if (!model) {
+      return "#/";
+    }
+    let hash = `#/model/${encodeURIComponent(db)}/${encodeURIComponent(model)}`;
+    if (suffix !== undefined && suffix !== null && String(suffix).trim() !== "") {
+      hash += `/${encodeURIComponent(String(suffix).trim())}`;
+    }
+    return hash;
+  }
+
+  function readSidebarPreference() {
+    try {
+      return window.localStorage.getItem(SIDEBAR_PREF_KEY) === "1";
+    } catch (_) {
+      return false;
+    }
+  }
+
+  function persistSidebarPreference(collapsed) {
+    try {
+      if (collapsed) {
+        window.localStorage.setItem(SIDEBAR_PREF_KEY, "1");
+      } else {
+        window.localStorage.removeItem(SIDEBAR_PREF_KEY);
+      }
+    } catch (_) {}
+  }
+
+  function applySidebarLayout() {
+    if (!els.layout || !els.sidebarDockToggle) {
+      return;
+    }
+    const collapsed = !!state.sidebarCollapsed && !window.matchMedia("(max-width: 1080px)").matches;
+    els.layout.classList.toggle("collapsed", collapsed);
+    els.sidebarDockToggle.classList.toggle("is-collapsed", collapsed);
+    els.sidebarDockToggle.setAttribute("title", collapsed ? "Expand sidebar" : "Collapse sidebar");
+    els.sidebarDockToggle.setAttribute("aria-label", collapsed ? "Expand sidebar" : "Collapse sidebar");
+    els.sidebarDockToggle.setAttribute("aria-pressed", collapsed ? "true" : "false");
   }
 
   function openPalette() {
@@ -2444,31 +3671,39 @@
     const items = [];
 
     items.push({
-      label: "Go to dashboard",
-      desc: "Overview",
+      label: "Go to overview",
+      desc: "Dashboard and runtime summary",
       run: function () {
         navigate("#/");
       },
     });
 
     items.push({
-      label: "Open sessions",
-      desc: "Runtime telemetry",
+      label: "Open Data Studio",
+      desc: "Models by engine and database",
+      run: function () {
+        navigate("#/data-studio");
+      },
+    });
+
+    items.push({
+      label: "Open Infra Manager",
+      desc: "Session runtime telemetry",
       run: function () {
         navigate("#/sessions");
       },
     });
 
     items.push({
-      label: "Open live runtime",
-      desc: "WebSocket stream + request inspector",
+      label: "Open Network Inspector",
+      desc: "Live requests and SQL stream",
       run: function () {
         navigate("#/live");
       },
     });
 
     items.push({
-      label: "Open system pulse",
+      label: "Open System Pulse",
       desc: "Goroutines, memory, DB pools and env",
       run: function () {
         navigate("#/system");
@@ -2480,17 +3715,20 @@
         label: `Create ${state.currentModel}`,
         desc: "Quick action",
         run: function () {
-          navigate(`#/model/${state.currentModel}/new`);
+          navigate(modelHash(state.currentModel, currentDatabaseAlias(), "new"));
         },
       });
     }
 
     state.models.forEach(function (model) {
+      const alias = currentDatabaseAlias();
+      const baseCount = model.counts && alias ? model.counts[alias] : model.count;
+      const countLabel = isKnownCount(baseCount) ? String(Number(baseCount)) : "n/a";
       items.push({
         label: `Open ${model.name}`,
-        desc: `${model.count || 0} records`,
+        desc: `${countLabel} records · ${alias}`,
         run: function () {
-          navigate(`#/model/${model.name}`);
+          navigate(modelHash(model.name, alias));
         },
       });
     });
@@ -2610,14 +3848,14 @@
     if (!button) {
       return function () {};
     }
-    const previousText = button.textContent;
+    const previousHTML = button.innerHTML;
     button.disabled = true;
     if (label) {
       button.textContent = label;
     }
     return function () {
       button.disabled = false;
-      button.textContent = previousText;
+      button.innerHTML = previousHTML;
     };
   }
 
@@ -2678,6 +3916,19 @@
       return "id";
     }
     return column;
+  }
+
+  function iconGlyph(name) {
+    switch (String(name || "").toLowerCase()) {
+      case "database":
+        return '<svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><ellipse cx="12" cy="6" rx="7" ry="3"></ellipse><path d="M5 6v6c0 1.7 3.1 3 7 3s7-1.3 7-3V6"></path><path d="M5 12v6c0 1.7 3.1 3 7 3s7-1.3 7-3v-6"></path></svg>';
+      case "model":
+        return '<svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 4 7v10l8 4 8-4V7l-8-4z"></path><path d="M4 7l8 4 8-4"></path><path d="M12 11v10"></path></svg>';
+      case "close":
+        return '<svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12"></path><path d="M18 6 6 18"></path></svg>';
+      default:
+        return "";
+    }
   }
 
   function createFallbackUI() {

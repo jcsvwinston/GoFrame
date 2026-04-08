@@ -89,6 +89,12 @@ Example mapping:
 | --- | --- | --- | --- |
 | `admin_prefix` | `/admin` | `stable` | Admin mount prefix. |
 | `admin_title` | `GoFrame Admin` | `transitional` | UI labeling may evolve with admin UX maturation. |
+| `admin_live_exclude_patterns[]` | `[/admin]` | `stable` | Path patterns excluded from live HTTP capture. |
+| `admin_cluster_enabled` | `false` | `stable` | Enables cluster-aware admin live telemetry relay. |
+| `admin_cluster_redis_url` | `""` | `stable` | Redis URL override for admin cluster relay (falls back to `redis_url`). |
+| `admin_cluster_channel` | `goframe:admin:live:v1` | `stable` | Pub/Sub channel used by the admin live cluster relay. |
+| `admin_cluster_node_id` | `""` | `stable` | Optional explicit runtime node id used in cluster telemetry events. |
+| `admin_cluster_token` | `""` | `stable` | Optional shared token to reject untrusted cluster relay events. |
 
 ## Mail
 

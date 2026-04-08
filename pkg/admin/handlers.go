@@ -23,52 +23,224 @@ func (p *Panel) handleListModels(w http.ResponseWriter, r *http.Request) {
 	if !p.authorizeAction(w, r, "*", "list_models") {
 		return
 	}
+	includeCounts := includeModelCounts(r)
 
 	type modelInfo struct {
-		Name   string `json:"name"`
-		Plural string `json:"plural"`
-		Table  string `json:"table"`
-		Icon   string `json:"icon"`
-		Count  int64  `json:"count"`
+		Name       string           `json:"name"`
+		Plural     string           `json:"plural"`
+		Table      string           `json:"table"`
+		Icon       string           `json:"icon"`
+		Count      int64            `json:"count"`
+		CountKnown bool             `json:"count_known"`
+		Counts     map[string]int64 `json:"counts,omitempty"`
+		Databases  []string         `json:"databases,omitempty"`
+	}
+	type runtimeModelInfo struct {
+		Name       string `json:"name"`
+		Plural     string `json:"plural"`
+		Table      string `json:"table"`
+		Count      int64  `json:"count"`
+		CountKnown bool   `json:"count_known"`
 	}
 	type runtimeDatabaseInfo struct {
-		Alias      string   `json:"alias"`
-		Engine     string   `json:"engine"`
-		Dialect    string   `json:"dialect"`
-		IsDefault  bool     `json:"is_default"`
-		Models     []string `json:"models"`
-		ModelCount int      `json:"model_count"`
+		Alias        string             `json:"alias"`
+		Engine       string             `json:"engine"`
+		Dialect      string             `json:"dialect"`
+		IsDefault    bool               `json:"is_default"`
+		Models       []string           `json:"models"`
+		ModelEntries []runtimeModelInfo `json:"model_entries"`
+		ModelCount   int                `json:"model_count"`
+	}
+	type runtimeEngineInfo struct {
+		Name      string                `json:"name"`
+		Databases []runtimeDatabaseInfo `json:"databases"`
 	}
 	type runtimeInfo struct {
-		Environment   string                `json:"environment"`
-		Databases     []runtimeDatabaseInfo `json:"databases"`
-		Engines       []string              `json:"engines"`
-		ModelsTotal   int                   `json:"models_total"`
-		RecordsTotal  int64                 `json:"records_total"`
-		SessionsCount int                   `json:"sessions_active"`
+		Environment     string                `json:"environment"`
+		Databases       []runtimeDatabaseInfo `json:"databases"`
+		Engines         []string              `json:"engines"`
+		EngineGroups    []runtimeEngineInfo   `json:"engine_groups"`
+		ModelsTotal     int                   `json:"models_total"`
+		RecordsTotal    int64                 `json:"records_total"`
+		CountsMode      string                `json:"counts_mode"`
+		CountsAvailable bool                  `json:"counts_available"`
+		SessionsCount   int                   `json:"sessions_active"`
 	}
 
 	models := p.registry.All()
 	result := make([]modelInfo, 0, len(models))
-	modelNames := make([]string, 0, len(models))
+	modelByName := make(map[string]*modelInfo, len(models))
+	for _, m := range models {
+		info := modelInfo{
+			Name:       m.Name,
+			Plural:     m.Plural,
+			Table:      m.Table,
+			Icon:       m.Config.Icon,
+			Count:      0,
+			CountKnown: false,
+			Counts:     map[string]int64{},
+			Databases:  []string{},
+		}
+		result = append(result, info)
+		modelByName[m.Name] = &result[len(result)-1]
+	}
+	sort.SliceStable(result, func(i, j int) bool {
+		return result[i].Name < result[j].Name
+	})
+
+	aliases := p.sortedDatabaseAliases()
+	dbRuntime := make([]runtimeDatabaseInfo, 0, len(aliases))
+	engineGroups := map[string][]runtimeDatabaseInfo{}
+	enginesSeen := map[string]struct{}{}
+	modelRecordsByAlias := map[string]map[string]int64{}
+
+	for _, alias := range aliases {
+		cfg, ok := p.databaseRuntimeInfoByAlias(alias)
+		if !ok {
+			cfg = DatabaseRuntimeInfo{
+				Alias:     alias,
+				Engine:    "",
+				Dialect:   "",
+				IsDefault: alias == p.defaultDBAlias,
+			}
+		}
+
+		modelNames := make([]string, 0, len(models))
+		modelEntries := make([]runtimeModelInfo, 0, len(models))
+		records := map[string]int64{}
+		queryable := true
+		if _, err := p.resolveDatabaseAlias(alias); err != nil {
+			queryable = false
+		}
+
+		if includeCounts {
+			if queryable {
+				for _, m := range models {
+					count, present, err := p.modelCount(r.Context(), m, alias)
+					if err != nil {
+						writeErr(w, fmt.Errorf("admin.ListModels count alias=%s model=%s: %w", alias, m.Name, err))
+						return
+					}
+					if !present {
+						continue
+					}
+					records[m.Name] = count
+					modelNames = append(modelNames, m.Name)
+					modelEntries = append(modelEntries, runtimeModelInfo{
+						Name:       m.Name,
+						Plural:     m.Plural,
+						Table:      m.Table,
+						Count:      count,
+						CountKnown: true,
+					})
+				}
+			}
+		} else {
+			if queryable {
+				for _, m := range models {
+					modelNames = append(modelNames, m.Name)
+					records[m.Name] = -1
+					modelEntries = append(modelEntries, runtimeModelInfo{
+						Name:       m.Name,
+						Plural:     m.Plural,
+						Table:      m.Table,
+						Count:      -1,
+						CountKnown: false,
+					})
+				}
+			}
+		}
+		sort.Strings(modelNames)
+		sort.SliceStable(modelEntries, func(i, j int) bool {
+			return modelEntries[i].Name < modelEntries[j].Name
+		})
+		modelRecordsByAlias[alias] = records
+
+		dbInfo := runtimeDatabaseInfo{
+			Alias:        cfg.Alias,
+			Engine:       cfg.Engine,
+			Dialect:      cfg.Dialect,
+			IsDefault:    cfg.IsDefault,
+			Models:       modelNames,
+			ModelEntries: modelEntries,
+			ModelCount:   len(modelNames),
+		}
+		dbRuntime = append(dbRuntime, dbInfo)
+
+		engineLabel := strings.TrimSpace(cfg.Dialect)
+		if engineLabel == "" {
+			engineLabel = strings.TrimSpace(cfg.Engine)
+		}
+		if engineLabel == "" {
+			engineLabel = "unknown"
+		}
+		enginesSeen[engineLabel] = struct{}{}
+		engineGroups[engineLabel] = append(engineGroups[engineLabel], dbInfo)
+	}
+
+	defaultAlias := p.defaultDBAlias
 	var recordsTotal int64
 	for _, m := range models {
-		count, err := p.modelCount(r.Context(), m)
-		if err != nil {
-			writeErr(w, fmt.Errorf("admin.ListModels count model=%s: %w", m.Name, err))
-			return
+		row := modelByName[m.Name]
+		if row == nil {
+			continue
 		}
-		recordsTotal += count
-		modelNames = append(modelNames, m.Name)
-		result = append(result, modelInfo{
-			Name:   m.Name,
-			Plural: m.Plural,
-			Table:  m.Table,
-			Icon:   m.Config.Icon,
-			Count:  count,
+		for alias, byModel := range modelRecordsByAlias {
+			count, ok := byModel[m.Name]
+			if !ok {
+				continue
+			}
+			row.Databases = append(row.Databases, alias)
+			if count >= 0 {
+				row.Counts[alias] = count
+			}
+		}
+		sort.Strings(row.Databases)
+		if includeCounts {
+			if count, ok := row.Counts[defaultAlias]; ok {
+				row.Count = count
+				row.CountKnown = true
+				recordsTotal += count
+			} else if len(row.Databases) > 0 {
+				firstAlias := row.Databases[0]
+				if firstCount, ok := row.Counts[firstAlias]; ok {
+					row.Count = firstCount
+					row.CountKnown = true
+					recordsTotal += row.Count
+				}
+			}
+		} else {
+			row.Count = -1
+			row.CountKnown = false
+		}
+		if len(row.Counts) == 0 {
+			row.Counts = nil
+		}
+		if len(row.Databases) == 0 {
+			row.Databases = nil
+		}
+	}
+
+	engines := make([]string, 0, len(enginesSeen))
+	for label := range enginesSeen {
+		engines = append(engines, label)
+	}
+	sort.Strings(engines)
+
+	engineRuntime := make([]runtimeEngineInfo, 0, len(engines))
+	for _, engine := range engines {
+		rows := engineGroups[engine]
+		sort.SliceStable(rows, func(i, j int) bool {
+			if rows[i].IsDefault != rows[j].IsDefault {
+				return rows[i].IsDefault
+			}
+			return rows[i].Alias < rows[j].Alias
+		})
+		engineRuntime = append(engineRuntime, runtimeEngineInfo{
+			Name:      engine,
+			Databases: rows,
 		})
 	}
-	sort.Strings(modelNames)
 
 	sessionsCount := 0
 	if p.config.Session != nil {
@@ -77,43 +249,25 @@ func (p *Panel) handleListModels(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	dbRuntime := make([]runtimeDatabaseInfo, 0, len(p.config.Databases))
-	enginesSeen := map[string]struct{}{}
-	for _, item := range p.config.Databases {
-		modelCopy := make([]string, len(modelNames))
-		copy(modelCopy, modelNames)
-		dbRuntime = append(dbRuntime, runtimeDatabaseInfo{
-			Alias:      item.Alias,
-			Engine:     item.Engine,
-			Dialect:    item.Dialect,
-			IsDefault:  item.IsDefault,
-			Models:     modelCopy,
-			ModelCount: len(modelCopy),
-		})
-		label := strings.TrimSpace(item.Dialect)
-		if label == "" {
-			label = strings.TrimSpace(item.Engine)
-		}
-		if label != "" {
-			enginesSeen[label] = struct{}{}
-		}
+	countsMode := "full"
+	if !includeCounts {
+		countsMode = "light"
+		recordsTotal = -1
 	}
-	engines := make([]string, 0, len(enginesSeen))
-	for label := range enginesSeen {
-		engines = append(engines, label)
-	}
-	sort.Strings(engines)
 
 	writeJSON(w, http.StatusOK, map[string]interface{}{
 		"models": result,
 		"title":  p.config.Title,
 		"runtime": runtimeInfo{
-			Environment:   strings.TrimSpace(p.config.Environment),
-			Databases:     dbRuntime,
-			Engines:       engines,
-			ModelsTotal:   len(result),
-			RecordsTotal:  recordsTotal,
-			SessionsCount: sessionsCount,
+			Environment:     strings.TrimSpace(p.config.Environment),
+			Databases:       dbRuntime,
+			Engines:         engines,
+			EngineGroups:    engineRuntime,
+			ModelsTotal:     len(result),
+			RecordsTotal:    recordsTotal,
+			CountsMode:      countsMode,
+			CountsAvailable: includeCounts,
+			SessionsCount:   sessionsCount,
 		},
 	})
 }
@@ -187,7 +341,13 @@ func (p *Panel) handleListRecords(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	crud, err := p.getCRUD(meta)
+	databaseAlias, err := p.requestDatabaseAlias(r)
+	if err != nil {
+		writeErr(w, gferrors.BadRequest(err.Error()))
+		return
+	}
+
+	crud, err := p.getCRUD(meta, databaseAlias)
 	if err != nil {
 		writeErr(w, err)
 		return
@@ -264,7 +424,13 @@ func (p *Panel) handleGetRecord(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	crud, err := p.getCRUD(meta)
+	databaseAlias, err := p.requestDatabaseAlias(r)
+	if err != nil {
+		writeErr(w, gferrors.BadRequest(err.Error()))
+		return
+	}
+
+	crud, err := p.getCRUD(meta, databaseAlias)
 	if err != nil {
 		writeErr(w, err)
 		return
@@ -294,7 +460,13 @@ func (p *Panel) handleCreateRecord(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	crud, err := p.getCRUD(meta)
+	databaseAlias, err := p.requestDatabaseAlias(r)
+	if err != nil {
+		writeErr(w, gferrors.BadRequest(err.Error()))
+		return
+	}
+
+	crud, err := p.getCRUD(meta, databaseAlias)
 	if err != nil {
 		writeErr(w, err)
 		return
@@ -350,7 +522,13 @@ func (p *Panel) handleUpdateRecord(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	crud, err := p.getCRUD(meta)
+	databaseAlias, err := p.requestDatabaseAlias(r)
+	if err != nil {
+		writeErr(w, gferrors.BadRequest(err.Error()))
+		return
+	}
+
+	crud, err := p.getCRUD(meta, databaseAlias)
 	if err != nil {
 		writeErr(w, err)
 		return
@@ -387,7 +565,13 @@ func (p *Panel) handleDeleteRecord(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	crud, err := p.getCRUD(meta)
+	databaseAlias, err := p.requestDatabaseAlias(r)
+	if err != nil {
+		writeErr(w, gferrors.BadRequest(err.Error()))
+		return
+	}
+
+	crud, err := p.getCRUD(meta, databaseAlias)
 	if err != nil {
 		writeErr(w, err)
 		return
@@ -418,6 +602,12 @@ func (p *Panel) handleBulkAction(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	databaseAlias, err := p.requestDatabaseAlias(r)
+	if err != nil {
+		writeErr(w, gferrors.BadRequest(err.Error()))
+		return
+	}
+
 	action := strings.ToLower(strings.TrimSpace(req.Action))
 	switch action {
 	case "delete":
@@ -432,7 +622,7 @@ func (p *Panel) handleBulkAction(w http.ResponseWriter, r *http.Request) {
 			writeErr(w, gferrors.BadRequest("ids are required for delete action"))
 			return
 		}
-		crud, err := p.getCRUD(meta)
+		crud, err := p.getCRUD(meta, databaseAlias)
 		if err != nil {
 			writeErr(w, err)
 			return
@@ -473,7 +663,7 @@ func (p *Panel) handleBulkAction(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		writeJSON(w, http.StatusOK, map[string]interface{}{
-			"export_url": buildBulkExportURL(r.URL.Path, req.IDs),
+			"export_url": buildBulkExportURL(r.URL.Path, req.IDs, databaseAlias),
 			"ids":        req.IDs,
 		})
 
@@ -511,14 +701,40 @@ func authDeniedDomain(modelName, action string) error {
 	return gferrors.Forbidden(fmt.Sprintf("not authorized to %s on %s", action, modelName))
 }
 
-func (p *Panel) modelCount(ctx context.Context, meta *model.ModelMeta) (int64, error) {
-	if p.db == nil {
-		return 0, fmt.Errorf("nil database")
+func includeModelCounts(r *http.Request) bool {
+	if r == nil {
+		return true
+	}
+	stats := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("stats")))
+	switch stats {
+	case "light", "lite", "meta", "fast", "no-counts", "nocounts":
+		return false
+	case "full", "counts":
+		return true
 	}
 
-	sqlDB, err := p.db.SqlDB()
+	counts := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("counts")))
+	switch counts {
+	case "0", "false", "off", "no":
+		return false
+	case "1", "true", "on", "yes":
+		return true
+	}
+	return true
+}
+
+func (p *Panel) modelCount(ctx context.Context, meta *model.ModelMeta, databaseAlias string) (int64, bool, error) {
+	alias, err := p.resolveDatabaseAlias(databaseAlias)
 	if err != nil {
-		return 0, err
+		return 0, false, err
+	}
+	handle, err := p.databaseHandle(alias)
+	if err != nil {
+		return 0, false, err
+	}
+	sqlDB, err := handle.SqlDB()
+	if err != nil {
+		return 0, false, err
 	}
 
 	query := fmt.Sprintf("SELECT COUNT(*) FROM %s", meta.Table)
@@ -529,11 +745,41 @@ func (p *Panel) modelCount(ctx context.Context, meta *model.ModelMeta) (int64, e
 	var count int64
 	if err := sqlDB.QueryRowContext(ctx, query).Scan(&count); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return 0, nil
+			return 0, true, nil
 		}
-		return 0, err
+		if isTableMissingErr(err) {
+			return 0, false, nil
+		}
+		return 0, false, err
 	}
-	return count, nil
+	return count, true, nil
+}
+
+func isTableMissingErr(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(strings.TrimSpace(err.Error()))
+	if msg == "" {
+		return false
+	}
+	return strings.Contains(msg, "no such table") ||
+		strings.Contains(msg, "does not exist") ||
+		strings.Contains(msg, "unknown table") ||
+		strings.Contains(msg, "undefined table")
+}
+
+func (p *Panel) databaseRuntimeInfoByAlias(alias string) (DatabaseRuntimeInfo, bool) {
+	needle := strings.TrimSpace(alias)
+	if needle == "" {
+		return DatabaseRuntimeInfo{}, false
+	}
+	for _, item := range p.config.Databases {
+		if strings.TrimSpace(item.Alias) == needle {
+			return item, true
+		}
+	}
+	return DatabaseRuntimeInfo{}, false
 }
 
 func hasDeletedAt(meta *model.ModelMeta) bool {
@@ -835,7 +1081,7 @@ func sanitizeSearchQuery(raw string) (string, error) {
 func collectFilters(meta *model.ModelMeta, values url.Values) (map[string]string, error) {
 	filters := make(map[string]string)
 	for key, vals := range values {
-		if key == "page" || key == "page_size" || key == "search" || key == "order_by" {
+		if key == "page" || key == "page_size" || key == "search" || key == "order_by" || key == "db" || key == "database" {
 			continue
 		}
 		if len(vals) == 0 {
@@ -902,7 +1148,7 @@ func runtimeColumn(col string) string {
 	return col
 }
 
-func buildBulkExportURL(currentPath string, ids []uint) string {
+func buildBulkExportURL(currentPath string, ids []uint, databaseAlias string) string {
 	base := strings.TrimSuffix(currentPath, "/bulk")
 	if base == currentPath {
 		base = strings.TrimSuffix(currentPath, "/")
@@ -915,5 +1161,8 @@ func buildBulkExportURL(currentPath string, ids []uint) string {
 
 	q := url.Values{}
 	q.Set("ids", strings.Join(parts, ","))
+	if alias := strings.TrimSpace(databaseAlias); alias != "" {
+		q.Set("db", alias)
+	}
 	return base + "/export?" + q.Encode()
 }

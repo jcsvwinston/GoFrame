@@ -32,6 +32,12 @@ func TestLoadConfig_Defaults(t *testing.T) {
 	if cfg.AdminPrefix != "/admin" {
 		t.Errorf("expected /admin, got %s", cfg.AdminPrefix)
 	}
+	if cfg.AdminClusterEnabled {
+		t.Error("expected admin_cluster_enabled false by default")
+	}
+	if cfg.AdminClusterChannel != "goframe:admin:live:v1" {
+		t.Errorf("expected default admin cluster channel goframe:admin:live:v1, got %s", cfg.AdminClusterChannel)
+	}
 	if cfg.MailDriver != "noop" {
 		t.Errorf("expected mail driver noop, got %s", cfg.MailDriver)
 	}

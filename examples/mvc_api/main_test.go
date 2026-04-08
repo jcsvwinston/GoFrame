@@ -86,6 +86,66 @@ func TestExampleMVCAPIAdmin_Smoke(t *testing.T) {
 		t.Fatalf("created article not found in list: %#v", listAfter.Items)
 	}
 
+	// Live feature-flag demo: published_only (default false for preview mode).
+	unpublishedPayload := map[string]any{
+		"title":     "Draft Preview Article",
+		"content":   "Should appear only when preview mode is enabled",
+		"published": false,
+	}
+	unpublishedBody, _ := json.Marshal(unpublishedPayload)
+	unpublishedRes := mustRequest(t, a.Router, http.MethodPost, "/api/articles", bytes.NewReader(unpublishedBody), map[string]string{
+		"Content-Type": "application/json",
+	})
+	if unpublishedRes.StatusCode != http.StatusCreated {
+		raw := mustReadBody(t, unpublishedRes)
+		t.Fatalf("create unpublished status=%d body=%s", unpublishedRes.StatusCode, raw)
+	}
+
+	respLiveFlagDefault := mustGET(t, a.Router, "/api/articles/live-flag")
+	if respLiveFlagDefault.StatusCode != http.StatusOK {
+		t.Fatalf("live-flag default status=%d", respLiveFlagDefault.StatusCode)
+	}
+	var liveFlagDefault struct {
+		FeatureFlag string       `json:"feature_flag"`
+		Enabled     bool         `json:"enabled"`
+		Mode        string       `json:"mode"`
+		Items       []articleDTO `json:"items"`
+	}
+	mustDecodeJSON(t, respLiveFlagDefault.Body, &liveFlagDefault)
+	if liveFlagDefault.FeatureFlag != "articles_preview_mode" {
+		t.Fatalf("unexpected feature_flag: %q", liveFlagDefault.FeatureFlag)
+	}
+	if liveFlagDefault.Enabled {
+		t.Fatalf("expected default preview mode disabled")
+	}
+	if liveFlagDefault.Mode != "published_only" {
+		t.Fatalf("unexpected mode when disabled: %q", liveFlagDefault.Mode)
+	}
+	if containsArticleTitle(liveFlagDefault.Items, "Draft Preview Article") {
+		t.Fatalf("draft article should not be visible with preview mode disabled")
+	}
+
+	a.Admin.SetFeatureFlag("articles_preview_mode", true)
+	respLiveFlagEnabled := mustGET(t, a.Router, "/api/articles/live-flag")
+	if respLiveFlagEnabled.StatusCode != http.StatusOK {
+		t.Fatalf("live-flag enabled status=%d", respLiveFlagEnabled.StatusCode)
+	}
+	var liveFlagEnabled struct {
+		Enabled bool         `json:"enabled"`
+		Mode    string       `json:"mode"`
+		Items   []articleDTO `json:"items"`
+	}
+	mustDecodeJSON(t, respLiveFlagEnabled.Body, &liveFlagEnabled)
+	if !liveFlagEnabled.Enabled {
+		t.Fatalf("expected preview mode enabled")
+	}
+	if liveFlagEnabled.Mode != "preview_all" {
+		t.Fatalf("unexpected mode when enabled: %q", liveFlagEnabled.Mode)
+	}
+	if !containsArticleTitle(liveFlagEnabled.Items, "Draft Preview Article") {
+		t.Fatalf("draft article should be visible with preview mode enabled")
+	}
+
 	respAdmin := mustGET(t, a.Router, "/admin/")
 	if respAdmin.StatusCode != http.StatusOK {
 		t.Fatalf("admin index status=%d", respAdmin.StatusCode)

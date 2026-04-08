@@ -218,6 +218,10 @@ rate_limit_by_route: false
 rate_limit_by_role: false
 admin_prefix: /admin
 admin_title: My Admin
+admin_live_exclude_patterns:
+  - /admin
+admin_cluster_enabled: false
+admin_cluster_channel: goframe:admin:live:v1
 multisite:
   enabled: false
   default_site: default
@@ -239,7 +243,7 @@ Frequent fields:
 - multisite/multitenant: `multisite.*`, `multitenant.*`
 - queue/background: `redis_url`
 - auth/session: `jwt_secret`, `jwt_expiry`, `session_lifetime`, `session_store`, `session_table`, `session_redis_url`, `session_cookie_*`
-- admin: `admin_prefix`, `admin_title`
+- admin: `admin_prefix`, `admin_title`, `admin_live_exclude_patterns`, `admin_cluster_*`
 - mail: `mail_driver`, `mail_from`, `smtp_*`, `sendgrid_api_key`, `sendgrid_endpoint`
 - observability: `log_level`, `log_format`, `metrics_path`, `otlp_endpoint`
 - HTTP hardening: `rate_limit_requests`, `rate_limit_window`, `rate_limit_burst`, `rate_limit_by_route`, `rate_limit_by_role`
@@ -431,6 +435,12 @@ Configuration:
 
 - `admin_prefix` (default `/admin`)
 - `admin_title`
+- `admin_live_exclude_patterns` (default `[/admin]`)
+- `admin_cluster_enabled` (default `false`)
+- `admin_cluster_redis_url` (optional, fallback `redis_url`)
+- `admin_cluster_channel` (default `goframe:admin:live:v1`)
+- `admin_cluster_node_id` (optional explicit runtime node id)
+- `admin_cluster_token` (optional shared relay token)
 
 ## 10.2 Capabilities
 

@@ -199,6 +199,25 @@ func TestPanel_ListRejectsInvalidOrderBy(t *testing.T) {
 	}
 }
 
+func TestPanel_ListAcceptsDatabaseQueryParam(t *testing.T) {
+	panel, cleanup := setupPanelForTest(t, db.EngineSQL)
+	defer cleanup()
+
+	srv := httptest.NewServer(panel.Handler())
+	defer srv.Close()
+
+	_ = createAdminUser(t, srv.URL, map[string]interface{}{
+		"email":  "db-param@example.com",
+		"name":   "DB Param",
+		"active": true,
+	})
+
+	resp, status := doJSON(t, http.MethodGet, srv.URL+"/api/models/AdminUser?db=default", nil)
+	if status != http.StatusOK {
+		t.Fatalf("expected status 200 with db query param, got %d body=%s", status, mustJSON(resp))
+	}
+}
+
 func TestPanel_ListValidationRejectsInvalidQueryParams(t *testing.T) {
 	panel, cleanup := setupPanelForTest(t, db.EngineSQL)
 	defer cleanup()
@@ -549,6 +568,61 @@ func TestPanel_ListSessions_WithSessionManager(t *testing.T) {
 	}
 }
 
+func TestPanel_ListSessions_DropsDuplicatePodWhenSameAsHost(t *testing.T) {
+	panel, cleanup := setupPanelForTest(t, db.EngineSQL)
+	defer cleanup()
+
+	sessionManager := auth.NewSessionManager(auth.SessionConfig{
+		Lifetime: 2 * time.Hour,
+	})
+	panel.config.Session = sessionManager
+	panel.config.SessionStore = "memory"
+	panel.config.SessionRuntime = auth.SessionRuntimeIdentity{
+		Pod:      "node-a",
+		Host:     "node-a",
+		Instance: "node-a",
+	}
+
+	deadline := time.Now().UTC().Add(time.Hour)
+	values := map[string]interface{}{
+		auth.SessionMetaFirstSeenAtKey: "2026-04-05T10:00:00Z",
+		auth.SessionMetaLastSeenAtKey:  "2026-04-05T10:10:00Z",
+		auth.SessionMetaPodKey:         "node-a",
+		auth.SessionMetaHostKey:        "node-a",
+		auth.SessionMetaInstanceKey:    "node-a",
+	}
+
+	payload, err := sessionManager.SCS().Codec.Encode(deadline, values)
+	if err != nil {
+		t.Fatalf("encode session payload failed: %v", err)
+	}
+	if err := sessionManager.SCS().Store.Commit("token-dup-runtime", payload, deadline); err != nil {
+		t.Fatalf("commit session payload failed: %v", err)
+	}
+
+	srv := httptest.NewServer(panel.Handler())
+	defer srv.Close()
+
+	resp, status := doJSON(t, http.MethodGet, srv.URL+"/api/sessions?limit=50", nil)
+	if status != http.StatusOK {
+		t.Fatalf("sessions status: got %d, body=%s", status, mustJSON(resp))
+	}
+	sessionsRaw, ok := resp["sessions"].([]interface{})
+	if !ok || len(sessionsRaw) != 1 {
+		t.Fatalf("expected one session row, got %#v", resp["sessions"])
+	}
+	row := sessionsRaw[0].(map[string]interface{})
+	if pod, exists := row["pod"]; exists && pod != "" {
+		t.Fatalf("expected pod to be empty when equal to host, got row=%#v", row)
+	}
+	if row["host"] != "node-a" {
+		t.Fatalf("expected host=node-a, got row=%#v", row)
+	}
+	if sourcePod, _ := resp["source_pod"].(string); sourcePod != "" {
+		t.Fatalf("expected source_pod empty when equal to source_host, got %q", sourcePod)
+	}
+}
+
 func TestPanel_SessionsCounterGrowsAcrossBrowsers(t *testing.T) {
 	panel, cleanup := setupPanelForTest(t, db.EngineSQL)
 	defer cleanup()
@@ -636,6 +710,64 @@ func TestPanel_ListModels_IncludesDatabaseRuntimeSummary(t *testing.T) {
 	engines, ok := runtime["engines"].([]interface{})
 	if !ok || len(engines) != 2 {
 		t.Fatalf("expected two runtime engines, got %#v", runtime["engines"])
+	}
+}
+
+func TestPanel_ListModels_LightStatsDisablesExpensiveCounts(t *testing.T) {
+	panel, cleanup := setupPanelForTest(t, db.EngineSQL)
+	defer cleanup()
+
+	srv := httptest.NewServer(panel.Handler())
+	defer srv.Close()
+
+	resp, status := doJSON(t, http.MethodGet, srv.URL+"/api/models?stats=light", nil)
+	if status != http.StatusOK {
+		t.Fatalf("list models (light) status=%d body=%s", status, mustJSON(resp))
+	}
+
+	runtime, ok := resp["runtime"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("expected runtime payload in /api/models response: %#v", resp)
+	}
+	if mode, _ := runtime["counts_mode"].(string); mode != "light" {
+		t.Fatalf("expected runtime.counts_mode=light, got %q", mode)
+	}
+	if available, _ := runtime["counts_available"].(bool); available {
+		t.Fatalf("expected runtime.counts_available=false in light mode")
+	}
+	if total, _ := runtime["records_total"].(float64); int(total) != -1 {
+		t.Fatalf("expected runtime.records_total=-1 in light mode, got %v", total)
+	}
+
+	models, ok := resp["models"].([]interface{})
+	if !ok || len(models) == 0 {
+		t.Fatalf("expected models payload, got %#v", resp["models"])
+	}
+	first, _ := models[0].(map[string]interface{})
+	if count, _ := first["count"].(float64); int(count) != -1 {
+		t.Fatalf("expected model count=-1 in light mode, got %#v", first["count"])
+	}
+}
+
+func TestPanel_ListRecords_RejectsUnknownDatabaseAlias(t *testing.T) {
+	panel, cleanup := setupPanelForTest(t, db.EngineSQL)
+	defer cleanup()
+
+	srv := httptest.NewServer(panel.Handler())
+	defer srv.Close()
+
+	req, err := http.NewRequest(http.MethodGet, srv.URL+"/api/models/AdminUser?db=missing", nil)
+	if err != nil {
+		t.Fatalf("http.NewRequest failed: %v", err)
+	}
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusBadRequest {
+		raw, _ := io.ReadAll(res.Body)
+		t.Fatalf("expected status 400 for unknown db alias, got %d body=%s", res.StatusCode, string(raw))
 	}
 }
 

@@ -56,8 +56,14 @@ type Config struct {
 	SessionRedisPrefix    string        `koanf:"session_redis_prefix"`
 
 	// Admin
-	AdminPrefix string `koanf:"admin_prefix"`
-	AdminTitle  string `koanf:"admin_title"`
+	AdminPrefix              string   `koanf:"admin_prefix"`
+	AdminTitle               string   `koanf:"admin_title"`
+	AdminLiveExcludePatterns []string `koanf:"admin_live_exclude_patterns"`
+	AdminClusterEnabled      bool     `koanf:"admin_cluster_enabled"`
+	AdminClusterRedisURL     string   `koanf:"admin_cluster_redis_url"`
+	AdminClusterChannel      string   `koanf:"admin_cluster_channel"`
+	AdminClusterNodeID       string   `koanf:"admin_cluster_node_id"`
+	AdminClusterToken        string   `koanf:"admin_cluster_token"`
 
 	// Mail
 	MailDriver       string `koanf:"mail_driver"`
@@ -188,6 +194,11 @@ func defaults() Config {
 
 		AdminPrefix: "/admin",
 		AdminTitle:  "GoFrame Admin",
+		AdminLiveExcludePatterns: []string{
+			"/admin",
+		},
+		AdminClusterEnabled: false,
+		AdminClusterChannel: "goframe:admin:live:v1",
 
 		MailDriver:       "noop",
 		SMTPPort:         587,
@@ -371,6 +382,7 @@ func normalizeRuntimeConfig(cfg *Config) {
 	normalizeDatabaseConfig(cfg)
 	normalizeMultiSiteConfig(cfg)
 	normalizeMultiTenantConfig(cfg)
+	normalizeAdminConfig(cfg)
 }
 
 func normalizeDatabaseConfig(cfg *Config) {
@@ -534,6 +546,19 @@ func normalizeMultiTenantConfig(cfg *Config) {
 	}
 	mt.Tenants = tenants
 	cfg.MultiTenant = mt
+}
+
+func normalizeAdminConfig(cfg *Config) {
+	if cfg == nil {
+		return
+	}
+	cfg.AdminClusterRedisURL = strings.TrimSpace(cfg.AdminClusterRedisURL)
+	cfg.AdminClusterChannel = strings.TrimSpace(cfg.AdminClusterChannel)
+	if cfg.AdminClusterChannel == "" {
+		cfg.AdminClusterChannel = "goframe:admin:live:v1"
+	}
+	cfg.AdminClusterNodeID = strings.TrimSpace(cfg.AdminClusterNodeID)
+	cfg.AdminClusterToken = strings.TrimSpace(cfg.AdminClusterToken)
 }
 
 func validateMultiTenantIsolation(cfg *Config) error {

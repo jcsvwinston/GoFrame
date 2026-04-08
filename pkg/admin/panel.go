@@ -12,7 +12,9 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/jcsvwinston/GoFrame/pkg/auth"
@@ -49,7 +51,13 @@ type PanelConfig struct {
 	Prefix              string // URL prefix (default "/admin")
 	Title               string // Site title shown in the UI
 	Environment         string
-	RedisURL            string // optional Redis URL for background jobs runtime snapshot
+	RedisURL            string   // optional Redis URL for background jobs runtime snapshot
+	LiveExcludePatterns []string // optional path patterns excluded from live HTTP capture
+	LiveClusterEnabled  bool     // when true, publish/subscribe live telemetry through Redis
+	LiveClusterRedisURL string   // optional Redis URL for live cluster relay (falls back to RedisURL)
+	LiveClusterChannel  string   // optional pub/sub channel (default goframe:admin:live:v1)
+	LiveClusterNodeID   string   // optional explicit node id (defaults to runtime identity)
+	LiveClusterToken    string   // optional shared token to reject untrusted relay messages
 	Databases           []DatabaseRuntimeInfo
 	DatabaseHandles     map[string]*db.DB // optional alias->db handle mapping for runtime stats
 	EnvironmentSnapshot []string          // optional env snapshot (defaults to os.Environ at startup)
@@ -62,15 +70,21 @@ type PanelConfig struct {
 
 // Panel is the admin panel instance that provides CRUD UI for registered models.
 type Panel struct {
-	db       *db.DB
-	registry *model.Registry
-	config   PanelConfig
-	logger   *slog.Logger
-	bus      *signals.Bus
-	cruds    map[string]model.CRUDOperator
-	live     *liveRuntime
-	flags    *featureFlagStore
-	bootEnv  []systemEnvVar
+	db             *db.DB
+	registry       *model.Registry
+	config         PanelConfig
+	logger         *slog.Logger
+	bus            *signals.Bus
+	cruds          map[string]model.CRUDOperator
+	live           *liveRuntime
+	liveExcludeMu  sync.RWMutex
+	liveExcludes   []string
+	flags          *featureFlagStore
+	bootEnv        []systemEnvVar
+	defaultDBAlias string
+	liveNode       string
+	liveClusterMu  sync.RWMutex
+	liveCluster    *liveClusterRelay
 }
 
 // NewPanel creates a new admin panel.
@@ -87,15 +101,139 @@ func NewPanel(database *db.DB, registry *model.Registry, logger *slog.Logger, cf
 	}
 
 	return &Panel{
-		db:       database,
-		registry: registry,
-		config:   cfg,
-		logger:   logger,
-		cruds:    make(map[string]model.CRUDOperator),
-		live:     newLiveRuntime(),
-		flags:    newFeatureFlagStore(cfg.FeatureFlags),
-		bootEnv:  buildSystemEnvironmentRows(env),
+		db:             database,
+		registry:       registry,
+		config:         cfg,
+		logger:         logger,
+		cruds:          make(map[string]model.CRUDOperator),
+		live:           newLiveRuntime(),
+		liveExcludes:   normalizeLiveExcludePatterns(cfg.Prefix, cfg.LiveExcludePatterns),
+		flags:          newFeatureFlagStore(cfg.FeatureFlags),
+		bootEnv:        buildSystemEnvironmentRows(env),
+		defaultDBAlias: defaultDatabaseAlias(cfg),
+		liveNode:       resolvePanelLiveNodeID(cfg),
 	}
+}
+
+// EnableLiveClusterRelay enables cluster-aware live telemetry distribution.
+// It is optional and safe to call multiple times.
+func (p *Panel) EnableLiveClusterRelay() error {
+	if p == nil {
+		return fmt.Errorf("admin panel is not initialized")
+	}
+	if !p.config.LiveClusterEnabled {
+		return nil
+	}
+
+	p.liveClusterMu.RLock()
+	existing := p.liveCluster
+	p.liveClusterMu.RUnlock()
+	if existing != nil {
+		return nil
+	}
+
+	redisURL := strings.TrimSpace(p.config.LiveClusterRedisURL)
+	if redisURL == "" {
+		redisURL = strings.TrimSpace(p.config.RedisURL)
+	}
+	if redisURL == "" {
+		return fmt.Errorf("admin live cluster enabled but redis url is empty")
+	}
+
+	channel := strings.TrimSpace(p.config.LiveClusterChannel)
+	if channel == "" {
+		channel = defaultLiveClusterChannel
+	}
+
+	nodeID := strings.TrimSpace(p.config.LiveClusterNodeID)
+	if nodeID == "" {
+		nodeID = p.liveNodeID()
+	}
+	relay, err := newLiveClusterRelay(liveClusterRelayConfig{
+		RedisURL: redisURL,
+		Channel:  channel,
+		NodeID:   nodeID,
+		Token:    strings.TrimSpace(p.config.LiveClusterToken),
+		Logger:   p.logger,
+		OnEvent:  p.ingestClusterLiveEvent,
+	})
+	if err != nil {
+		return fmt.Errorf("admin live cluster relay: %w", err)
+	}
+
+	p.liveClusterMu.Lock()
+	defer p.liveClusterMu.Unlock()
+	if p.liveCluster != nil {
+		_ = relay.close(context.Background())
+		return nil
+	}
+	p.liveCluster = relay
+	p.liveNode = nodeID
+	return nil
+}
+
+// Close releases optional admin panel background resources.
+func (p *Panel) Close(ctx context.Context) error {
+	if p == nil {
+		return nil
+	}
+	p.liveClusterMu.Lock()
+	relay := p.liveCluster
+	p.liveCluster = nil
+	p.liveClusterMu.Unlock()
+	if relay == nil {
+		return nil
+	}
+	return relay.close(ctx)
+}
+
+func (p *Panel) liveNodeID() string {
+	if p == nil {
+		return "node-local"
+	}
+	node := strings.TrimSpace(p.liveNode)
+	if node == "" {
+		return "node-local"
+	}
+	return node
+}
+
+func resolvePanelLiveNodeID(cfg PanelConfig) string {
+	if explicit := normalizePanelNodeID(cfg.LiveClusterNodeID); explicit != "" {
+		return explicit
+	}
+	if instance := normalizePanelNodeID(cfg.SessionRuntime.Instance); instance != "" {
+		return instance
+	}
+	if pod := normalizePanelNodeID(cfg.SessionRuntime.Pod); pod != "" {
+		host := normalizePanelNodeID(cfg.SessionRuntime.Host)
+		if host != "" && !strings.EqualFold(pod, host) {
+			return pod + "@" + host
+		}
+		return pod
+	}
+	if host := normalizePanelNodeID(cfg.SessionRuntime.Host); host != "" {
+		return host
+	}
+	hostname, err := os.Hostname()
+	if err == nil {
+		if host := normalizePanelNodeID(hostname); host != "" {
+			return host
+		}
+	}
+	return "node-local"
+}
+
+func normalizePanelNodeID(raw string) string {
+	value := strings.TrimSpace(raw)
+	if value == "" {
+		return ""
+	}
+	value = strings.ReplaceAll(value, " ", "-")
+	if len(value) > 120 {
+		value = value[:120]
+	}
+	return value
 }
 
 // SetSignalBus sets the signal bus for CRUD operations.
@@ -103,24 +241,31 @@ func (p *Panel) SetSignalBus(bus *signals.Bus) {
 	p.bus = bus
 }
 
-// getCRUD returns or creates a CRUD instance for the given model.
-func (p *Panel) getCRUD(meta *model.ModelMeta) (model.CRUDOperator, error) {
-	if c, ok := p.cruds[meta.Name]; ok {
+// getCRUD returns or creates a CRUD instance for the given model and database alias.
+func (p *Panel) getCRUD(meta *model.ModelMeta, databaseAlias string) (model.CRUDOperator, error) {
+	alias, err := p.resolveDatabaseAlias(databaseAlias)
+	if err != nil {
+		return nil, err
+	}
+
+	cacheKey := alias + "::" + meta.Name
+	if c, ok := p.cruds[cacheKey]; ok {
 		return c, nil
 	}
 
-	if p.db == nil {
-		return nil, fmt.Errorf("admin.getCRUD model=%s: nil database", meta.Name)
+	dbHandle, err := p.databaseHandle(alias)
+	if err != nil {
+		return nil, fmt.Errorf("admin.getCRUD alias=%s model=%s: %w", alias, meta.Name, err)
 	}
 
-	sqlDB, err := p.db.SqlDB()
+	sqlDB, err := dbHandle.SqlDB()
 	if err != nil {
-		return nil, fmt.Errorf("admin.getCRUD model=%s: %w", meta.Name, err)
+		return nil, fmt.Errorf("admin.getCRUD alias=%s model=%s: %w", alias, meta.Name, err)
 	}
 	c := model.NewCRUD(sqlDB, meta, p.bus)
 	c.SetSQLQueryObserver(p.onModelSQLQuery)
 
-	p.cruds[meta.Name] = c
+	p.cruds[cacheKey] = c
 	return c, nil
 }
 
@@ -161,6 +306,9 @@ func (p *Panel) mountRoutes(r *router.Mux) {
 	r.Get("/api/models/{name}/export", p.handleExportCSV)
 	r.Get("/api/sessions", p.handleListSessions)
 	r.Get("/api/live/snapshot", p.handleLiveSnapshot)
+	r.Get("/api/live/excludes", p.handleListLiveExcludePatterns)
+	r.Post("/api/live/excludes", p.handleAddLiveExcludePattern)
+	r.Delete("/api/live/excludes", p.handleDeleteLiveExcludePattern)
 	r.Get("/api/live/ws", p.handleLiveWS)
 	r.Get("/api/system/snapshot", p.handleSystemSnapshot)
 	r.Get("/api/system/flags", p.handleListSystemFlags)
@@ -243,6 +391,132 @@ func (p *Panel) touchAdminSession(r *http.Request) {
 
 	// Keep a dedicated admin heartbeat value so the session always commits.
 	p.config.Session.Put(ctx, adminSessionTouchKey, now)
+}
+
+func defaultDatabaseAlias(cfg PanelConfig) string {
+	for _, item := range cfg.Databases {
+		if item.IsDefault && strings.TrimSpace(item.Alias) != "" {
+			return strings.TrimSpace(item.Alias)
+		}
+	}
+	for _, item := range cfg.Databases {
+		if strings.TrimSpace(item.Alias) != "" {
+			return strings.TrimSpace(item.Alias)
+		}
+	}
+	for alias := range cfg.DatabaseHandles {
+		if trimmed := strings.TrimSpace(alias); trimmed != "" {
+			return trimmed
+		}
+	}
+	return "default"
+}
+
+func (p *Panel) resolveDatabaseAlias(raw string) (string, error) {
+	if p == nil {
+		return "default", fmt.Errorf("admin panel not initialized")
+	}
+
+	alias := strings.TrimSpace(raw)
+	inputProvided := alias != ""
+	if alias == "" {
+		alias = strings.TrimSpace(p.defaultDBAlias)
+		if alias == "" {
+			alias = "default"
+		}
+	}
+
+	if len(p.config.DatabaseHandles) == 0 {
+		if p.db == nil {
+			return "", fmt.Errorf("database %q is not configured", alias)
+		}
+		if inputProvided && alias != p.defaultDBAlias {
+			return "", fmt.Errorf("database %q is not configured", alias)
+		}
+		return alias, nil
+	}
+
+	if _, ok := p.config.DatabaseHandles[alias]; !ok {
+		return "", fmt.Errorf("database %q is not configured", alias)
+	}
+	return alias, nil
+}
+
+func (p *Panel) databaseHandle(alias string) (*db.DB, error) {
+	if p == nil {
+		return nil, fmt.Errorf("admin panel not initialized")
+	}
+	if len(p.config.DatabaseHandles) == 0 {
+		if p.db == nil {
+			return nil, fmt.Errorf("no default database handle available")
+		}
+		return p.db, nil
+	}
+	handle, ok := p.config.DatabaseHandles[alias]
+	if !ok || handle == nil {
+		return nil, fmt.Errorf("database %q handle is not available", alias)
+	}
+	return handle, nil
+}
+
+func (p *Panel) requestDatabaseAlias(r *http.Request) (string, error) {
+	if r == nil || r.URL == nil {
+		return p.resolveDatabaseAlias("")
+	}
+	alias := strings.TrimSpace(r.URL.Query().Get("db"))
+	if alias == "" {
+		alias = strings.TrimSpace(r.URL.Query().Get("database"))
+	}
+	return p.resolveDatabaseAlias(alias)
+}
+
+func (p *Panel) sortedDatabaseAliases() []string {
+	if p == nil {
+		return []string{}
+	}
+	aliases := make([]string, 0, len(p.config.Databases))
+	seen := map[string]struct{}{}
+	for _, item := range p.config.Databases {
+		alias := strings.TrimSpace(item.Alias)
+		if alias == "" {
+			continue
+		}
+		if _, ok := seen[alias]; ok {
+			continue
+		}
+		seen[alias] = struct{}{}
+		aliases = append(aliases, alias)
+	}
+	if len(aliases) == 0 {
+		for alias := range p.config.DatabaseHandles {
+			trimmed := strings.TrimSpace(alias)
+			if trimmed == "" {
+				continue
+			}
+			if _, ok := seen[trimmed]; ok {
+				continue
+			}
+			seen[trimmed] = struct{}{}
+			aliases = append(aliases, trimmed)
+		}
+	}
+	sort.Strings(aliases)
+	defaultAlias := strings.TrimSpace(p.defaultDBAlias)
+	if defaultAlias != "" {
+		for i, alias := range aliases {
+			if alias != defaultAlias {
+				continue
+			}
+			if i > 0 {
+				aliases = append([]string{defaultAlias}, append(aliases[:i], aliases[i+1:]...)...)
+			}
+			break
+		}
+	}
+	if len(aliases) == 0 {
+		aliases = append(aliases, p.defaultDBAlias)
+	}
+	return aliases
 }
 
 func sessionContextReady(sm *auth.SessionManager, ctx context.Context) (ok bool) {

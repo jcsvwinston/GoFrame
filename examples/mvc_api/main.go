@@ -118,7 +118,11 @@ func newExampleApp(cfg *app.Config) (*app.App, error) {
 		gfrender.JSON(w, http.StatusOK, map[string]any{"status": "ok"})
 	})
 	a.Router.Get("/api/articles", listArticlesHandler(sqlDB))
+	a.Router.Get("/api/articles/live-flag", listArticlesLiveFlagHandler(a, sqlDB))
 	a.Router.Post("/api/articles", createArticleHandler(a, sqlDB))
+
+	// Demo flag for runtime behavior toggling from /admin/system.
+	a.Admin.SetFeatureFlag("articles_preview_mode", false)
 
 	return a, nil
 }
@@ -193,6 +197,52 @@ func listArticlesHandler(sqlDB *sql.DB) http.HandlerFunc {
 		gfrender.JSON(w, http.StatusOK, map[string]any{
 			"items": items,
 			"total": len(items),
+		})
+	}
+}
+
+func listArticlesLiveFlagHandler(a *app.App, sqlDB *sql.DB) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		previewMode, _ := a.Admin.FeatureFlag("articles_preview_mode")
+
+		query := `SELECT id, title, content, published, created_at, updated_at FROM articles`
+		if !previewMode {
+			query += ` WHERE published = 1`
+		}
+		query += ` ORDER BY id DESC LIMIT 100`
+
+		rows, err := sqlDB.QueryContext(r.Context(), query)
+		if err != nil {
+			gfrender.Error(w, err)
+			return
+		}
+		defer rows.Close()
+
+		items := make([]articleDTO, 0, 16)
+		for rows.Next() {
+			var it articleDTO
+			if err := rows.Scan(&it.ID, &it.Title, &it.Content, &it.Published, &it.CreatedAt, &it.UpdatedAt); err != nil {
+				gfrender.Error(w, err)
+				return
+			}
+			items = append(items, it)
+		}
+		if err := rows.Err(); err != nil {
+			gfrender.Error(w, err)
+			return
+		}
+
+		mode := "published_only"
+		if previewMode {
+			mode = "preview_all"
+		}
+
+		gfrender.JSON(w, http.StatusOK, map[string]any{
+			"feature_flag": "articles_preview_mode",
+			"enabled":      previewMode,
+			"mode":         mode,
+			"items":        items,
+			"total":        len(items),
 		})
 	}
 }

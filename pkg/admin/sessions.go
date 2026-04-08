@@ -128,8 +128,11 @@ func (p *Panel) handleListSessions(w http.ResponseWriter, r *http.Request) {
 	resp.Enabled = true
 	resp.SourceEnv = strings.TrimSpace(p.config.Environment)
 	resp.SourceRuntime = classifyRuntime(p.config.SessionRuntime)
-	resp.SourcePod = p.config.SessionRuntime.Pod
-	resp.SourceHost = p.config.SessionRuntime.Host
+	resp.SourcePod = strings.TrimSpace(p.config.SessionRuntime.Pod)
+	resp.SourceHost = strings.TrimSpace(p.config.SessionRuntime.Host)
+	if resp.SourcePod != "" && strings.EqualFold(resp.SourcePod, resp.SourceHost) {
+		resp.SourcePod = ""
+	}
 	resp.SourceInstance = p.config.SessionRuntime.Instance
 
 	rawSessions, supported, err := allSessionPayloads(r.Context(), p.config.Session)
@@ -221,6 +224,9 @@ func buildSessionRow(token string, deadline time.Time, values map[string]interfa
 		firstSeen:  firstSeen,
 		lastSeen:   lastSeen,
 		expiresAt:  expiresAt,
+	}
+	if row.Pod != "" && strings.EqualFold(row.Pod, row.Host) {
+		row.Pod = ""
 	}
 
 	if !firstSeen.IsZero() {
