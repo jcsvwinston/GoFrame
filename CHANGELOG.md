@@ -48,6 +48,15 @@ while in pre-1.0 mode (`v0.x.y`).
 - Admin session observability endpoint and UI:
   - `GET /admin/api/sessions`
   - `/admin` sessions dashboard with active-session table, pod/host attribution, and telemetry windows (real-time, last hour, today)
+- Admin live runtime inspector foundation:
+  - `GET /admin/api/live/snapshot` for in-memory request/session runtime snapshots
+  - `GET /admin/api/live/ws` for non-blocking WebSocket event stream
+  - bounded request ring buffer + in-memory session tracker + non-blocking subscriber drop policy
+  - new `/admin#/live` view wired to snapshot + live stream
+- Admin system pulse snapshot foundation:
+  - `GET /admin/api/system/snapshot` for Go runtime + DB pool + startup environment telemetry
+  - startup environment viewer with mandatory masking for `KEY|SECRET|PASSWORD|TOKEN`
+  - new `/admin#/system` view for goroutine states, memory/GC metrics, and DB pool stats
 - Advanced in-process rate limiting dimensions:
   - `rate_limit_burst` for controlled token-bucket burst capacity
   - `rate_limit_by_route` for route-scoped budgets

@@ -130,15 +130,17 @@ func New(cfg *Config) (*App, error) {
 		sessionStoreLabel = "memory"
 	}
 	adminPanel := admin.NewPanel(dbConn, reg, logger, admin.PanelConfig{
-		Prefix:         effective.AdminPrefix,
-		Title:          effective.AdminTitle,
-		Environment:    effective.Env,
-		Databases:      buildAdminDatabaseRuntimeInfo(effective, dbs, defaultAlias),
-		Auth:           admin.NewDatabaseAdminAuth(sqlDB, sessionManager, effective.AdminPrefix),
-		Session:        sessionManager,
-		SessionStore:   sessionStoreLabel,
-		SessionRuntime: sessionRuntimeIdentity,
+		Prefix:          effective.AdminPrefix,
+		Title:           effective.AdminTitle,
+		Environment:     effective.Env,
+		Databases:       buildAdminDatabaseRuntimeInfo(effective, dbs, defaultAlias),
+		DatabaseHandles: dbs,
+		Auth:            admin.NewDatabaseAdminAuth(sqlDB, sessionManager, effective.AdminPrefix),
+		Session:         sessionManager,
+		SessionStore:    sessionStoreLabel,
+		SessionRuntime:  sessionRuntimeIdentity,
 	})
+	r.Use(adminPanel.LiveTrafficMiddleware())
 
 	a := &App{
 		Config:               effective,

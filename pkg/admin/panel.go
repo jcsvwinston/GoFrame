@@ -11,6 +11,7 @@ import (
 	"io/fs"
 	"log/slog"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
@@ -45,14 +46,16 @@ type AdminAuth interface {
 
 // PanelConfig configures the admin panel.
 type PanelConfig struct {
-	Prefix         string // URL prefix (default "/admin")
-	Title          string // Site title shown in the UI
-	Environment    string
-	Databases      []DatabaseRuntimeInfo
-	Auth           AdminAuth
-	Session        *auth.SessionManager // optional session manager for admin telemetry
-	SessionStore   string               // configured session store label (memory|sql|redis)
-	SessionRuntime auth.SessionRuntimeIdentity
+	Prefix              string // URL prefix (default "/admin")
+	Title               string // Site title shown in the UI
+	Environment         string
+	Databases           []DatabaseRuntimeInfo
+	DatabaseHandles     map[string]*db.DB // optional alias->db handle mapping for runtime stats
+	EnvironmentSnapshot []string          // optional env snapshot (defaults to os.Environ at startup)
+	Auth                AdminAuth
+	Session             *auth.SessionManager // optional session manager for admin telemetry
+	SessionStore        string               // configured session store label (memory|sql|redis)
+	SessionRuntime      auth.SessionRuntimeIdentity
 }
 
 // Panel is the admin panel instance that provides CRUD UI for registered models.
@@ -63,6 +66,8 @@ type Panel struct {
 	logger   *slog.Logger
 	bus      *signals.Bus
 	cruds    map[string]model.CRUDOperator
+	live     *liveRuntime
+	bootEnv  []systemEnvVar
 }
 
 // NewPanel creates a new admin panel.
@@ -73,6 +78,10 @@ func NewPanel(database *db.DB, registry *model.Registry, logger *slog.Logger, cf
 	if cfg.Title == "" {
 		cfg.Title = "GoFrame Admin"
 	}
+	env := cfg.EnvironmentSnapshot
+	if len(env) == 0 {
+		env = os.Environ()
+	}
 
 	return &Panel{
 		db:       database,
@@ -80,6 +89,8 @@ func NewPanel(database *db.DB, registry *model.Registry, logger *slog.Logger, cf
 		config:   cfg,
 		logger:   logger,
 		cruds:    make(map[string]model.CRUDOperator),
+		live:     newLiveRuntime(),
+		bootEnv:  buildSystemEnvironmentRows(env),
 	}
 }
 
@@ -120,10 +131,12 @@ func (p *Panel) Handler() *router.Mux {
 		r.Group(func(r *router.Mux) {
 			r.Use(p.authMiddleware)
 			r.Use(p.sessionActivityMiddleware)
+			r.Use(p.liveTrafficMiddleware)
 			p.mountRoutes(r)
 		})
 	} else {
 		r.Use(p.sessionActivityMiddleware)
+		r.Use(p.liveTrafficMiddleware)
 		p.mountRoutes(r)
 	}
 
@@ -142,12 +155,21 @@ func (p *Panel) mountRoutes(r *router.Mux) {
 	r.Post("/api/models/{name}/bulk", p.handleBulkAction)
 	r.Get("/api/models/{name}/export", p.handleExportCSV)
 	r.Get("/api/sessions", p.handleListSessions)
+	r.Get("/api/live/snapshot", p.handleLiveSnapshot)
+	r.Get("/api/live/ws", p.handleLiveWS)
+	r.Get("/api/system/snapshot", p.handleSystemSnapshot)
 
 	// Serve embedded UI
 	uiContent, _ := fs.Sub(uiFS, "ui")
 	fileServer := http.FileServer(http.FS(uiContent))
 	r.Get("/static/{filepath...}", http.StripPrefix("/static", fileServer).ServeHTTP)
 	r.Get("/{path...}", p.handleSPA(uiContent))
+}
+
+// LiveTrafficMiddleware returns non-blocking runtime observation middleware
+// that can be mounted at app-router level to capture traffic outside /admin.
+func (p *Panel) LiveTrafficMiddleware() func(http.Handler) http.Handler {
+	return p.liveTrafficMiddleware
 }
 
 func (p *Panel) handleSPA(fsys fs.FS) http.HandlerFunc {

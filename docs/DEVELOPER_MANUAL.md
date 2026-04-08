@@ -444,6 +444,15 @@ Configuration:
   - active session inventory
   - runtime attribution (`pod`, `host`, `instance`) for shared session stores
   - telemetry windows (real-time, last hour, current day)
+- live runtime inspector dashboard:
+  - in-memory recent HTTP request ring buffer
+  - in-memory active session tracker (`last_route`, `ip`, `user_agent`, `trace_id`)
+  - non-blocking WebSocket stream for live admin telemetry events
+- system pulse dashboard:
+  - goroutine state snapshot from runtime profile
+  - memory and GC snapshot from `runtime.ReadMemStats`
+  - DB pool snapshot from `database/sql` stats
+  - startup environment snapshot with automatic sensitive-value masking
 
 ## 10.3 Admin API
 
@@ -459,6 +468,9 @@ Main routes:
 - `POST /admin/api/models/{name}/bulk`
 - `GET /admin/api/models/{name}/export`
 - `GET /admin/api/sessions`
+- `GET /admin/api/live/snapshot`
+- `GET /admin/api/live/ws`
+- `GET /admin/api/system/snapshot`
 
 List query validation contract (`GET /admin/api/models/{name}`):
 

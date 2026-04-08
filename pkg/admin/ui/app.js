@@ -41,6 +41,12 @@
   };
 
   let sessionsRefreshTimer = null;
+  let liveStreamSocket = null;
+  let liveStreamRetryTimer = null;
+  let liveStreamAttempts = 0;
+  let liveStreamConnected = false;
+  const liveStreamEvents = [];
+  const LIVE_STREAM_EVENT_CAP = 40;
   let confirmResolver = null;
   let overlayReturnFocus = null;
 
@@ -136,6 +142,12 @@
         }),
       exportURL: (name) => `${root}/models/${encodeURIComponent(name)}/export`,
       sessions: (limit) => req(`/sessions?limit=${encodeURIComponent(String(limit || 250))}`),
+      liveSnapshot: (limit) => req(`/live/snapshot?limit=${encodeURIComponent(String(limit || 50))}`),
+      systemSnapshot: (envLimit) => req(`/system/snapshot?env_limit=${encodeURIComponent(String(envLimit || 200))}`),
+      liveWebSocketURL: function () {
+        const protocol = window.location.protocol === "https:" ? "wss://" : "ws://";
+        return protocol + window.location.host + root + "/live/ws";
+      },
     };
   })();
 
@@ -260,9 +272,10 @@
 
   async function onRoute() {
     const route = parseRoute();
-    setActiveNav(route.view === "sessions" ? "sessions" : route.model || "dashboard");
+    setActiveNav(route.view === "sessions" ? "sessions" : route.view === "live" ? "live" : route.view === "system" ? "system" : route.model || "dashboard");
     renderBreadcrumbs(route);
     closeSidebarOnMobile();
+    stopLiveStream();
 
     if (route.view === "dashboard") {
       stopSessionsAutoRefresh();
@@ -280,6 +293,25 @@
       updateNewButton();
       await renderSessionsOverview();
       startSessionsAutoRefresh();
+      return;
+    }
+
+    if (route.view === "live") {
+      stopSessionsAutoRefresh();
+      state.currentModel = null;
+      state.schema = null;
+      updateNewButton();
+      await renderLiveOverview();
+      startLiveStream();
+      return;
+    }
+
+    if (route.view === "system") {
+      stopSessionsAutoRefresh();
+      state.currentModel = null;
+      state.schema = null;
+      updateNewButton();
+      await renderSystemOverview();
       return;
     }
 
@@ -321,6 +353,12 @@
     if (cleaned === "sessions") {
       return { view: "sessions" };
     }
+    if (cleaned === "live") {
+      return { view: "live" };
+    }
+    if (cleaned === "system") {
+      return { view: "system" };
+    }
 
     const parts = cleaned.split("/").filter(Boolean);
     if (parts[0] !== "model" || !parts[1]) {
@@ -352,6 +390,14 @@
     if (route.view === "sessions") {
       crumbs.push("/");
       crumbs.push(`<a class="crumb-link" href="#/sessions">Sessions</a>`);
+    }
+    if (route.view === "live") {
+      crumbs.push("/");
+      crumbs.push(`<a class="crumb-link" href="#/live">Live</a>`);
+    }
+    if (route.view === "system") {
+      crumbs.push("/");
+      crumbs.push(`<a class="crumb-link" href="#/system">System</a>`);
     }
 
     if (route.model) {
@@ -572,6 +618,440 @@
     } finally {
       setAppBusy(false);
     }
+  }
+
+  async function renderLiveOverview() {
+    setAppBusy(true);
+    els.app.innerHTML = loadingMarkup();
+
+    try {
+      const payload = await API.liveSnapshot(80);
+      const stream = payload.stream || {};
+      const requests = Array.isArray(payload.requests) ? payload.requests : [];
+      const sessions = Array.isArray(payload.sessions) ? payload.sessions : [];
+      const buffer = payload.request_buffer || {};
+
+      els.app.innerHTML =
+        UI.sectionHead("Live runtime", "In-memory request/session inspector", liveStreamConnected ? "Stream connected" : "Stream offline") +
+        `
+          <section class="detail-grid">
+            ${UI.kv("Active stream subscribers", String(Number(stream.subscribers || 0)))}
+            ${UI.kv("Published events", String(Number(stream.published || 0)))}
+            ${UI.kv("Dropped events", String(Number(stream.dropped || 0)))}
+            ${UI.kv("Buffered requests", `${Number(buffer.stored || requests.length)}/${Number(buffer.capacity || requests.length)}`)}
+            ${UI.kv("Tracked sessions", String(sessions.length))}
+            ${UI.kv("Generated", formatTemporal(payload.generated_at))}
+          </section>
+
+          <section class="section-block">
+            <div class="section-block-head">
+              <h3>Live event stream</h3>
+              <p>WebSocket feed from /admin/api/live/ws</p>
+            </div>
+            <div id="live-stream-events" class="table-wrap">
+              ${renderLiveEventRows(liveStreamEvents)}
+            </div>
+          </section>
+
+          <section class="section-block">
+            <div class="section-block-head">
+              <h3>Recent HTTP requests</h3>
+              <p>Non-persistent ring buffer</p>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Time</th>
+                    <th>Method</th>
+                    <th>Path</th>
+                    <th>Status</th>
+                    <th>Duration (ms)</th>
+                    <th>IP</th>
+                    <th>Trace</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${renderLiveRequestRows(requests)}
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+          <section class="section-block">
+            <div class="section-block-head">
+              <h3>Active sessions tracker</h3>
+              <p>Sync map snapshot</p>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Session</th>
+                    <th>User</th>
+                    <th>Route</th>
+                    <th>Last seen</th>
+                    <th>IP</th>
+                    <th>Trace</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${renderLiveSessionRows(sessions)}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        `;
+    } catch (err) {
+      const retryID = "retry-live";
+      els.app.innerHTML = renderRecoverableError("Could not load live runtime", errorText(err), retryID);
+      const retryBtn = document.getElementById(retryID);
+      if (retryBtn) {
+        retryBtn.addEventListener("click", function () {
+          renderLiveOverview();
+        });
+      }
+      toast(errorText(err), "error");
+    } finally {
+      setAppBusy(false);
+    }
+  }
+
+  async function renderSystemOverview() {
+    setAppBusy(true);
+    els.app.innerHTML = loadingMarkup();
+
+    try {
+      const payload = await API.systemSnapshot(220);
+      const goroutines = payload.goroutines || {};
+      const memory = payload.memory || {};
+      const databases = Array.isArray(payload.databases) ? payload.databases : [];
+      const envRows = Array.isArray(payload.environment) ? payload.environment : [];
+
+      els.app.innerHTML =
+        UI.sectionHead("System pulse", "Go runtime + DB pool + environment", "Snapshot") +
+        `
+          <section class="detail-grid">
+            ${UI.kv("Go version", payload.go_version || "-")}
+            ${UI.kv("Runtime", `${payload.go_os || "-"} / ${payload.go_arch || "-"}`)}
+            ${UI.kv("Goroutines", String(Number(goroutines.count || 0)))}
+            ${UI.kv("GOMAXPROCS", String(Number(payload.gomaxprocs || 0)))}
+            ${UI.kv("CPU cores", String(Number(payload.cpus || 0)))}
+            ${UI.kv("Generated", formatTemporal(payload.generated_at))}
+          </section>
+
+          <section class="section-block">
+            <div class="section-block-head">
+              <h3>Goroutine explorer</h3>
+              <p>States from runtime pprof snapshot</p>
+            </div>
+            <div class="cards">
+              ${renderGoroutineStateCards(goroutines.state_counts || [])}
+            </div>
+          </section>
+
+          <section class="section-block">
+            <div class="section-block-head">
+              <h3>Memory and GC</h3>
+              <p>runtime.ReadMemStats</p>
+            </div>
+            <section class="detail-grid">
+              ${UI.kv("Alloc", formatBytes(memory.alloc_bytes))}
+              ${UI.kv("Heap alloc", formatBytes(memory.heap_alloc_bytes))}
+              ${UI.kv("Heap sys", formatBytes(memory.heap_sys_bytes))}
+              ${UI.kv("Stack in use", formatBytes(memory.stack_in_use_bytes))}
+              ${UI.kv("Heap objects", String(Number(memory.heap_objects || 0)))}
+              ${UI.kv("GC cycles", String(Number(memory.num_gc || 0)))}
+              ${UI.kv("Last GC pause", `${Number(memory.last_pause_ms || 0)} ms`)}
+              ${UI.kv("Total GC pause", `${Number(memory.pause_total_ms || 0)} ms`)}
+            </section>
+          </section>
+
+          <section class="section-block">
+            <div class="section-block-head">
+              <h3>DB connection pool stats</h3>
+              <p>database/sql Stats()</p>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Alias</th>
+                    <th>Dialect</th>
+                    <th>Open</th>
+                    <th>In use</th>
+                    <th>Idle</th>
+                    <th>Wait count</th>
+                    <th>Wait (ms)</th>
+                    <th>Max open</th>
+                    <th>Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${renderSystemDatabaseRows(databases)}
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+          <section class="section-block">
+            <div class="section-block-head">
+              <h3>Environment (startup snapshot)</h3>
+              <p>Sensitive values are masked by key policy</p>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Name</th>
+                    <th>Value</th>
+                    <th>Masked</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${renderSystemEnvRows(envRows)}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        `;
+    } catch (err) {
+      const retryID = "retry-system";
+      els.app.innerHTML = renderRecoverableError("Could not load system pulse", errorText(err), retryID);
+      const retryBtn = document.getElementById(retryID);
+      if (retryBtn) {
+        retryBtn.addEventListener("click", function () {
+          renderSystemOverview();
+        });
+      }
+      toast(errorText(err), "error");
+    } finally {
+      setAppBusy(false);
+    }
+  }
+
+  function renderGoroutineStateCards(rows) {
+    if (!Array.isArray(rows) || rows.length === 0) {
+      return UI.empty("No goroutine states available");
+    }
+    return rows
+      .map(function (row) {
+        return `
+          <article class="card card-static">
+            <p class="card-label">${escapeHtml(row.state || "unknown")}</p>
+            <p class="card-count">${Number(row.count || 0)}</p>
+          </article>
+        `;
+      })
+      .join("");
+  }
+
+  function renderSystemDatabaseRows(rows) {
+    if (!Array.isArray(rows) || rows.length === 0) {
+      return `<tr><td class="table-empty" colspan="9">No database stats available</td></tr>`;
+    }
+    return rows
+      .map(function (row) {
+        const status = row.error ? `error: ${row.error}` : "ok";
+        return `
+          <tr>
+            <td>${escapeHtml(row.alias || "-")}${row.is_default ? " (default)" : ""}</td>
+            <td>${escapeHtml(row.dialect || row.engine || "-")}</td>
+            <td>${escapeHtml(String(row.open_connections || 0))}</td>
+            <td>${escapeHtml(String(row.in_use || 0))}</td>
+            <td>${escapeHtml(String(row.idle || 0))}</td>
+            <td>${escapeHtml(String(row.wait_count || 0))}</td>
+            <td>${escapeHtml(String(row.wait_duration_ms || 0))}</td>
+            <td>${escapeHtml(String(row.max_open_connections || 0))}</td>
+            <td>${escapeHtml(status)}</td>
+          </tr>
+        `;
+      })
+      .join("");
+  }
+
+  function renderSystemEnvRows(rows) {
+    if (!Array.isArray(rows) || rows.length === 0) {
+      return `<tr><td class="table-empty" colspan="3">No environment rows available</td></tr>`;
+    }
+    return rows
+      .map(function (row) {
+        return `
+          <tr>
+            <td>${escapeHtml(row.name || "-")}</td>
+            <td>${escapeHtml(row.value || "")}</td>
+            <td>${row.masked ? "yes" : "no"}</td>
+          </tr>
+        `;
+      })
+      .join("");
+  }
+
+  function startLiveStream() {
+    stopLiveStream();
+    liveStreamAttempts = 0;
+    connectLiveStream();
+  }
+
+  function connectLiveStream() {
+    if ((window.location.hash || "#/") !== "#/live") {
+      return;
+    }
+    const url = API.liveWebSocketURL();
+    try {
+      liveStreamSocket = new WebSocket(url);
+    } catch (_) {
+      scheduleLiveReconnect();
+      return;
+    }
+
+    liveStreamSocket.onopen = function () {
+      liveStreamConnected = true;
+      liveStreamAttempts = 0;
+      refreshLiveStreamHeader();
+    };
+
+    liveStreamSocket.onmessage = function (evt) {
+      try {
+        const payload = JSON.parse(String(evt.data || "{}"));
+        liveStreamEvents.unshift(payload);
+        if (liveStreamEvents.length > LIVE_STREAM_EVENT_CAP) {
+          liveStreamEvents.length = LIVE_STREAM_EVENT_CAP;
+        }
+        refreshLiveStreamRows();
+      } catch (_) {}
+    };
+
+    liveStreamSocket.onerror = function () {};
+
+    liveStreamSocket.onclose = function () {
+      liveStreamConnected = false;
+      refreshLiveStreamHeader();
+      if ((window.location.hash || "#/") === "#/live") {
+        scheduleLiveReconnect();
+      }
+    };
+  }
+
+  function scheduleLiveReconnect() {
+    if (liveStreamRetryTimer !== null) {
+      return;
+    }
+    liveStreamAttempts += 1;
+    const wait = Math.min(4000, 300 * Math.pow(2, Math.min(5, liveStreamAttempts)));
+    liveStreamRetryTimer = setTimeout(function () {
+      liveStreamRetryTimer = null;
+      connectLiveStream();
+    }, wait);
+  }
+
+  function stopLiveStream() {
+    if (liveStreamRetryTimer !== null) {
+      clearTimeout(liveStreamRetryTimer);
+      liveStreamRetryTimer = null;
+    }
+    if (liveStreamSocket) {
+      try {
+        liveStreamSocket.close();
+      } catch (_) {}
+      liveStreamSocket = null;
+    }
+    liveStreamConnected = false;
+  }
+
+  function refreshLiveStreamRows() {
+    const node = document.getElementById("live-stream-events");
+    if (!node) {
+      return;
+    }
+    node.innerHTML = renderLiveEventRows(liveStreamEvents);
+  }
+
+  function refreshLiveStreamHeader() {
+    if ((window.location.hash || "#/") !== "#/live") {
+      return;
+    }
+    renderLiveOverview();
+  }
+
+  function renderLiveEventRows(events) {
+    if (!Array.isArray(events) || events.length === 0) {
+      return `<div class="table-empty">No streamed events yet</div>`;
+    }
+    const rows = events
+      .map(function (event) {
+        const type = escapeHtml(event.type || "event");
+        const ts = escapeHtml(formatTemporal(event.timestamp || ""));
+        let summary = "-";
+        if (event.request && event.request.path) {
+          summary = `${escapeHtml(event.request.method || "")} ${escapeHtml(event.request.path || "")} · ${escapeHtml(String(event.request.status || ""))}`;
+        } else if (event.session && event.session.last_route) {
+          summary = `${escapeHtml(event.session.user_id || "-")} · ${escapeHtml(event.session.last_route || "")}`;
+        }
+        return `<tr><td>${ts}</td><td>${type}</td><td>${summary}</td></tr>`;
+      })
+      .join("");
+    return `
+      <table>
+        <thead>
+          <tr>
+            <th>Time</th>
+            <th>Type</th>
+            <th>Summary</th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>
+    `;
+  }
+
+  function renderLiveRequestRows(rows) {
+    if (!Array.isArray(rows) || rows.length === 0) {
+      return `<tr><td class="table-empty" colspan="7">No recent requests</td></tr>`;
+    }
+    return rows
+      .map(function (row) {
+        return `
+          <tr>
+            <td>${escapeHtml(formatTemporal(row.timestamp || ""))}</td>
+            <td>${escapeHtml(row.method || "-")}</td>
+            <td>${escapeHtml(row.path || "-")}</td>
+            <td>${escapeHtml(String(row.status || "-"))}</td>
+            <td>${escapeHtml(String(row.duration_ms || 0))}</td>
+            <td>${escapeHtml(row.remote_ip || "-")}</td>
+            <td>${escapeHtml(shortenTrace(row.trace_id || ""))}</td>
+          </tr>
+        `;
+      })
+      .join("");
+  }
+
+  function renderLiveSessionRows(rows) {
+    if (!Array.isArray(rows) || rows.length === 0) {
+      return `<tr><td class="table-empty" colspan="6">No tracked sessions</td></tr>`;
+    }
+    return rows
+      .map(function (row) {
+        return `
+          <tr>
+            <td>${escapeHtml(row.token_short || "-")}</td>
+            <td>${escapeHtml(row.user_id || "-")}</td>
+            <td>${escapeHtml(row.last_route || "-")}</td>
+            <td>${escapeHtml(formatTemporal(row.last_seen_at || ""))}</td>
+            <td>${escapeHtml(row.ip || "-")}</td>
+            <td>${escapeHtml(shortenTrace(row.trace_id || ""))}</td>
+          </tr>
+        `;
+      })
+      .join("");
+  }
+
+  function shortenTrace(value) {
+    const text = String(value || "").trim();
+    if (text.length <= 12) {
+      return text || "-";
+    }
+    return text.slice(0, 12) + "...";
   }
 
   function renderSessionChartCard(title, subtitle, points) {
@@ -1502,6 +1982,22 @@
     return date.toLocaleString();
   }
 
+  function formatBytes(value) {
+    const bytes = Number(value || 0);
+    if (!Number.isFinite(bytes) || bytes <= 0) {
+      return "0 B";
+    }
+    const units = ["B", "KB", "MB", "GB", "TB"];
+    let idx = 0;
+    let current = bytes;
+    while (current >= 1024 && idx < units.length - 1) {
+      current = current / 1024;
+      idx += 1;
+    }
+    const precision = current >= 100 || idx === 0 ? 0 : 1;
+    return `${current.toFixed(precision)} ${units[idx]}`;
+  }
+
   function formatValue(value, field) {
     if (value === null || value === undefined || value === "") {
       return "-";
@@ -1583,6 +2079,22 @@
       desc: "Runtime telemetry",
       run: function () {
         navigate("#/sessions");
+      },
+    });
+
+    items.push({
+      label: "Open live runtime",
+      desc: "WebSocket stream + request inspector",
+      run: function () {
+        navigate("#/live");
+      },
+    });
+
+    items.push({
+      label: "Open system pulse",
+      desc: "Goroutines, memory, DB pools and env",
+      run: function () {
+        navigate("#/system");
       },
     });
 
