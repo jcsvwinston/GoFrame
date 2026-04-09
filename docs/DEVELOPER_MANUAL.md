@@ -492,6 +492,29 @@ Main routes:
 - `DELETE /admin/api/system/flags/{name}`
 - `POST /admin/api/system/jobs/queues/{name}/actions/{action}` (`pause|unpause|retry`, guarded with explicit acknowledgment)
 
+## 10.4 Local Cluster Lab
+
+For a reproducible multi-node admin runtime check (2 nodes + Redis + round-robin LB):
+
+```bash
+scripts/dev/run_admin_cluster_lab.sh
+```
+
+Windows PowerShell:
+
+```powershell
+pwsh -File scripts/dev/run_admin_cluster_lab.ps1
+```
+
+Stop scripts:
+
+- bash: `scripts/dev/stop_admin_cluster_lab.sh`
+- powershell: `pwsh -File scripts/dev/stop_admin_cluster_lab.ps1`
+
+Detailed guide:
+
+- `docs/ADMIN_CLUSTER_LAB.md`
+
 List query validation contract (`GET /admin/api/models/{name}`):
 
 - `page` and `page_size` must be positive integers.

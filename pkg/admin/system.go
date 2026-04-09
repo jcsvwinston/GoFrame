@@ -3,6 +3,7 @@ package admin
 import (
 	"bytes"
 	"net/http"
+	"net/url"
 	"os"
 	"runtime"
 	"runtime/pprof"
@@ -33,6 +34,7 @@ type systemSnapshotResponse struct {
 	Databases   []systemDatabasePoolRow `json:"databases"`
 	Jobs        tasks.RuntimeSnapshot   `json:"jobs"`
 	Flags       []featureFlagState      `json:"flags"`
+	Telemetry   systemTelemetryInfo     `json:"telemetry"`
 	Environment []systemEnvVar          `json:"environment"`
 }
 
@@ -77,6 +79,13 @@ type systemEnvVar struct {
 	Masked bool   `json:"masked"`
 }
 
+type systemTelemetryInfo struct {
+	OTLPConfigured       bool   `json:"otlp_configured"`
+	OTLPEndpoint         string `json:"otlp_endpoint,omitempty"`
+	TraceLinksConfigured bool   `json:"trace_links_configured"`
+	TraceURLTemplate     string `json:"trace_url_template,omitempty"`
+}
+
 func (p *Panel) handleSystemSnapshot(w http.ResponseWriter, r *http.Request) {
 	if !p.authorizeAction(w, r, "*", "system_pulse") {
 		return
@@ -108,9 +117,15 @@ func (p *Panel) handleSystemSnapshot(w http.ResponseWriter, r *http.Request) {
 			LastPauseMS:     lastGCPauseMS(mem),
 			PauseTotalMS:    uint64(mem.PauseTotalNs / uint64(time.Millisecond)),
 		},
-		Databases:   p.systemDatabasePoolRows(),
-		Jobs:        tasks.InspectRuntime(p.config.RedisURL),
-		Flags:       p.systemFeatureFlags(),
+		Databases: p.systemDatabasePoolRows(),
+		Jobs:      tasks.InspectRuntime(p.config.RedisURL),
+		Flags:     p.systemFeatureFlags(),
+		Telemetry: systemTelemetryInfo{
+			OTLPConfigured:       strings.TrimSpace(p.config.OTLPEndpoint) != "",
+			OTLPEndpoint:         summarizeOTLPEndpoint(p.config.OTLPEndpoint),
+			TraceLinksConfigured: strings.TrimSpace(p.config.TraceURLTemplate) != "",
+			TraceURLTemplate:     strings.TrimSpace(p.config.TraceURLTemplate),
+		},
 		Environment: p.systemEnvironmentRows(limit),
 	}
 
@@ -221,6 +236,25 @@ func parseSystemEnvLimit(r *http.Request, fallback int) int {
 		return maxSystemEnvLimit
 	}
 	return value
+}
+
+func summarizeOTLPEndpoint(raw string) string {
+	endpoint := strings.TrimSpace(raw)
+	if endpoint == "" {
+		return ""
+	}
+	if !strings.Contains(endpoint, "://") {
+		return endpoint
+	}
+	parsed, err := url.Parse(endpoint)
+	if err != nil || strings.TrimSpace(parsed.Host) == "" {
+		return endpoint
+	}
+	scheme := strings.TrimSpace(parsed.Scheme)
+	if scheme == "" {
+		return parsed.Host
+	}
+	return scheme + "://" + parsed.Host
 }
 
 func gatherGoroutineStateCounts() []systemStateCount {

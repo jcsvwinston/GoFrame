@@ -1003,32 +1003,65 @@
       values.push(Number(item.value || 0));
     });
     const max = Math.max(1, ...values);
+    const min = 0;
+    const range = Math.max(1, max - min);
 
     const width = 1240;
-    const height = 250;
-    const padX = 20;
-    const padY = 16;
-    const graphW = width - padX * 2;
-    const graphH = height - padY * 2;
+    const height = 290;
+    const padLeft = 48;
+    const padRight = 16;
+    const padTop = 14;
+    const padBottom = 26;
+    const graphW = width - padLeft - padRight;
+    const graphH = height - padTop - padBottom;
 
-    const buildPath = function (series) {
+    const mapY = function (value) {
+      const ratio = (Number(value || 0) - min) / range;
+      return padTop + graphH - ratio * graphH;
+    };
+
+    const buildCoords = function (series) {
       if (!Array.isArray(series) || series.length === 0) {
+        return [];
+      }
+      return series.map(function (item, idx) {
+        const x = padLeft + (idx / Math.max(1, series.length - 1)) * graphW;
+        const y = mapY(Number(item.value || 0));
+        return {
+          x: x,
+          y: y,
+          value: Number(item.value || 0),
+          timestamp: item.timestamp,
+        };
+      });
+    };
+
+    const buildPath = function (coords) {
+      if (!Array.isArray(coords) || coords.length === 0) {
         return "";
       }
-      return series
-        .map(function (item, idx) {
-          const x = padX + (idx / Math.max(1, series.length - 1)) * graphW;
-          const y = padY + graphH - (Number(item.value || 0) / max) * graphH;
-          return `${idx === 0 ? "M" : "L"}${x.toFixed(1)} ${y.toFixed(1)}`;
+      return coords
+        .map(function (point, idx) {
+          return `${idx === 0 ? "M" : "L"}${point.x.toFixed(1)} ${point.y.toFixed(1)}`;
         })
         .join(" ");
     };
 
-    const sessionPath = buildPath(sessions);
-    const requestPath = buildPath(requests);
-    const sessionArea = sessionPath
-      ? `${sessionPath} L${(padX + graphW).toFixed(1)} ${(padY + graphH).toFixed(1)} L${padX.toFixed(1)} ${(padY + graphH).toFixed(1)} Z`
-      : "";
+    const buildAreaPath = function (coords) {
+      if (!Array.isArray(coords) || coords.length === 0) {
+        return "";
+      }
+      const line = buildPath(coords);
+      const last = coords[coords.length - 1];
+      const first = coords[0];
+      return `${line} L${last.x.toFixed(1)} ${(padTop + graphH).toFixed(1)} L${first.x.toFixed(1)} ${(padTop + graphH).toFixed(1)} Z`;
+    };
+
+    const sessionCoords = buildCoords(sessions);
+    const requestCoords = buildCoords(requests);
+    const sessionPath = buildPath(sessionCoords);
+    const requestPath = buildPath(requestCoords);
+    const sessionArea = buildAreaPath(sessionCoords);
     const labelSource = requests.length > 0 ? requests : sessions;
     const divider = Math.max(1, Math.floor(labelSource.length / 6));
     const labels = labelSource
@@ -1040,14 +1073,70 @@
       })
       .join("");
 
+    const yTickCount = 4;
+    const yTicks = [];
+    for (let idx = 0; idx <= yTickCount; idx += 1) {
+      const ratio = idx / yTickCount;
+      const value = Math.round(min + (max - min) * ratio);
+      const y = padTop + graphH - ratio * graphH;
+      yTicks.push({
+        value: value,
+        y: y,
+      });
+    }
+
+    const verticalDivisions = Math.max(5, Math.min(12, labelSource.length - 1));
+    const xTicks = [];
+    for (let idx = 0; idx <= verticalDivisions; idx += 1) {
+      const x = padLeft + (idx / Math.max(1, verticalDivisions)) * graphW;
+      xTicks.push({ x: x, strong: idx === 0 || idx === verticalDivisions });
+    }
+
+    const sessionSummary = summarizeOverviewSeries(sessions);
+    const requestSummary = summarizeOverviewSeries(requests);
+    const sessionAvg = sessions.length > 0
+      ? Math.round(sessions.reduce(function (acc, item) {
+        return acc + Number(item.value || 0);
+      }, 0) / sessions.length)
+      : 0;
+    const requestAvg = requests.length > 0
+      ? Math.round(requests.reduce(function (acc, item) {
+        return acc + Number(item.value || 0);
+      }, 0) / requests.length)
+      : 0;
+
+    const sessionLatest = sessionCoords.length > 0 ? sessionCoords[sessionCoords.length - 1] : null;
+    const requestLatest = requestCoords.length > 0 ? requestCoords[requestCoords.length - 1] : null;
+
     return `
       <div class="overview-trend-wrap">
         <svg viewBox="0 0 ${width} ${height}" class="overview-trend-chart" role="img" aria-label="Live traffic signals">
-          ${sessionArea ? `<path class="overview-trend-area" d="${sessionArea}"></path>` : ""}
+          <defs>
+            <linearGradient id="overview-sessions-area" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stop-color="rgba(34, 211, 238, 0.38)"></stop>
+              <stop offset="100%" stop-color="rgba(34, 211, 238, 0.05)"></stop>
+            </linearGradient>
+          </defs>
+          ${xTicks.map(function (tick) {
+            return `<line class="overview-trend-x-grid${tick.strong ? " is-strong" : ""}" x1="${tick.x.toFixed(1)}" y1="${padTop.toFixed(1)}" x2="${tick.x.toFixed(1)}" y2="${(padTop + graphH).toFixed(1)}"></line>`;
+          }).join("")}
+          ${yTicks.map(function (tick, idx) {
+            return `
+              <line class="overview-trend-y-grid${idx === 0 ? " is-top" : ""}" x1="${padLeft.toFixed(1)}" y1="${tick.y.toFixed(1)}" x2="${(padLeft + graphW).toFixed(1)}" y2="${tick.y.toFixed(1)}"></line>
+              <text class="overview-trend-y-label" x="${(padLeft - 8).toFixed(1)}" y="${(tick.y + 4).toFixed(1)}" text-anchor="end">${escapeHtml(String(tick.value))}</text>
+            `;
+          }).join("")}
+          ${sessionArea ? `<path class="overview-trend-area" d="${sessionArea}" fill="url(#overview-sessions-area)"></path>` : ""}
           ${sessionPath ? `<path class="overview-trend-line" d="${sessionPath}"></path>` : ""}
           ${requestPath ? `<path class="overview-trend-line-secondary" d="${requestPath}"></path>` : ""}
+          ${sessionLatest ? `<circle class="overview-trend-point overview-trend-point-session" cx="${sessionLatest.x.toFixed(1)}" cy="${sessionLatest.y.toFixed(1)}" r="3.4"></circle>` : ""}
+          ${requestLatest ? `<circle class="overview-trend-point overview-trend-point-request" cx="${requestLatest.x.toFixed(1)}" cy="${requestLatest.y.toFixed(1)}" r="3.4"></circle>` : ""}
         </svg>
         <div class="overview-trend-labels" style="grid-template-columns: repeat(${labelSource.length}, minmax(0, 1fr));">${labels}</div>
+        <div class="overview-trend-legend">
+          <span class="legend-item"><i class="legend-swatch is-session"></i>Sessions · latest ${sessionSummary.latest} · avg ${sessionAvg} · peak ${sessionSummary.peak}</span>
+          <span class="legend-item"><i class="legend-swatch is-request"></i>Requests/min · latest ${requestSummary.latest} · avg ${requestAvg} · peak ${requestSummary.peak}</span>
+        </div>
       </div>
     `;
   }
@@ -1776,6 +1865,8 @@
             ${UI.kv("Cluster node", cluster.node_id || "-")}
             ${UI.kv("Cluster channel", cluster.channel || "-")}
             ${UI.kv("Cluster received", String(Number(cluster.received || 0)))}
+            ${UI.kv("Cluster reason", cluster.reason || "-")}
+            ${UI.kv("Trace links", state.traceURLTemplate ? "configured" : "not configured")}
             ${UI.kv("Generated", formatTemporal(payload.generated_at))}
           </section>
 
@@ -2048,12 +2139,15 @@
       const jobQueues = Array.isArray(jobs.queues) ? jobs.queues : [];
       const jobWorkers = Array.isArray(jobs.workers) ? jobs.workers : [];
       const flags = Array.isArray(payload.flags) ? payload.flags : [];
+      const telemetry = payload.telemetry || {};
       const envRows = Array.isArray(payload.environment) ? payload.environment : [];
       const goroutineCount = Number(goroutines.count || 0);
       const workerCount = Number(jobs.total_workers || 0);
       const queueCount = Number(jobs.total_queues || 0);
       const heapUsage = formatBytes(memory.heap_alloc_bytes);
       const gcCycles = Number(memory.num_gc || 0);
+      const otlpConfigured = !!telemetry.otlp_configured;
+      const traceLinksConfigured = !!telemetry.trace_links_configured;
 
       els.app.innerHTML =
         UI.sectionHead("System Pulse", "Go runtime + DB pool + jobs + feature flags", "Snapshot") +
@@ -2079,6 +2173,11 @@
               <p class="kpi-value">${flags.length.toLocaleString()}</p>
               <span class="status-chip">${envRows.length.toLocaleString()} env vars</span>
             </article>
+            <article class="card kpi-card card-static">
+              <p class="card-label">Telemetry</p>
+              <p class="kpi-value">${otlpConfigured ? "OTLP on" : "OTLP off"}</p>
+              <span class="status-chip">Trace links ${traceLinksConfigured ? "on" : "off"}</span>
+            </article>
           </section>
 
           <section class="detail-grid">
@@ -2089,7 +2188,23 @@
             ${UI.kv("CPU cores", String(Number(payload.cpus || 0)))}
             ${UI.kv("Queues discovered", String(queueCount))}
             ${UI.kv("Active workers", String(workerCount))}
+            ${UI.kv("OTLP exporter", otlpConfigured ? "enabled" : "disabled")}
+            ${UI.kv("OTLP endpoint", telemetry.otlp_endpoint || "-")}
+            ${UI.kv("Trace links", traceLinksConfigured ? "configured" : "not configured")}
             ${UI.kv("Generated", formatTemporal(payload.generated_at))}
+          </section>
+
+          <section class="cards system-signal-grid">
+            <article class="card card-static system-signal-card">
+              <p class="card-label">Memory composition</p>
+              <p class="section-subtitle">Current runtime distribution</p>
+              ${renderSystemMemoryBars(memory)}
+            </article>
+            <article class="card card-static system-signal-card">
+              <p class="card-label">DB pool utilization</p>
+              <p class="section-subtitle">In use vs open capacity</p>
+              ${renderSystemDatabaseUtilizationBars(databases)}
+            </article>
           </section>
 
           <section class="section-block">
@@ -2291,6 +2406,69 @@
         `;
       })
       .join("");
+  }
+
+  function renderSystemMemoryBars(memory) {
+    const alloc = Number(memory && memory.alloc_bytes || 0);
+    const heapAlloc = Number(memory && memory.heap_alloc_bytes || 0);
+    const heapSys = Number(memory && memory.heap_sys_bytes || 0);
+    const stackInUse = Number(memory && memory.stack_in_use_bytes || 0);
+    const maxValue = Math.max(1, alloc, heapAlloc, heapSys, stackInUse);
+
+    return renderMetricBars([
+      { label: "Alloc", value: alloc, max: maxValue, display: formatBytes(alloc) },
+      { label: "Heap alloc", value: heapAlloc, max: maxValue, display: formatBytes(heapAlloc) },
+      { label: "Heap sys", value: heapSys, max: maxValue, display: formatBytes(heapSys) },
+      { label: "Stack in use", value: stackInUse, max: maxValue, display: formatBytes(stackInUse) },
+    ]);
+  }
+
+  function renderSystemDatabaseUtilizationBars(rows) {
+    const items = (Array.isArray(rows) ? rows : [])
+      .map(function (row) {
+        const open = Number(row && row.open_connections || 0);
+        const maxOpen = Number(row && row.max_open_connections || 0);
+        const inUse = Number(row && row.in_use || 0);
+        const base = Math.max(1, maxOpen, open);
+        return {
+          label: String((row && row.alias) || "default"),
+          value: inUse,
+          max: base,
+          display: `${inUse}/${base}`,
+        };
+      });
+
+    if (items.length === 0) {
+      return `<div class="table-empty">No database pools available</div>`;
+    }
+    return renderMetricBars(items);
+  }
+
+  function renderMetricBars(items) {
+    const rows = Array.isArray(items) ? items : [];
+    if (rows.length === 0) {
+      return `<div class="table-empty">No metrics available</div>`;
+    }
+    return `
+      <div class="metric-bars">
+        ${rows.map(function (row) {
+          const value = Number(row.value || 0);
+          const max = Math.max(1, Number(row.max || 0));
+          const percent = Math.max(0, Math.min(100, Math.round((value / max) * 100)));
+          return `
+            <div class="metric-bar-row">
+              <div class="metric-bar-head">
+                <span>${escapeHtml(row.label || "-")}</span>
+                <strong>${escapeHtml(String(row.display || value))}</strong>
+              </div>
+              <div class="metric-bar-track">
+                <span class="metric-bar-fill" style="width:${percent}%;"></span>
+              </div>
+            </div>
+          `;
+        }).join("")}
+      </div>
+    `;
   }
 
   function renderSystemDatabaseRows(rows) {
@@ -3076,21 +3254,30 @@
       return `<div class="table-empty">No telemetry points</div>`;
     }
 
-    const width = 320;
-    const height = 130;
-    const padX = 10;
-    const padY = 10;
-    const graphW = width - padX * 2;
-    const graphH = height - padY * 2;
+    const width = 360;
+    const height = 152;
+    const padLeft = 28;
+    const padRight = 12;
+    const padTop = 10;
+    const padBottom = 20;
+    const graphW = width - padLeft - padRight;
+    const graphH = height - padTop - padBottom;
 
     const values = points.map(function (p) {
       return Number(p.active || 0);
     });
     const max = Math.max(1, ...values);
+    const avg = Math.round(values.reduce(function (acc, value) {
+      return acc + Number(value || 0);
+    }, 0) / values.length);
+    const latest = values[values.length - 1] || 0;
+    const prev = values.length > 1 ? values[values.length - 2] : latest;
+    const delta = latest - prev;
+    const trendLabel = delta > 0 ? `+${delta}` : String(delta);
 
     const coords = values.map(function (value, idx) {
-      const x = padX + (idx / Math.max(1, values.length - 1)) * graphW;
-      const y = padY + graphH - (value / max) * graphH;
+      const x = padLeft + (idx / Math.max(1, values.length - 1)) * graphW;
+      const y = padTop + graphH - (value / max) * graphH;
       return [x, y];
     });
 
@@ -3100,18 +3287,46 @@
       })
       .join(" ");
 
-    const areaPath = `${path} L${(padX + graphW).toFixed(1)} ${(padY + graphH).toFixed(1)} L${padX.toFixed(1)} ${(padY + graphH).toFixed(1)} Z`;
-    const latest = values[values.length - 1] || 0;
+    const areaPath = `${path} L${(padLeft + graphW).toFixed(1)} ${(padTop + graphH).toFixed(1)} L${padLeft.toFixed(1)} ${(padTop + graphH).toFixed(1)} Z`;
+    const latestPoint = coords.length > 0 ? coords[coords.length - 1] : null;
+    const yTickCount = 3;
+    const yTicks = [];
+    for (let idx = 0; idx <= yTickCount; idx += 1) {
+      const ratio = idx / yTickCount;
+      const y = padTop + graphH - ratio * graphH;
+      const tickValue = Math.round(max * ratio);
+      yTicks.push({ y: y, value: tickValue });
+    }
+
+    const xTickDivider = Math.max(1, Math.floor(points.length / 3));
+    const xTicks = points
+      .map(function (point, idx) {
+        if (idx % xTickDivider !== 0 && idx !== points.length - 1) {
+          return "";
+        }
+        return `<span>${escapeHtml(formatOverviewTimeLabel(point.timestamp))}</span>`;
+      })
+      .join("");
 
     return `
       <div class="session-chart-wrap">
         <svg viewBox="0 0 ${width} ${height}" class="session-chart" role="img" aria-label="Session active chart">
+          ${yTicks.map(function (tick) {
+            return `
+              <line class="session-chart-grid-line" x1="${padLeft.toFixed(1)}" y1="${tick.y.toFixed(1)}" x2="${(padLeft + graphW).toFixed(1)}" y2="${tick.y.toFixed(1)}"></line>
+              <text class="session-chart-y-label" x="${(padLeft - 6).toFixed(1)}" y="${(tick.y + 4).toFixed(1)}" text-anchor="end">${escapeHtml(String(tick.value))}</text>
+            `;
+          }).join("")}
           <path class="session-chart-area" d="${areaPath}"></path>
           <path class="session-chart-line" d="${path}"></path>
+          ${latestPoint ? `<circle class="session-chart-point" cx="${latestPoint[0].toFixed(1)}" cy="${latestPoint[1].toFixed(1)}" r="3"></circle>` : ""}
         </svg>
+        <div class="session-chart-labels">${xTicks}</div>
         <div class="session-chart-meta">
           <span class="status-chip">Latest: ${latest}</span>
+          <span class="status-chip">Avg: ${avg}</span>
           <span class="status-chip">Peak: ${max}</span>
+          <span class="status-chip ${delta >= 0 ? "metric-success" : "metric-warning"}">Trend: ${trendLabel}</span>
         </div>
       </div>
     `;

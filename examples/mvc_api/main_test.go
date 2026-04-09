@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -147,15 +148,25 @@ func TestExampleMVCAPIAdmin_Smoke(t *testing.T) {
 	}
 
 	respAdmin := mustGET(t, a.Router, "/admin/")
-	if respAdmin.StatusCode != http.StatusOK {
+	if respAdmin.StatusCode != http.StatusFound {
 		t.Fatalf("admin index status=%d", respAdmin.StatusCode)
+	}
+	if got := respAdmin.Header.Get("Location"); got != "/admin/login" {
+		t.Fatalf("expected redirect to /admin/login, got %q", got)
+	}
+
+	adminCookies := mustAdminLogin(t, a.Router, "/admin/login", "admin", "supersecret123")
+
+	respAdmin = mustRequestWithCookies(t, a.Router, http.MethodGet, "/admin/", nil, nil, adminCookies)
+	if respAdmin.StatusCode != http.StatusOK {
+		t.Fatalf("admin index authenticated status=%d", respAdmin.StatusCode)
 	}
 	bodyAdmin := mustReadBody(t, respAdmin)
 	if !strings.Contains(bodyAdmin, "Command palette") {
 		t.Fatalf("admin index missing expected content")
 	}
 
-	respAdminModels := mustGET(t, a.Router, "/admin/api/models")
+	respAdminModels := mustRequestWithCookies(t, a.Router, http.MethodGet, "/admin/api/models", nil, nil, adminCookies)
 	if respAdminModels.StatusCode != http.StatusOK {
 		t.Fatalf("admin models status=%d", respAdminModels.StatusCode)
 	}
@@ -169,7 +180,7 @@ func TestExampleMVCAPIAdmin_Smoke(t *testing.T) {
 		t.Fatalf("Article model not found in admin models payload: %#v", adminModels.Models)
 	}
 
-	respComponents := mustGET(t, a.Router, "/admin/static/components.js")
+	respComponents := mustRequestWithCookies(t, a.Router, http.MethodGet, "/admin/static/components.js", nil, nil, adminCookies)
 	if respComponents.StatusCode != http.StatusOK {
 		t.Fatalf("components.js status=%d", respComponents.StatusCode)
 	}
@@ -249,6 +260,9 @@ func newExampleTestApp(t *testing.T) (*app.App, func()) {
 	cfg.Port = 0
 	cfg.LogLevel = "error"
 	cfg.LogFormat = "text"
+	cfg.AdminBootstrapUsername = "admin"
+	cfg.AdminBootstrapEmail = "admin@example.com"
+	cfg.AdminBootstrapPassword = "supersecret123"
 
 	a, err := newExampleApp(cfg)
 	if err != nil {
@@ -281,6 +295,52 @@ func mustRequest(t *testing.T, handler http.Handler, method, url string, body io
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 	return rec.Result()
+}
+
+func mustRequestWithCookies(
+	t *testing.T,
+	handler http.Handler,
+	method string,
+	url string,
+	body io.Reader,
+	headers map[string]string,
+	cookies []*http.Cookie,
+) *http.Response {
+	t.Helper()
+
+	req := httptest.NewRequest(method, url, body)
+	for _, c := range cookies {
+		req.AddCookie(c)
+	}
+	for k, v := range headers {
+		req.Header.Set(k, v)
+	}
+
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	return rec.Result()
+}
+
+func mustAdminLogin(t *testing.T, handler http.Handler, loginPath, username, password string) []*http.Cookie {
+	t.Helper()
+
+	form := url.Values{
+		"username": {username},
+		"password": {password},
+		"next":     {"/admin/"},
+	}
+	res := mustRequest(t, handler, http.MethodPost, loginPath, strings.NewReader(form.Encode()), map[string]string{
+		"Content-Type": "application/x-www-form-urlencoded",
+	})
+	if res.StatusCode != http.StatusSeeOther {
+		body := mustReadBody(t, res)
+		t.Fatalf("admin login status=%d body=%s", res.StatusCode, body)
+	}
+	cookies := res.Cookies()
+	if len(cookies) == 0 {
+		t.Fatal("admin login did not set any session cookie")
+	}
+	return cookies
 }
 
 func mustReadBody(t *testing.T, res *http.Response) string {

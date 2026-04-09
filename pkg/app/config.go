@@ -58,6 +58,10 @@ type Config struct {
 	// Admin
 	AdminPrefix              string   `koanf:"admin_prefix"`
 	AdminTitle               string   `koanf:"admin_title"`
+	AdminAuthDatabase        string   `koanf:"admin_auth_database"`
+	AdminBootstrapUsername   string   `koanf:"admin_bootstrap_username"`
+	AdminBootstrapEmail      string   `koanf:"admin_bootstrap_email"`
+	AdminBootstrapPassword   string   `koanf:"admin_bootstrap_password"`
 	AdminLiveExcludePatterns []string `koanf:"admin_live_exclude_patterns"`
 	AdminClusterEnabled      bool     `koanf:"admin_cluster_enabled"`
 	AdminClusterRedisURL     string   `koanf:"admin_cluster_redis_url"`
@@ -193,8 +197,12 @@ func defaults() Config {
 		SessionCookieSameSite: "lax",
 		SessionRedisPrefix:    "goframe:sessions:",
 
-		AdminPrefix: "/admin",
-		AdminTitle:  "GoFrame Admin",
+		AdminPrefix:            "/admin",
+		AdminTitle:             "GoFrame Admin",
+		AdminAuthDatabase:      "",
+		AdminBootstrapUsername: "admin",
+		AdminBootstrapEmail:    "admin@localhost",
+		AdminBootstrapPassword: "",
 		AdminLiveExcludePatterns: []string{
 			"/admin",
 		},
@@ -553,6 +561,16 @@ func normalizeAdminConfig(cfg *Config) {
 	if cfg == nil {
 		return
 	}
+	cfg.AdminAuthDatabase = normalizeAlias(cfg.AdminAuthDatabase)
+	cfg.AdminBootstrapUsername = strings.TrimSpace(cfg.AdminBootstrapUsername)
+	if cfg.AdminBootstrapUsername == "" {
+		cfg.AdminBootstrapUsername = "admin"
+	}
+	cfg.AdminBootstrapEmail = strings.TrimSpace(cfg.AdminBootstrapEmail)
+	if cfg.AdminBootstrapEmail == "" {
+		cfg.AdminBootstrapEmail = "admin@localhost"
+	}
+	cfg.AdminBootstrapPassword = strings.TrimSpace(cfg.AdminBootstrapPassword)
 	cfg.AdminClusterRedisURL = strings.TrimSpace(cfg.AdminClusterRedisURL)
 	cfg.AdminClusterChannel = strings.TrimSpace(cfg.AdminClusterChannel)
 	if cfg.AdminClusterChannel == "" {

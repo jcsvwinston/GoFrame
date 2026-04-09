@@ -20,6 +20,29 @@ Open:
 - `http://localhost:8090/api/health`
 - `http://localhost:8090/admin`
 
+## Runtime overrides (env)
+
+`examples/mvc_api` accepts optional environment overrides for local cluster testing:
+
+- `GOFRAME_EXAMPLE_PORT`
+- `GOFRAME_EXAMPLE_DB_URL`
+- `GOFRAME_EXAMPLE_REDIS_URL`
+- `GOFRAME_EXAMPLE_SESSION_STORE` (`memory|sql|redis`)
+- `GOFRAME_EXAMPLE_SESSION_REDIS_URL`
+- `GOFRAME_EXAMPLE_ADMIN_CLUSTER_ENABLED`
+- `GOFRAME_EXAMPLE_ADMIN_CLUSTER_REDIS_URL`
+- `GOFRAME_EXAMPLE_ADMIN_CLUSTER_CHANNEL`
+- `GOFRAME_EXAMPLE_ADMIN_CLUSTER_NODE_ID`
+- `GOFRAME_EXAMPLE_ADMIN_CLUSTER_TOKEN`
+- `GOFRAME_EXAMPLE_ADMIN_TRACE_URL_TEMPLATE`
+- `GOFRAME_EXAMPLE_OTLP_ENDPOINT`
+- `GOFRAME_EXAMPLE_ADMIN_TITLE`
+
+For a full 2-node + LB lab, use:
+
+- `scripts/dev/run_admin_cluster_lab.sh`
+- `scripts/dev/run_admin_cluster_lab.ps1`
+
 ## Purpose
 
 Use this example as a reference for:

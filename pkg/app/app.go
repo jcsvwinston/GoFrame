@@ -92,11 +92,50 @@ func New(cfg *Config) (*App, error) {
 		return nil, wrapOp("New db", fmt.Errorf("database alias %q not initialized", defaultAlias))
 	}
 
-	sqlDB, err := dbConn.SqlDB()
+	adminAuthAlias := normalizeAlias(effective.AdminAuthDatabase)
+	if adminAuthAlias == "" {
+		adminAuthAlias = defaultAlias
+	}
+	adminAuthDB := dbs[adminAuthAlias]
+	if adminAuthDB == nil {
+		_ = closeDatabases(dbs)
+		_ = telemetryShutdown(context.Background())
+		return nil, wrapOp("New admin auth", fmt.Errorf("admin_auth_database alias %q not initialized", adminAuthAlias))
+	}
+
+	adminAuthSQLDB, err := adminAuthDB.SqlDB()
 	if err != nil {
 		_ = closeDatabases(dbs)
 		_ = telemetryShutdown(context.Background())
-		return nil, wrapOp("New db sql handle", err)
+		return nil, wrapOp("New admin auth sql handle", err)
+	}
+
+	bootstrapResult, err := admin.EnsureBootstrapAdminUser(context.Background(), adminAuthSQLDB, admin.BootstrapAdminConfig{
+		Username: effective.AdminBootstrapUsername,
+		Email:    effective.AdminBootstrapEmail,
+		Password: effective.AdminBootstrapPassword,
+	})
+	if err != nil {
+		_ = closeDatabases(dbs)
+		_ = telemetryShutdown(context.Background())
+		return nil, wrapOp("New admin bootstrap user", err)
+	}
+	if bootstrapResult.Created {
+		if bootstrapResult.PasswordGenerated {
+			logger.Warn(
+				"admin bootstrap credentials created",
+				"database_alias", adminAuthAlias,
+				"username", bootstrapResult.Username,
+				"password", bootstrapResult.Password,
+				"note", "rotate this password immediately",
+			)
+		} else {
+			logger.Info(
+				"admin bootstrap credentials created",
+				"database_alias", adminAuthAlias,
+				"username", bootstrapResult.Username,
+			)
+		}
 	}
 
 	sessionManager, sessionStoreShutdown, err := buildSessionManager(effective, dbConn)
@@ -137,6 +176,7 @@ func New(cfg *Config) (*App, error) {
 		Prefix:              effective.AdminPrefix,
 		Title:               effective.AdminTitle,
 		Environment:         effective.Env,
+		OTLPEndpoint:        strings.TrimSpace(effective.OTLPEndpoint),
 		RedisURL:            effective.RedisURL,
 		LiveExcludePatterns: append([]string(nil), effective.AdminLiveExcludePatterns...),
 		LiveClusterEnabled:  effective.AdminClusterEnabled,
@@ -147,7 +187,7 @@ func New(cfg *Config) (*App, error) {
 		TraceURLTemplate:    effective.AdminTraceURLTemplate,
 		Databases:           buildAdminDatabaseRuntimeInfo(effective, dbs, defaultAlias),
 		DatabaseHandles:     dbs,
-		Auth:                admin.NewDatabaseAdminAuth(sqlDB, sessionManager, effective.AdminPrefix),
+		Auth:                admin.NewDatabaseAdminAuth(adminAuthSQLDB, sessionManager, effective.AdminPrefix),
 		Session:             sessionManager,
 		SessionStore:        sessionStoreLabel,
 		SessionRuntime:      sessionRuntimeIdentity,
@@ -409,6 +449,18 @@ func mergeDefaults(cfg *Config) *Config {
 	}
 	if merged.AdminTitle == "" {
 		merged.AdminTitle = base.AdminTitle
+	}
+	if merged.AdminAuthDatabase == "" {
+		merged.AdminAuthDatabase = base.AdminAuthDatabase
+	}
+	if merged.AdminBootstrapUsername == "" {
+		merged.AdminBootstrapUsername = base.AdminBootstrapUsername
+	}
+	if merged.AdminBootstrapEmail == "" {
+		merged.AdminBootstrapEmail = base.AdminBootstrapEmail
+	}
+	if merged.AdminBootstrapPassword == "" {
+		merged.AdminBootstrapPassword = base.AdminBootstrapPassword
 	}
 	if merged.AdminClusterChannel == "" {
 		merged.AdminClusterChannel = base.AdminClusterChannel

@@ -8,6 +8,9 @@ import (
 	"html/template"
 	"log"
 	"net/http"
+	"os"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/jcsvwinston/GoFrame/pkg/app"
@@ -58,7 +61,7 @@ func main() {
 }
 
 func defaultExampleConfig() *app.Config {
-	return &app.Config{
+	cfg := &app.Config{
 		Host:            "0.0.0.0",
 		Port:            8090,
 		DatabaseDefault: "default",
@@ -74,6 +77,98 @@ func defaultExampleConfig() *app.Config {
 		AdminTitle:  "GoFrame Example Admin",
 		LogLevel:    "info",
 		LogFormat:   "text",
+	}
+	applyExampleEnvOverrides(cfg)
+	return cfg
+}
+
+func applyExampleEnvOverrides(cfg *app.Config) {
+	if cfg == nil {
+		return
+	}
+	port := getenvInt("GOFRAME_EXAMPLE_PORT", cfg.Port)
+	cfg.Port = port
+
+	dbURL := strings.TrimSpace(os.Getenv("GOFRAME_EXAMPLE_DB_URL"))
+	if dbURL != "" {
+		if cfg.Databases == nil {
+			cfg.Databases = map[string]app.DatabaseConfig{}
+		}
+		dbCfg := cfg.Databases["default"]
+		dbCfg.URL = dbURL
+		cfg.Databases["default"] = dbCfg
+	}
+
+	redisURL := strings.TrimSpace(os.Getenv("GOFRAME_EXAMPLE_REDIS_URL"))
+	if redisURL != "" {
+		cfg.RedisURL = redisURL
+	}
+
+	sessionStore := strings.TrimSpace(os.Getenv("GOFRAME_EXAMPLE_SESSION_STORE"))
+	if sessionStore != "" {
+		cfg.SessionStore = strings.ToLower(sessionStore)
+	}
+	sessionRedisURL := strings.TrimSpace(os.Getenv("GOFRAME_EXAMPLE_SESSION_REDIS_URL"))
+	if sessionRedisURL != "" {
+		cfg.SessionRedisURL = sessionRedisURL
+	}
+
+	cfg.AdminClusterEnabled = getenvBool("GOFRAME_EXAMPLE_ADMIN_CLUSTER_ENABLED", cfg.AdminClusterEnabled)
+	clusterRedis := strings.TrimSpace(os.Getenv("GOFRAME_EXAMPLE_ADMIN_CLUSTER_REDIS_URL"))
+	if clusterRedis != "" {
+		cfg.AdminClusterRedisURL = clusterRedis
+	}
+	clusterChannel := strings.TrimSpace(os.Getenv("GOFRAME_EXAMPLE_ADMIN_CLUSTER_CHANNEL"))
+	if clusterChannel != "" {
+		cfg.AdminClusterChannel = clusterChannel
+	}
+	clusterNodeID := strings.TrimSpace(os.Getenv("GOFRAME_EXAMPLE_ADMIN_CLUSTER_NODE_ID"))
+	if clusterNodeID != "" {
+		cfg.AdminClusterNodeID = clusterNodeID
+	}
+	clusterToken := strings.TrimSpace(os.Getenv("GOFRAME_EXAMPLE_ADMIN_CLUSTER_TOKEN"))
+	if clusterToken != "" {
+		cfg.AdminClusterToken = clusterToken
+	}
+
+	traceURLTemplate := strings.TrimSpace(os.Getenv("GOFRAME_EXAMPLE_ADMIN_TRACE_URL_TEMPLATE"))
+	if traceURLTemplate != "" {
+		cfg.AdminTraceURLTemplate = traceURLTemplate
+	}
+	otlpEndpoint := strings.TrimSpace(os.Getenv("GOFRAME_EXAMPLE_OTLP_ENDPOINT"))
+	if otlpEndpoint != "" {
+		cfg.OTLPEndpoint = otlpEndpoint
+	}
+	adminTitle := strings.TrimSpace(os.Getenv("GOFRAME_EXAMPLE_ADMIN_TITLE"))
+	if adminTitle != "" {
+		cfg.AdminTitle = adminTitle
+	}
+}
+
+func getenvInt(name string, fallback int) int {
+	raw := strings.TrimSpace(os.Getenv(name))
+	if raw == "" {
+		return fallback
+	}
+	value, err := strconv.Atoi(raw)
+	if err != nil || value <= 0 {
+		return fallback
+	}
+	return value
+}
+
+func getenvBool(name string, fallback bool) bool {
+	raw := strings.TrimSpace(strings.ToLower(os.Getenv(name)))
+	if raw == "" {
+		return fallback
+	}
+	switch raw {
+	case "1", "true", "yes", "y", "on":
+		return true
+	case "0", "false", "no", "n", "off":
+		return false
+	default:
+		return fallback
 	}
 }
 

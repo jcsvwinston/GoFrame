@@ -38,6 +38,12 @@ func TestLoadConfig_Defaults(t *testing.T) {
 	if cfg.AdminClusterChannel != "goframe:admin:live:v1" {
 		t.Errorf("expected default admin cluster channel goframe:admin:live:v1, got %s", cfg.AdminClusterChannel)
 	}
+	if cfg.AdminBootstrapUsername != "admin" {
+		t.Errorf("expected admin_bootstrap_username admin, got %s", cfg.AdminBootstrapUsername)
+	}
+	if cfg.AdminBootstrapEmail != "admin@localhost" {
+		t.Errorf("expected admin_bootstrap_email admin@localhost, got %s", cfg.AdminBootstrapEmail)
+	}
 	if cfg.MailDriver != "noop" {
 		t.Errorf("expected mail driver noop, got %s", cfg.MailDriver)
 	}

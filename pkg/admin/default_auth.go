@@ -124,8 +124,7 @@ var adminLoginTemplate = template.Must(template.New("admin-login").Parse(`<!doct
 
 // DatabaseAdminAuth is the default admin auth provider wired by pkg/app.
 // Behavior:
-// - Bootstrap mode (no admin table or no users): admin remains open.
-// - Protected mode (at least one admin user): login is required.
+// - Admin is always protected: login is required.
 type DatabaseAdminAuth struct {
 	db      *sql.DB
 	session *auth.SessionManager
@@ -160,26 +159,12 @@ func normalizeAdminPrefix(raw string) string {
 }
 
 // Authenticate returns an authenticated admin user from server-side session.
-// In bootstrap mode it returns a synthetic bootstrap user.
 func (a *DatabaseAdminAuth) Authenticate(r *http.Request) (*auth.User, error) {
 	if a == nil || a.db == nil {
 		return nil, errors.New("admin auth provider is not configured")
 	}
 	if r == nil {
 		return nil, errors.New("missing request")
-	}
-
-	bootstrap, err := a.bootstrapMode(r.Context())
-	if err != nil {
-		return nil, err
-	}
-	if bootstrap {
-		return &auth.User{
-			ID:          "bootstrap-admin",
-			Username:    "bootstrap-admin",
-			Role:        "admin",
-			IsSuperuser: true,
-		}, nil
 	}
 
 	if a.session == nil {
@@ -245,19 +230,7 @@ func (u adminLoginUserRecord) toUser() *auth.User {
 
 func (a *DatabaseAdminAuth) handleLoginGET(w http.ResponseWriter, r *http.Request) {
 	next := a.sanitizeNext(r.URL.Query().Get("next"))
-
-	bootstrap, err := a.bootstrapMode(r.Context())
-	if err != nil {
-		http.Error(w, "admin auth bootstrap check failed", http.StatusInternalServerError)
-		return
-	}
-
-	info := ""
-	if bootstrap {
-		info = "No admin users found yet. Create one with: goframe createuser --config goframe.yaml --username admin --email admin@example.com --password <secret> --no-input"
-	}
-
-	a.renderLoginPage(w, http.StatusOK, next, "", info)
+	a.renderLoginPage(w, http.StatusOK, next, "", "")
 }
 
 func (a *DatabaseAdminAuth) handleLoginPOST(w http.ResponseWriter, r *http.Request) {
@@ -270,16 +243,6 @@ func (a *DatabaseAdminAuth) handleLoginPOST(w http.ResponseWriter, r *http.Reque
 	formNext := strings.TrimSpace(r.FormValue("next"))
 	if formNext != "" {
 		next = a.sanitizeNext(formNext)
-	}
-
-	bootstrap, err := a.bootstrapMode(r.Context())
-	if err != nil {
-		http.Error(w, "admin auth bootstrap check failed", http.StatusInternalServerError)
-		return
-	}
-	if bootstrap {
-		a.renderLoginPage(w, http.StatusServiceUnavailable, next, "No admin users are available. Create one first with goframe createuser.", "")
-		return
 	}
 
 	username := strings.TrimSpace(r.FormValue("username"))
@@ -344,17 +307,6 @@ func (a *DatabaseAdminAuth) sanitizeNext(raw string) string {
 		return fallback
 	}
 	return value
-}
-
-func (a *DatabaseAdminAuth) bootstrapMode(ctx context.Context) (bool, error) {
-	users, tableReady, err := a.listUsers(ctx)
-	if err != nil {
-		return false, err
-	}
-	if !tableReady {
-		return true, nil
-	}
-	return len(users) == 0, nil
 }
 
 func (a *DatabaseAdminAuth) findUserByID(ctx context.Context, id string) (adminLoginUserRecord, bool, error) {

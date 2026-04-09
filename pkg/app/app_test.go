@@ -2,7 +2,6 @@ package app
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"fmt"
 	"net/http"
@@ -11,8 +10,6 @@ import (
 	"strings"
 	"testing"
 	"time"
-
-	"github.com/jcsvwinston/GoFrame/pkg/auth"
 )
 
 func testAppConfig() *Config {
@@ -31,10 +28,13 @@ func testAppConfig() *Config {
 				MaxLifetime: time.Minute,
 			},
 		},
-		LogLevel:    "error",
-		LogFormat:   "text",
-		AdminPrefix: "/admin",
-		AdminTitle:  "Test Admin",
+		LogLevel:               "error",
+		LogFormat:              "text",
+		AdminPrefix:            "/admin",
+		AdminTitle:             "Test Admin",
+		AdminBootstrapUsername: "admin",
+		AdminBootstrapEmail:    "admin@example.com",
+		AdminBootstrapPassword: "supersecret123",
 	}
 }
 
@@ -319,7 +319,7 @@ func TestAppNew_SQLSessionStorePersistsAcrossRequests(t *testing.T) {
 	}
 }
 
-func TestAppNew_AdminBootstrapMode_AllowsAccessWithoutUsers(t *testing.T) {
+func TestAppNew_AdminRequiresLoginByDefault(t *testing.T) {
 	a, err := New(testAppConfig())
 	if err != nil {
 		t.Fatalf("unexpected error creating app: %v", err)
@@ -329,25 +329,20 @@ func TestAppNew_AdminBootstrapMode_AllowsAccessWithoutUsers(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/admin/api/models", nil)
 	rec := httptest.NewRecorder()
 	a.Router.ServeHTTP(rec, req)
-	if rec.Code != http.StatusOK {
-		t.Fatalf("expected bootstrap admin access without users to return 200, got %d", rec.Code)
+	if rec.Code != http.StatusFound {
+		t.Fatalf("expected unauthenticated admin access to redirect, got %d", rec.Code)
+	}
+	if loc := rec.Header().Get("Location"); loc != "/admin/login" {
+		t.Fatalf("expected redirect to /admin/login, got %q", loc)
 	}
 }
 
-func TestAppNew_AdminRequiresLoginAfterCreateUser(t *testing.T) {
+func TestAppNew_AdminLoginWithBootstrapCredentials(t *testing.T) {
 	a, err := New(testAppConfig())
 	if err != nil {
 		t.Fatalf("unexpected error creating app: %v", err)
 	}
 	defer a.Shutdown(context.Background())
-
-	sqlDB, err := a.DB.SqlDB()
-	if err != nil {
-		t.Fatalf("sql db handle: %v", err)
-	}
-	if err := seedAdminUser(sqlDB, "admin", "admin@example.com", "supersecret123"); err != nil {
-		t.Fatalf("seed admin user failed: %v", err)
-	}
 
 	protectedReq := httptest.NewRequest(http.MethodGet, "/admin/api/models", nil)
 	protectedRec := httptest.NewRecorder()
@@ -391,6 +386,50 @@ func TestAppNew_AdminRequiresLoginAfterCreateUser(t *testing.T) {
 	}
 }
 
+func TestAppNew_AdminAuthDatabaseAlias_UsesDedicatedAlias(t *testing.T) {
+	cfg := testAppConfig()
+	cfg.DatabaseDefault = "default"
+	cfg.Databases = map[string]DatabaseConfig{
+		"default": {URL: "sqlite://:memory:"},
+		"admin":   {URL: "sqlite://:memory:"},
+	}
+	cfg.AdminAuthDatabase = "admin"
+	cfg.AdminBootstrapPassword = "dedicated-secret-123"
+
+	a, err := New(cfg)
+	if err != nil {
+		t.Fatalf("unexpected error creating app: %v", err)
+	}
+	defer a.Shutdown(context.Background())
+
+	defaultSQL, err := a.DB.SqlDB()
+	if err != nil {
+		t.Fatalf("default sql db handle: %v", err)
+	}
+	adminDB, err := a.Database("admin")
+	if err != nil {
+		t.Fatalf("admin alias db handle: %v", err)
+	}
+	adminSQL, err := adminDB.SqlDB()
+	if err != nil {
+		t.Fatalf("admin alias sql db handle: %v", err)
+	}
+
+	var defaultCount int
+	err = defaultSQL.QueryRow(`SELECT COUNT(*) FROM goframe_admin_users`).Scan(&defaultCount)
+	if err == nil {
+		t.Fatalf("expected default alias to not own admin users table, got count=%d", defaultCount)
+	}
+
+	var adminCount int
+	if err := adminSQL.QueryRow(`SELECT COUNT(*) FROM goframe_admin_users`).Scan(&adminCount); err != nil {
+		t.Fatalf("query admin users on dedicated alias failed: %v", err)
+	}
+	if adminCount != 1 {
+		t.Fatalf("expected exactly one bootstrap admin user on dedicated alias, got %d", adminCount)
+	}
+}
+
 func TestAppNew_OpensMultipleDatabaseAliases(t *testing.T) {
 	cfg := testAppConfig()
 	cfg.DatabaseDefault = "primary"
@@ -425,41 +464,6 @@ func TestAppNew_OpensMultipleDatabaseAliases(t *testing.T) {
 	if _, err := a.Database("missing"); !errors.Is(err, ErrDatabaseAliasNotFound) {
 		t.Fatalf("expected ErrDatabaseAliasNotFound, got %v", err)
 	}
-}
-
-func seedAdminUser(sqlDB *sql.DB, username, email, password string) error {
-	if sqlDB == nil {
-		return fmt.Errorf("nil sql db")
-	}
-	hash, err := auth.HashPassword(password)
-	if err != nil {
-		return fmt.Errorf("hash password: %w", err)
-	}
-
-	if _, err := sqlDB.Exec(`
-CREATE TABLE IF NOT EXISTS goframe_admin_users (
-	id VARCHAR(64) PRIMARY KEY,
-	username VARCHAR(191) NOT NULL UNIQUE,
-	email VARCHAR(191) NOT NULL UNIQUE,
-	password_hash TEXT NOT NULL,
-	is_superuser INTEGER NOT NULL DEFAULT 0,
-	created_at TEXT NOT NULL,
-	updated_at TEXT NOT NULL
-)`); err != nil {
-		return fmt.Errorf("create admin users table: %w", err)
-	}
-
-	_, err = sqlDB.Exec(
-		`INSERT INTO goframe_admin_users (id, username, email, password_hash, is_superuser, created_at, updated_at) VALUES (?, ?, ?, ?, 1, datetime('now'), datetime('now'))`,
-		"u_test_admin",
-		username,
-		email,
-		hash,
-	)
-	if err != nil {
-		return fmt.Errorf("insert admin user: %w", err)
-	}
-	return nil
 }
 
 func TestAppDatabaseForRequest_UsesTenantDatabaseAlias(t *testing.T) {

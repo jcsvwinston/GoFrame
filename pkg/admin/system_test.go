@@ -120,6 +120,8 @@ func TestPanelSystemSnapshotIncludesJobsAndFlags(t *testing.T) {
 	defer cleanup()
 
 	panel.SetFeatureFlag("checkout_v2", true)
+	panel.config.OTLPEndpoint = "https://otel-collector.internal:4318/v1/traces"
+	panel.config.TraceURLTemplate = "https://jaeger.example.local/trace/{trace_id}"
 
 	srv := httptest.NewServer(panel.Handler())
 	defer srv.Close()
@@ -156,6 +158,19 @@ func TestPanelSystemSnapshotIncludesJobsAndFlags(t *testing.T) {
 	}
 	if !found {
 		t.Fatalf("expected checkout_v2 flag in snapshot rows")
+	}
+
+	if !payload.Telemetry.OTLPConfigured {
+		t.Fatalf("expected telemetry.otlp_configured=true")
+	}
+	if payload.Telemetry.OTLPEndpoint != "https://otel-collector.internal:4318" {
+		t.Fatalf("expected summarized otlp endpoint, got %q", payload.Telemetry.OTLPEndpoint)
+	}
+	if !payload.Telemetry.TraceLinksConfigured {
+		t.Fatalf("expected telemetry.trace_links_configured=true")
+	}
+	if payload.Telemetry.TraceURLTemplate != "https://jaeger.example.local/trace/{trace_id}" {
+		t.Fatalf("unexpected trace url template: %q", payload.Telemetry.TraceURLTemplate)
 	}
 }
 

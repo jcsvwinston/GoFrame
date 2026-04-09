@@ -146,6 +146,10 @@ rate_limit_by_route: false
 rate_limit_by_role: false
 admin_prefix: /admin
 admin_title: GoFrame Admin
+admin_auth_database: default
+admin_bootstrap_username: admin
+admin_bootstrap_email: admin@example.com
+admin_bootstrap_password: ""
 admin_trace_url_template: ""
 multisite:
   enabled: false

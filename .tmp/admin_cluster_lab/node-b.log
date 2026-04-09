@@ -1,0 +1,10 @@
+2026/04/09 18:09:07 Example running:
+2026/04/09 18:09:07   web:   http://localhost:8092/
+2026/04/09 18:09:07   api:   http://localhost:8092/api/articles
+2026/04/09 18:09:07   admin: http://localhost:8092/admin
+time=2026-04-09T18:09:07.985+02:00 level=INFO msg=http_request method=GET path=/api/health status=200 duration_ms=0.178 request_id=f5a911c1-1e29-43e1-d295-8b205badf5c0 remote_addr=127.0.0.1:53882 user_agent=curl/8.7.1 bytes_written=16
+time=2026-04-09T18:09:10.024+02:00 level=INFO msg=http_request method=GET path=/api/health status=200 duration_ms=0.417958 request_id=98c608c4-45b2-e1aa-2d42-99d99935c89f remote_addr=127.0.0.1 user_agent=curl/8.7.1 bytes_written=40
+time=2026-04-09T18:09:10.046+02:00 level=INFO msg=http_request method=GET path=/api/health status=200 duration_ms=0.139542 request_id=eb12f309-1b83-1e7f-e5ce-e0963a11c74a remote_addr=127.0.0.1:53888 user_agent=curl/8.7.1 bytes_written=16
+time=2026-04-09T18:09:28.094+02:00 level=INFO msg=http_request method=GET path=/api/health status=200 duration_ms=0.148167 request_id=ea54f1b1-3cb6-632b-18f3-b5ac24e35732 remote_addr=127.0.0.1:53891 user_agent=curl/8.7.1 bytes_written=16
+time=2026-04-09T18:09:58.121+02:00 level=INFO msg=http_request method=GET path=/api/health status=200 duration_ms=1.655542 request_id=72fca117-9833-5031-8d7a-784bdc94c67c remote_addr=127.0.0.1 user_agent=curl/8.7.1 bytes_written=40
+time=2026-04-09T18:09:58.146+02:00 level=INFO msg=http_request method=GET path=/api/health status=200 duration_ms=0.177042 request_id=4da84799-afd6-f498-e47f-c7f62868e088 remote_addr=127.0.0.1:53901 user_agent=curl/8.7.1 bytes_written=16

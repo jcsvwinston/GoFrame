@@ -51,6 +51,7 @@ type PanelConfig struct {
 	Prefix              string // URL prefix (default "/admin")
 	Title               string // Site title shown in the UI
 	Environment         string
+	OTLPEndpoint        string   // optional OTLP endpoint configured by the host app
 	RedisURL            string   // optional Redis URL for background jobs runtime snapshot
 	LiveExcludePatterns []string // optional path patterns excluded from live HTTP capture
 	LiveClusterEnabled  bool     // when true, publish/subscribe live telemetry through Redis

@@ -1,4 +1,18 @@
-@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap");
+@font-face {
+  font-family: "Inter";
+  src: url("fonts/inter-latin.woff2") format("woff2");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "JetBrains Mono";
+  src: url("fonts/jetbrains-mono-latin.woff2") format("woff2");
+  font-weight: 100 800;
+  font-style: normal;
+  font-display: swap;
+}
 
 :root {
   color-scheme: light;
@@ -759,6 +773,18 @@ textarea:focus-visible {
   fill: rgba(20, 184, 166, 0.18);
 }
 
+.session-chart-grid-line {
+  stroke: rgba(129, 154, 180, 0.28);
+  stroke-width: 1;
+  shape-rendering: crispEdges;
+}
+
+.session-chart-y-label {
+  fill: var(--text-muted);
+  font-size: 9px;
+  font-family: var(--font-mono);
+}
+
 .session-chart-line {
   fill: none;
   stroke: var(--bg-accent);
@@ -767,10 +793,86 @@ textarea:focus-visible {
   stroke-linejoin: round;
 }
 
+.session-chart-point {
+  fill: #14b8a6;
+  stroke: rgba(20, 184, 166, 0.28);
+  stroke-width: 2;
+}
+
+.session-chart-labels {
+  margin-top: 2px;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+.session-chart-labels span:nth-child(2) {
+  text-align: center;
+}
+
+.session-chart-labels span:last-child {
+  text-align: right;
+}
+
 .session-chart-meta {
   display: flex;
   gap: 6px;
   flex-wrap: wrap;
+}
+
+.system-signal-grid {
+  margin-bottom: 14px;
+}
+
+.system-signal-card {
+  cursor: default;
+}
+
+.system-signal-card:hover {
+  transform: none;
+}
+
+.metric-bars {
+  margin-top: 8px;
+  display: grid;
+  gap: 8px;
+}
+
+.metric-bar-row {
+  display: grid;
+  gap: 4px;
+}
+
+.metric-bar-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.metric-bar-head strong {
+  font-family: var(--font-mono);
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.metric-bar-track {
+  height: 7px;
+  border-radius: 999px;
+  background: rgba(141, 173, 204, 0.2);
+  overflow: hidden;
+  border: 1px solid rgba(141, 173, 204, 0.32);
+}
+
+.metric-bar-fill {
+  height: 100%;
+  display: block;
+  border-radius: 999px;
+  background: linear-gradient(90deg, rgba(20, 184, 166, 0.9), rgba(6, 182, 212, 0.9));
 }
 
 .toolbar {
@@ -1802,7 +1904,28 @@ body.theme-frameworkos .overview-signal-toolbar {
 
 body.theme-frameworkos .overview-trend-chart {
   width: 100%;
-  height: 250px;
+  height: 290px;
+}
+
+body.theme-frameworkos .overview-trend-x-grid,
+body.theme-frameworkos .overview-trend-y-grid {
+  stroke: rgba(43, 86, 141, 0.3);
+  stroke-width: 1;
+  shape-rendering: crispEdges;
+}
+
+body.theme-frameworkos .overview-trend-x-grid.is-strong {
+  stroke: rgba(70, 126, 192, 0.5);
+}
+
+body.theme-frameworkos .overview-trend-y-grid.is-top {
+  stroke: rgba(79, 142, 212, 0.48);
+}
+
+body.theme-frameworkos .overview-trend-y-label {
+  fill: #6f92bd;
+  font-family: var(--font-mono);
+  font-size: 10px;
 }
 
 body.theme-frameworkos .overview-trend-line {
@@ -1832,6 +1955,79 @@ body.theme-frameworkos .overview-trend-labels {
   gap: 8px;
   color: #6d8eb4;
   font-size: 11px;
+}
+
+body.theme-frameworkos .overview-trend-point {
+  fill: #d5efff;
+}
+
+body.theme-frameworkos .overview-trend-point-session {
+  stroke: #22d3ee;
+  stroke-width: 2.2;
+}
+
+body.theme-frameworkos .overview-trend-point-request {
+  stroke: #f59e0b;
+  stroke-width: 2.2;
+}
+
+body.theme-frameworkos .overview-trend-legend {
+  margin-top: 8px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  color: #8aa8cb;
+  font-size: 12px;
+}
+
+body.theme-frameworkos .legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px;
+  border-radius: 999px;
+  border: 1px solid rgba(35, 78, 133, 0.44);
+  background: rgba(7, 18, 38, 0.52);
+}
+
+body.theme-frameworkos .legend-swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  display: inline-block;
+}
+
+body.theme-frameworkos .legend-swatch.is-session {
+  background: #22d3ee;
+}
+
+body.theme-frameworkos .legend-swatch.is-request {
+  background: #f59e0b;
+}
+
+body.theme-frameworkos .session-chart-grid-line {
+  stroke: rgba(37, 77, 128, 0.42);
+}
+
+body.theme-frameworkos .session-chart-y-label,
+body.theme-frameworkos .session-chart-labels {
+  color: #6f92bd;
+  fill: #6f92bd;
+}
+
+body.theme-frameworkos .session-chart-point {
+  fill: #d3f9ff;
+  stroke: rgba(34, 211, 238, 0.52);
+}
+
+body.theme-frameworkos .metric-bar-track {
+  background: rgba(12, 31, 58, 0.58);
+  border-color: rgba(42, 90, 150, 0.44);
+}
+
+body.theme-frameworkos .metric-bar-fill {
+  background: linear-gradient(90deg, rgba(34, 211, 238, 0.92), rgba(16, 185, 129, 0.9));
 }
 
 body.theme-frameworkos .overview-meta-grid {
@@ -2152,6 +2348,49 @@ body.theme-frameworkos[data-theme="light"] .overview-meta {
 
 body.theme-frameworkos[data-theme="light"] .overview-trend-line-secondary {
   stroke: #c17d05;
+}
+
+body.theme-frameworkos[data-theme="light"] .overview-trend-x-grid,
+body.theme-frameworkos[data-theme="light"] .overview-trend-y-grid {
+  stroke: rgba(128, 157, 194, 0.36);
+}
+
+body.theme-frameworkos[data-theme="light"] .overview-trend-x-grid.is-strong {
+  stroke: rgba(94, 143, 203, 0.56);
+}
+
+body.theme-frameworkos[data-theme="light"] .overview-trend-y-label {
+  fill: #6f88aa;
+}
+
+body.theme-frameworkos[data-theme="light"] .legend-item {
+  border-color: rgba(140, 169, 206, 0.62);
+  background: rgba(244, 250, 255, 0.92);
+  color: #3f5f87;
+}
+
+body.theme-frameworkos[data-theme="light"] .session-chart-grid-line {
+  stroke: rgba(129, 154, 186, 0.42);
+}
+
+body.theme-frameworkos[data-theme="light"] .session-chart-y-label,
+body.theme-frameworkos[data-theme="light"] .session-chart-labels {
+  fill: #6c86a8;
+  color: #6c86a8;
+}
+
+body.theme-frameworkos[data-theme="light"] .session-chart-point {
+  fill: #e8faff;
+  stroke: rgba(14, 165, 233, 0.48);
+}
+
+body.theme-frameworkos[data-theme="light"] .metric-bar-track {
+  background: rgba(205, 225, 246, 0.56);
+  border-color: rgba(143, 170, 207, 0.58);
+}
+
+body.theme-frameworkos[data-theme="light"] .metric-bar-fill {
+  background: linear-gradient(90deg, rgba(14, 165, 233, 0.86), rgba(16, 185, 129, 0.8));
 }
 
 body.theme-frameworkos[data-theme="light"] .trace-link {
