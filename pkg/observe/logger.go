@@ -38,6 +38,9 @@ func NewLogger(level, format string) *slog.Logger {
 // WithContext returns a logger enriched with fields extracted from the context
 // (request_id, user_id, trace_id) if present.
 func WithContext(ctx context.Context, logger *slog.Logger) *slog.Logger {
+	if logger == nil {
+		logger = slog.Default()
+	}
 	if id := RequestIDFromCtx(ctx); id != "" {
 		logger = logger.With("request_id", id)
 	}

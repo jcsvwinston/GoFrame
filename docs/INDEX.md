@@ -1,6 +1,6 @@
 # Documentation Map
 
-Reference date: 2026-04-07.
+Reference date: 2026-04-10.
 Status: Current.
 
 This file is the canonical entrypoint for GoFrame documentation.
@@ -11,6 +11,17 @@ This file is the canonical entrypoint for GoFrame documentation.
 - [DEVELOPER_MANUAL.md](DEVELOPER_MANUAL.md)
 - [PROJECT_LAYOUT.md](PROJECT_LAYOUT.md)
 - [../SPEC.md](../SPEC.md)
+
+## Feature Guides (New)
+
+- [AUTH_GUIDE.md](AUTH_GUIDE.md) — Authentication & Authorization (JWT, sessions, Casbin)
+- [TESTING_GUIDE.md](TESTING_GUIDE.md) — Testing strategies and patterns
+- [DEPLOYMENT_GUIDE.md](DEPLOYMENT_GUIDE.md) — Production deployment (Docker, K8s, reverse proxy)
+- [ERROR_HANDLING.md](ERROR_HANDLING.md) — Error types and HTTP mapping
+- [VALIDATION_GUIDE.md](VALIDATION_GUIDE.md) — Input validation and custom rules
+- [SIGNALS_GUIDE.md](SIGNALS_GUIDE.md) — Event bus and model hooks
+- [MULTISITE_GUIDE.md](MULTISITE_GUIDE.md) — MultiSite & MultiTenant routing
+- [RATE_LIMITING_GUIDE.md](RATE_LIMITING_GUIDE.md) — Rate limiting configuration
 
 ## Core Engineering References
 
@@ -25,6 +36,10 @@ This file is the canonical entrypoint for GoFrame documentation.
 - [PLUGIN_EXAMPLES.md](PLUGIN_EXAMPLES.md)
 - [MAIL_PROVIDERS.md](MAIL_PROVIDERS.md)
 - [OBSERVABILITY_BASELINE.md](OBSERVABILITY_BASELINE.md)
+
+## Architecture Decision Records
+
+- [adrs/README.md](adrs/README.md) — ADR-001: stdlib-first, ADR-002: Django-inspired CLI
 
 ## Strategy and Governance
 
@@ -42,8 +57,6 @@ This file is the canonical entrypoint for GoFrame documentation.
 ## Validation Reports
 
 - [reports/exploratory_stability.md](reports/exploratory_stability.md)
-- [reports/exploratory_stability_postfix.md](reports/exploratory_stability_postfix.md)
-- [reports/exploratory_stability_postfix_10runs.md](reports/exploratory_stability_postfix_10runs.md)
 - [reports/compatibility_harness_latest.md](reports/compatibility_harness_latest.md)
 - [reports/dependency_critical_review_2026-04-07.md](reports/dependency_critical_review_2026-04-07.md)
 - [reports/release_readiness_2026-04-07.md](reports/release_readiness_2026-04-07.md)
