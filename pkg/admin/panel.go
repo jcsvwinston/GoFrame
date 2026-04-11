@@ -275,27 +275,32 @@ func (p *Panel) getCRUD(meta *model.ModelMeta, databaseAlias string) (model.CRUD
 func (p *Panel) Handler() *router.Mux {
 	r := router.NewMux()
 
+	// Serve embedded UI static assets unconditionally so the login page can use them
+	uiContent, _ := fs.Sub(uiFS, "ui")
+	fileServer := http.FileServer(http.FS(uiContent))
+	r.Get("/static/{filepath...}", http.StripPrefix("/static", fileServer).ServeHTTP)
+
 	// Auth middleware if configured
 	if p.config.Auth != nil {
 		loginHandler := p.config.Auth.LoginHandler()
 		r.Get("/login", loginHandler.ServeHTTP)
 		r.Post("/login", loginHandler.ServeHTTP)
-		r.Group(func(r *router.Mux) {
-			r.Use(p.authMiddleware)
-			r.Use(p.sessionActivityMiddleware)
-			r.Use(p.liveTrafficMiddleware)
-			p.mountRoutes(r)
+		r.Group(func(sub *router.Mux) {
+			sub.Use(p.authMiddleware)
+			sub.Use(p.sessionActivityMiddleware)
+			sub.Use(p.liveTrafficMiddleware)
+			p.mountRoutes(sub, uiContent)
 		})
 	} else {
 		r.Use(p.sessionActivityMiddleware)
 		r.Use(p.liveTrafficMiddleware)
-		p.mountRoutes(r)
+		p.mountRoutes(r, uiContent)
 	}
 
 	return r
 }
 
-func (p *Panel) mountRoutes(r *router.Mux) {
+func (p *Panel) mountRoutes(r *router.Mux, uiContent fs.FS) {
 	// API routes
 	r.Get("/api/models", p.handleListModels)
 	r.Get("/api/models/{name}/schema", p.handleGetSchema)
@@ -319,10 +324,7 @@ func (p *Panel) mountRoutes(r *router.Mux) {
 	r.Delete("/api/system/flags/{name}", p.handleDeleteSystemFlag)
 	r.Post("/api/system/jobs/queues/{name}/actions/{action}", p.handleSystemQueueAction)
 
-	// Serve embedded UI
-	uiContent, _ := fs.Sub(uiFS, "ui")
-	fileServer := http.FileServer(http.FS(uiContent))
-	r.Get("/static/{filepath...}", http.StripPrefix("/static", fileServer).ServeHTTP)
+	// Serve the SPA interface fallback for all authenticated requests
 	r.Get("/{path...}", p.handleSPA(uiContent))
 }
 

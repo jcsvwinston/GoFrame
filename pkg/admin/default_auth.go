@@ -21,104 +21,54 @@ const (
 	adminSessionSuperuserKey = "__goframe_admin_superuser"
 )
 
-var adminLoginTemplate = template.Must(template.New("admin-login").Parse(`<!doctype html>
+var adminLoginTemplate = template.Must(template.New("admin-login").Parse(`<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>GoFrame Admin Login</title>
-  <style>
-    :root { color-scheme: light; }
-    body {
-      margin: 0;
-      min-height: 100vh;
-      display: grid;
-      place-items: center;
-      font-family: "IBM Plex Sans", "Segoe UI", sans-serif;
-      background:
-        radial-gradient(circle at 12% 14%, #dbefff 0%, transparent 32%),
-        radial-gradient(circle at 88% 86%, #dff9eb 0%, transparent 36%),
-        #f6f8fb;
-      color: #142033;
-    }
-    .card {
-      width: min(440px, calc(100vw - 32px));
-      background: #fff;
-      border: 1px solid #d8e1ea;
-      border-radius: 16px;
-      box-shadow: 0 22px 46px rgba(15, 34, 51, 0.12);
-      padding: 28px;
-    }
-    h1 {
-      margin: 0 0 6px;
-      font-size: 28px;
-      letter-spacing: -0.02em;
-    }
-    p { margin: 0 0 18px; color: #4c5f73; }
-    label {
-      display: block;
-      margin-bottom: 6px;
-      font-weight: 600;
-      font-size: 14px;
-    }
-    input {
-      width: 100%;
-      box-sizing: border-box;
-      margin-bottom: 12px;
-      border: 1px solid #c8d4df;
-      border-radius: 10px;
-      padding: 10px 12px;
-      font-size: 15px;
-      outline: none;
-    }
-    input:focus {
-      border-color: #1f6ae0;
-      box-shadow: 0 0 0 3px rgba(31, 106, 224, 0.18);
-    }
-    button {
-      width: 100%;
-      border: 0;
-      border-radius: 10px;
-      padding: 11px 14px;
-      font-weight: 700;
-      cursor: pointer;
-      background: linear-gradient(100deg, #1150bd, #1f6ae0);
-      color: #fff;
-      font-size: 15px;
-    }
-    .notice {
-      border-radius: 10px;
-      padding: 10px 12px;
-      margin-bottom: 14px;
-      font-size: 14px;
-    }
-    .notice.error {
-      background: #feecef;
-      border: 1px solid #f3bbc3;
-      color: #8a1f34;
-    }
-    .notice.info {
-      background: #ecf5ff;
-      border: 1px solid #bfdcff;
-      color: #13437b;
-    }
-  </style>
+  <link rel="stylesheet" href="{{.Prefix}}/static/style.css">
 </head>
-<body>
-  <main class="card">
-    <h1>Admin</h1>
-    <p>Sign in to continue.</p>
-    {{if .Info}}<div class="notice info">{{.Info}}</div>{{end}}
-    {{if .Error}}<div class="notice error">{{.Error}}</div>{{end}}
-    <form method="post" action="{{.Action}}">
-      <input type="hidden" name="next" value="{{.Next}}">
-      <label for="username">Username or email</label>
-      <input id="username" name="username" autocomplete="username" required>
-      <label for="password">Password</label>
-      <input id="password" type="password" name="password" autocomplete="current-password" required>
-      <button type="submit">Sign in</button>
-    </form>
-  </main>
+<body class="auth-body">
+  <div class="auth-wrapper">
+    <div class="auth-back-div">
+      <div class="auth-front-card">
+        <h1>Log in</h1>
+        
+        {{if .Info}}<div class="auth-notice info">{{.Info}}</div>{{end}}
+        {{if .Error}}<div class="auth-notice error">{{.Error}}</div>{{end}}
+
+        <form method="post" action="{{.Action}}">
+          <input type="hidden" name="next" value="{{.Next}}">
+          
+          <div class="auth-field-group">
+            <label for="username">Email or Username</label>
+            <input id="username" name="username" type="text" placeholder="Email" autocomplete="username" required>
+          </div>
+          
+          <div class="auth-field-group">
+            <label for="password">Password</label>
+            <input id="password" name="password" type="password" placeholder="Password" autocomplete="current-password" required>
+          </div>
+          
+          <div style="margin-top: 8px;">
+            <a class="auth-link-animated" href="#"><span style="font-size: 14px;">Forget your password?</span></a>
+          </div>
+
+          <button class="auth-submit-btn" type="submit">LOG IN</button>
+        </form>
+
+        <div class="auth-footer-links" style="margin-top: 24px; color: #d1d5db;">
+          Don't have an account? 
+          <a class="auth-link-animated" href="#" style="margin-top: 4px;"><span>Sign Up</span></a>
+        </div>
+
+        <div class="auth-footer-links">
+          
+        </div>
+      </div>
+    </div>
+  </div>
 </body>
 </html>`))
 
@@ -287,6 +237,7 @@ func (a *DatabaseAdminAuth) renderLoginPage(w http.ResponseWriter, status int, n
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(status)
 	_ = adminLoginTemplate.Execute(w, map[string]string{
+		"Prefix": a.prefix,
 		"Action": a.prefix + "/login",
 		"Next":   next,
 		"Error":  strings.TrimSpace(errorMsg),

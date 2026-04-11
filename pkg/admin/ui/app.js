@@ -70,6 +70,47 @@
   const RUNTIME_QUEUE_ACK = "I_UNDERSTAND_RUNTIME_OPERATION";
   let confirmResolver = null;
   let overlayReturnFocus = null;
+  const activeCharts = [];
+
+  // Configure Chart.js global defaults
+  if (typeof Chart !== "undefined") {
+    Chart.defaults.font.family = '"Inter", "Segoe UI", sans-serif';
+    Chart.defaults.font.size = 12;
+    Chart.defaults.color = '#6f87aa';
+    Chart.defaults.animation.duration = 600;
+    Chart.defaults.animation.easing = 'easeOutQuart';
+    Chart.defaults.responsive = true;
+    Chart.defaults.maintainAspectRatio = false;
+    Chart.defaults.plugins.legend.display = false;
+    Chart.defaults.plugins.tooltip.backgroundColor = 'rgba(5, 12, 28, 0.92)';
+    Chart.defaults.plugins.tooltip.titleColor = '#dce9ff';
+    Chart.defaults.plugins.tooltip.bodyColor = '#95a9c8';
+    Chart.defaults.plugins.tooltip.borderColor = 'rgba(28, 66, 117, 0.56)';
+    Chart.defaults.plugins.tooltip.borderWidth = 1;
+    Chart.defaults.plugins.tooltip.cornerRadius = 6;
+    Chart.defaults.plugins.tooltip.padding = 10;
+    Chart.defaults.plugins.tooltip.displayColors = true;
+    Chart.defaults.plugins.tooltip.boxPadding = 4;
+    Chart.defaults.elements.point.radius = 0;
+    Chart.defaults.elements.point.hoverRadius = 5;
+    Chart.defaults.elements.point.hoverBorderWidth = 2;
+    Chart.defaults.elements.line.tension = 0.35;
+    Chart.defaults.elements.line.borderWidth = 2.2;
+  }
+
+  function destroyAllCharts() {
+    while (activeCharts.length > 0) {
+      const chart = activeCharts.pop();
+      try { chart.destroy(); } catch (_) {}
+    }
+  }
+
+  function registerChart(chart) {
+    if (chart) {
+      activeCharts.push(chart);
+    }
+    return chart;
+  }
 
   const API = (() => {
     const base = window.location.pathname.replace(/\/+$/, "");
@@ -485,8 +526,9 @@
               : "overview";
     setActiveNav(navKey);
     renderBreadcrumbs(route);
-    closeSidebarOnMobile();
     stopLiveStream();
+    destroyAllCharts();
+    closeSidebarOnMobile();
 
     if (route.view === "dashboard") {
       stopSessionsAutoRefresh();
@@ -671,7 +713,6 @@
 
   async function renderDashboard() {
     setAppBusy(true);
-    els.app.innerHTML = loadingMarkup();
 
     try {
       const runtime = state.runtime || {};
@@ -710,28 +751,23 @@
         .join("");
 
       els.app.innerHTML =
-        UI.sectionHead("Overview", "Resumen del estado del framework", env) +
+        UI.sectionHead("Overview", "Framework environment state", env) +
         `
           <section class="cards kpi-grid">
             <article class="card kpi-card card-static">
-              <p class="card-label">Modelos activos</p>
-              <p class="kpi-value">${state.models.length}</p>
+              <p class="card-label">Active models</p>
+              <p class="kpi-value animate-number" data-value="${state.models.length}">0</p>
               <span class="status-chip">${engines.length} engines</span>
             </article>
             <article class="card kpi-card card-static">
-              <p class="card-label">Sessions activas</p>
-              <p class="kpi-value">${sessionsActive.toLocaleString()}</p>
+              <p class="card-label">Active sessions</p>
+              <p class="kpi-value animate-number" data-value="${sessionsActive}">0</p>
               <span class="status-chip">${env}</span>
             </article>
             <article class="card kpi-card card-static">
-              <p class="card-label">Bases configuradas</p>
-              <p class="kpi-value">${databases.length}</p>
+              <p class="card-label">Configured databases</p>
+              <p class="kpi-value animate-number" data-value="${databases.length}">0</p>
               <span class="status-chip">${countsAvailable ? "counts ready" : "light mode"}</span>
-            </article>
-            <article class="card kpi-card card-static">
-              <p class="card-label">Registros totales</p>
-              <p class="kpi-value ${recordsTotalKnown ? "" : "card-count-muted"}">${recordsSummary}</p>
-              <span class="status-chip">${countsAvailable ? "full" : "deferred"}</span>
             </article>
           </section>
 
@@ -753,21 +789,29 @@
           <section class="cards overview-meta-grid">
             <article class="section-block overview-panel">
               <div class="section-block-head">
-                <h3>Actividad reciente</h3>
-                <p>Eventos observados en runtime</p>
+                <h3>Recent activity</h3>
+                <p>Runtime observed events</p>
               </div>
-              <ul class="overview-list">
-                ${renderOverviewListRows(activityRows)}
-              </ul>
+              <div class="table-wrap">
+                <table class="table" style="width: 100%">
+                  <tbody>
+                    ${renderOverviewListRows(activityRows)}
+                  </tbody>
+                </table>
+              </div>
             </article>
             <article class="section-block overview-panel">
               <div class="section-block-head">
-                <h3>Servicios</h3>
-                <p>Estado general del entorno</p>
+                <h3>Services</h3>
+                <p>General environment state</p>
               </div>
-              <ul class="overview-list">
-                ${renderOverviewListRows(serviceRows)}
-              </ul>
+              <div class="table-wrap">
+                <table class="table" style="width: 100%">
+                  <tbody>
+                    ${renderOverviewListRows(serviceRows)}
+                  </tbody>
+                </table>
+              </div>
             </article>
           </section>
 
@@ -797,6 +841,7 @@
           navigate(card.getAttribute("data-hash"));
         });
       });
+      runNumberAnimations(els.app);
     } catch (err) {
       els.app.innerHTML = renderRecoverableError("Could not load overview", errorText(err), "retry-overview");
       const retryBtn = document.getElementById("retry-overview");
@@ -995,144 +1040,99 @@
     const baseCount = Math.max(hasSessions ? sessionPoints.length : 0, hasRequests ? requestPoints.length : 0, 2);
     const sessions = hasSessions ? resampleOverviewSeries(sessionPoints, baseCount) : [];
     const requests = hasRequests ? resampleOverviewSeries(requestPoints, baseCount) : [];
-    const values = [];
-    sessions.forEach(function (item) {
-      values.push(Number(item.value || 0));
-    });
-    requests.forEach(function (item) {
-      values.push(Number(item.value || 0));
-    });
-    const max = Math.max(1, ...values);
-    const min = 0;
-    const range = Math.max(1, max - min);
-
-    const width = 1240;
-    const height = 290;
-    const padLeft = 48;
-    const padRight = 16;
-    const padTop = 14;
-    const padBottom = 26;
-    const graphW = width - padLeft - padRight;
-    const graphH = height - padTop - padBottom;
-
-    const mapY = function (value) {
-      const ratio = (Number(value || 0) - min) / range;
-      return padTop + graphH - ratio * graphH;
-    };
-
-    const buildCoords = function (series) {
-      if (!Array.isArray(series) || series.length === 0) {
-        return [];
-      }
-      return series.map(function (item, idx) {
-        const x = padLeft + (idx / Math.max(1, series.length - 1)) * graphW;
-        const y = mapY(Number(item.value || 0));
-        return {
-          x: x,
-          y: y,
-          value: Number(item.value || 0),
-          timestamp: item.timestamp,
-        };
-      });
-    };
-
-    const buildPath = function (coords) {
-      if (!Array.isArray(coords) || coords.length === 0) {
-        return "";
-      }
-      return coords
-        .map(function (point, idx) {
-          return `${idx === 0 ? "M" : "L"}${point.x.toFixed(1)} ${point.y.toFixed(1)}`;
-        })
-        .join(" ");
-    };
-
-    const buildAreaPath = function (coords) {
-      if (!Array.isArray(coords) || coords.length === 0) {
-        return "";
-      }
-      const line = buildPath(coords);
-      const last = coords[coords.length - 1];
-      const first = coords[0];
-      return `${line} L${last.x.toFixed(1)} ${(padTop + graphH).toFixed(1)} L${first.x.toFixed(1)} ${(padTop + graphH).toFixed(1)} Z`;
-    };
-
-    const sessionCoords = buildCoords(sessions);
-    const requestCoords = buildCoords(requests);
-    const sessionPath = buildPath(sessionCoords);
-    const requestPath = buildPath(requestCoords);
-    const sessionArea = buildAreaPath(sessionCoords);
-    const labelSource = requests.length > 0 ? requests : sessions;
-    const divider = Math.max(1, Math.floor(labelSource.length / 6));
-    const labels = labelSource
-      .map(function (item, idx) {
-        if (idx % divider !== 0 && idx !== labelSource.length - 1) {
-          return "<span></span>";
-        }
-        return `<span>${escapeHtml(formatOverviewTimeLabel(item.timestamp))}</span>`;
-      })
-      .join("");
-
-    const yTickCount = 4;
-    const yTicks = [];
-    for (let idx = 0; idx <= yTickCount; idx += 1) {
-      const ratio = idx / yTickCount;
-      const value = Math.round(min + (max - min) * ratio);
-      const y = padTop + graphH - ratio * graphH;
-      yTicks.push({
-        value: value,
-        y: y,
-      });
-    }
-
-    const verticalDivisions = Math.max(5, Math.min(12, labelSource.length - 1));
-    const xTicks = [];
-    for (let idx = 0; idx <= verticalDivisions; idx += 1) {
-      const x = padLeft + (idx / Math.max(1, verticalDivisions)) * graphW;
-      xTicks.push({ x: x, strong: idx === 0 || idx === verticalDivisions });
-    }
 
     const sessionSummary = summarizeOverviewSeries(sessions);
     const requestSummary = summarizeOverviewSeries(requests);
     const sessionAvg = sessions.length > 0
-      ? Math.round(sessions.reduce(function (acc, item) {
-        return acc + Number(item.value || 0);
-      }, 0) / sessions.length)
+      ? Math.round(sessions.reduce(function (acc, item) { return acc + Number(item.value || 0); }, 0) / sessions.length)
       : 0;
     const requestAvg = requests.length > 0
-      ? Math.round(requests.reduce(function (acc, item) {
-        return acc + Number(item.value || 0);
-      }, 0) / requests.length)
+      ? Math.round(requests.reduce(function (acc, item) { return acc + Number(item.value || 0); }, 0) / requests.length)
       : 0;
 
-    const sessionLatest = sessionCoords.length > 0 ? sessionCoords[sessionCoords.length - 1] : null;
-    const requestLatest = requestCoords.length > 0 ? requestCoords[requestCoords.length - 1] : null;
+    const chartId = "overview-trend-canvas-" + Date.now();
+
+    setTimeout(function () {
+      const canvas = document.getElementById(chartId);
+      if (!canvas || typeof Chart === "undefined") { return; }
+
+      const bodyStyles = window.getComputedStyle(document.body);
+      const gridColor = bodyStyles.getPropertyValue("--line").trim() || "rgba(148, 163, 184, 0.1)";
+      const textColor = bodyStyles.getPropertyValue("--text-soft").trim() || "#94a3b8";
+      const primaryColor = bodyStyles.getPropertyValue("--bg-accent").trim() || "#0ea5e9";
+
+      const sessionLabels = (sessions.length > 0 ? sessions : requests).map(function (item) {
+        return formatOverviewTimeLabel(item.timestamp);
+      });
+
+      const datasets = [];
+      if (hasSessions) {
+        datasets.push({
+          label: "Sessions",
+          data: sessions.map(function (item) { return Number(item.value || 0); }),
+          borderColor: primaryColor,
+          backgroundColor: function (ctx) {
+            var chart = ctx.chart;
+            var area = chart.chartArea;
+            if (!area) { return "rgba(14, 165, 233, 0.15)"; }
+            var gradient = chart.ctx.createLinearGradient(0, area.top, 0, area.bottom);
+            // We use standard semitransparent blues since Canvas gradients require explicit RGBA/HEX
+            gradient.addColorStop(0, "rgba(14, 165, 233, 0.3)");
+            gradient.addColorStop(1, "rgba(14, 165, 233, 0.0)");
+            return gradient;
+          },
+          fill: true,
+          tension: 0.4, // smooth spline
+          pointBackgroundColor: primaryColor,
+          pointBorderColor: "#fff",
+          pointHoverRadius: 6,
+          pointHoverBackgroundColor: primaryColor,
+          order: 2,
+        });
+      }
+      if (hasRequests) {
+        datasets.push({
+          label: "Requests/min",
+          data: requests.map(function (item) { return Number(item.value || 0); }),
+          borderColor: "#10b981", // Professional emerald
+          backgroundColor: "transparent",
+          fill: false,
+          tension: 0.4, // smooth spline
+          pointBackgroundColor: "#059669",
+          pointBorderColor: "#fff",
+          pointHoverRadius: 6,
+          pointHoverBackgroundColor: "#10b981",
+          order: 1,
+        });
+      }
+
+      var chart = new Chart(canvas, {
+        type: "line",
+        data: { labels: sessionLabels, datasets: datasets },
+        options: {
+          interaction: { mode: "index", intersect: false },
+          scales: {
+            x: {
+              grid: { color: gridColor },
+              ticks: { maxTicksLimit: 8, color: textColor, font: { family: '"Inter", sans-serif', size: 10 } },
+            },
+            y: {
+              beginAtZero: true,
+              grid: { color: gridColor },
+              ticks: { color: textColor, font: { family: '"Inter", sans-serif', size: 10 }, precision: 0 },
+            },
+          },
+          plugins: { legend: { display: false } },
+        },
+      });
+      registerChart(chart);
+    }, 0);
 
     return `
       <div class="overview-trend-wrap">
-        <svg viewBox="0 0 ${width} ${height}" class="overview-trend-chart" role="img" aria-label="Live traffic signals">
-          <defs>
-            <linearGradient id="overview-sessions-area" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stop-color="rgba(34, 211, 238, 0.38)"></stop>
-              <stop offset="100%" stop-color="rgba(34, 211, 238, 0.05)"></stop>
-            </linearGradient>
-          </defs>
-          ${xTicks.map(function (tick) {
-            return `<line class="overview-trend-x-grid${tick.strong ? " is-strong" : ""}" x1="${tick.x.toFixed(1)}" y1="${padTop.toFixed(1)}" x2="${tick.x.toFixed(1)}" y2="${(padTop + graphH).toFixed(1)}"></line>`;
-          }).join("")}
-          ${yTicks.map(function (tick, idx) {
-            return `
-              <line class="overview-trend-y-grid${idx === 0 ? " is-top" : ""}" x1="${padLeft.toFixed(1)}" y1="${tick.y.toFixed(1)}" x2="${(padLeft + graphW).toFixed(1)}" y2="${tick.y.toFixed(1)}"></line>
-              <text class="overview-trend-y-label" x="${(padLeft - 8).toFixed(1)}" y="${(tick.y + 4).toFixed(1)}" text-anchor="end">${escapeHtml(String(tick.value))}</text>
-            `;
-          }).join("")}
-          ${sessionArea ? `<path class="overview-trend-area" d="${sessionArea}" fill="url(#overview-sessions-area)"></path>` : ""}
-          ${sessionPath ? `<path class="overview-trend-line" d="${sessionPath}"></path>` : ""}
-          ${requestPath ? `<path class="overview-trend-line-secondary" d="${requestPath}"></path>` : ""}
-          ${sessionLatest ? `<circle class="overview-trend-point overview-trend-point-session" cx="${sessionLatest.x.toFixed(1)}" cy="${sessionLatest.y.toFixed(1)}" r="3.4"></circle>` : ""}
-          ${requestLatest ? `<circle class="overview-trend-point overview-trend-point-request" cx="${requestLatest.x.toFixed(1)}" cy="${requestLatest.y.toFixed(1)}" r="3.4"></circle>` : ""}
-        </svg>
-        <div class="overview-trend-labels" style="grid-template-columns: repeat(${labelSource.length}, minmax(0, 1fr));">${labels}</div>
+        <div class="chart-container overview-chart-container">
+          <canvas id="${chartId}"></canvas>
+        </div>
         <div class="overview-trend-legend">
           <span class="legend-item"><i class="legend-swatch is-session"></i>Sessions · latest ${sessionSummary.latest} · avg ${sessionAvg} · peak ${sessionSummary.peak}</span>
           <span class="legend-item"><i class="legend-swatch is-request"></i>Requests/min · latest ${requestSummary.latest} · avg ${requestAvg} · peak ${requestSummary.peak}</span>
@@ -1222,16 +1222,15 @@
 
   function renderOverviewListRows(rows) {
     if (!Array.isArray(rows) || rows.length === 0) {
-      return `<li class="overview-list-item"><span class="overview-dot"></span><span>No data</span><span class="overview-meta">-</span></li>`;
+      return `<tr><td colspan="2" class="text-muted">No data</td></tr>`;
     }
     return rows
       .map(function (row) {
         return `
-          <li class="overview-list-item">
-            <span class="overview-dot"></span>
-            <span>${escapeHtml(row.label || "-")}</span>
-            <span class="overview-meta">${escapeHtml(row.meta || "-")}</span>
-          </li>
+          <tr>
+            <td style="font-weight: 600">${escapeHtml(row.label || "-")}</td>
+            <td class="text-right text-muted">${escapeHtml(row.meta || "-")}</td>
+          </tr>
         `;
       })
       .join("");
@@ -1627,8 +1626,13 @@
   }
 
   async function renderSessionsOverview() {
-    setAppBusy(true);
-    els.app.innerHTML = loadingMarkup();
+    const existingGrid = els.app.querySelector('.sessions-kpi-grid');
+    if (!existingGrid) {
+      setAppBusy(true);
+      els.app.innerHTML = loadingMarkup();
+    } else {
+      setAppBusy(true); // show linear loading overlay without destroying layout
+    }
 
     try {
       const requestedLimit = Number(state.sessionsLimit || 200);
@@ -1666,28 +1670,66 @@
       const includedRows = Number(payload.included_rows || sessionRows.length || 0);
       const selectedLimit = Number(state.sessionsLimit || normalizedLimit || 200);
 
+      // Avoid micro-cuts by surgically updating DOM if it's already mounted
+      if (existingGrid) {
+        const vals = existingGrid.querySelectorAll('.kpi-value');
+        if (vals.length >= 4) {
+          vals[0].setAttribute("data-value", currentActive);
+          vals[1].setAttribute("data-value", active5m);
+          vals[2].setAttribute("data-value", active1h);
+          vals[3].setAttribute("data-value", includedRows);
+        }
+        const details = els.app.querySelector('.detail-grid');
+        if (details) {
+          details.innerHTML = 
+            UI.kv("Current active", String(currentActive)) +
+            UI.kv("Active (last 5m)", String(active5m)) +
+            UI.kv("Active (last hour)", String(active1h)) +
+            UI.kv("Store", payload.store || "memory") +
+            UI.kv("Runtime", payload.source_runtime || "-") +
+            UI.kv("Environment", payload.source_env || "-") +
+            UI.kv("Source instance", payload.source_instance || "-") +
+            UI.kv("Source pod", sourcePod || "-") +
+            UI.kv("Source host", sourceHost || "-");
+        }
+        const tbody = els.app.querySelector('.table-wrap tbody');
+        if (tbody) {
+          tbody.innerHTML = renderSessionRows(sessionRows);
+        }
+        const chartsGrid = els.app.querySelector('.session-chart-grid');
+        if (chartsGrid) {
+          chartsGrid.innerHTML = 
+            renderSessionChartCard("Real time", "10-minute rolling active sessions", realtime.points || []) +
+            renderSessionChartCard("Last hour", "Hourly stability signal", lastHour.points || []) +
+            renderSessionChartCard("Today", "Active sessions by current day", today.points || []);
+        }
+        runNumberAnimations(els.app);
+        setAppBusy(false);
+        return;
+      }
+
       els.app.innerHTML =
         UI.sectionHead("Infra Manager", `${currentActive} active sessions`, "Live telemetry") +
         `
           <section class="cards kpi-grid sessions-kpi-grid">
             <article class="card kpi-card card-static">
               <p class="card-label">Active now</p>
-              <p class="kpi-value">${currentActive.toLocaleString()}</p>
+              <p class="kpi-value animate-number" data-value="${currentActive}">0</p>
               <span class="status-chip">store: ${escapeHtml(payload.store || "memory")}</span>
             </article>
             <article class="card kpi-card card-static">
               <p class="card-label">Last 5 minutes</p>
-              <p class="kpi-value">${active5m.toLocaleString()}</p>
+              <p class="kpi-value animate-number" data-value="${active5m}">0</p>
               <span class="status-chip">session churn</span>
             </article>
             <article class="card kpi-card card-static">
               <p class="card-label">Last hour</p>
-              <p class="kpi-value">${active1h.toLocaleString()}</p>
+              <p class="kpi-value animate-number" data-value="${active1h}">0</p>
               <span class="status-chip">stability signal</span>
             </article>
             <article class="card kpi-card card-static">
               <p class="card-label">Rows loaded</p>
-              <p class="kpi-value">${includedRows.toLocaleString()}</p>
+              <p class="kpi-value animate-number" data-value="${includedRows}">0</p>
               <span class="status-chip">limit ${selectedLimit}</span>
             </article>
           </section>
@@ -1768,6 +1810,7 @@
       if (limitApply) {
         limitApply.addEventListener("click", applyLimit);
       }
+      runNumberAnimations(els.app);
     } catch (err) {
       els.app.innerHTML = renderRecoverableError("Could not load sessions", errorText(err), "retry-sessions");
       const retryBtn = document.getElementById("retry-sessions");
@@ -1784,7 +1827,6 @@
 
   async function renderLiveOverview() {
     setAppBusy(true);
-    els.app.innerHTML = loadingMarkup();
 
     try {
       const payload = await API.liveSnapshot({
@@ -1832,22 +1874,22 @@
           <section class="cards kpi-grid live-kpi-grid">
             <article class="card kpi-card card-static">
               <p class="card-label">HTTP buffered</p>
-              <p class="kpi-value">${bufferedRequests.toLocaleString()}</p>
+              <p class="kpi-value animate-number" data-value="${bufferedRequests}">0</p>
               <span class="status-chip">limit ${Number(buffer.capacity || requests.length || 0)}</span>
             </article>
             <article class="card kpi-card card-static">
               <p class="card-label">SQL buffered</p>
-              <p class="kpi-value">${bufferedSQL.toLocaleString()}</p>
+              <p class="kpi-value animate-number" data-value="${bufferedSQL}">0</p>
               <span class="status-chip">limit ${Number(sqlBuffer.capacity || queries.length || 0)}</span>
             </article>
             <article class="card kpi-card card-static">
               <p class="card-label">Tracked sessions</p>
-              <p class="kpi-value">${trackedSessions.toLocaleString()}</p>
+              <p class="kpi-value animate-number" data-value="${trackedSessions}">0</p>
               <span class="status-chip">scope ${escapeHtml(nodeFilterLabel)}</span>
             </article>
             <article class="card kpi-card card-static">
               <p class="card-label">Dropped events</p>
-              <p class="kpi-value">${droppedEvents.toLocaleString()}</p>
+              <p class="kpi-value animate-number" data-value="${droppedEvents}">0</p>
               <span class="badge ${clusterStatusClass}">relay ${escapeHtml(clusterStatusLabel)}</span>
             </article>
           </section>
@@ -2111,6 +2153,7 @@
       }
 
       bindLiveExcludeControls();
+      runNumberAnimations(els.app);
     } catch (err) {
       const retryID = "retry-live";
       els.app.innerHTML = renderRecoverableError("Could not load live runtime", errorText(err), retryID);
@@ -2128,7 +2171,6 @@
 
   async function renderSystemOverview() {
     setAppBusy(true);
-    els.app.innerHTML = loadingMarkup();
 
     try {
       const payload = await API.systemSnapshot(220);
@@ -2155,22 +2197,27 @@
           <section class="cards kpi-grid system-kpi-grid">
             <article class="card kpi-card card-static">
               <p class="card-label">Goroutines</p>
-              <p class="kpi-value">${goroutineCount.toLocaleString()}</p>
-              <span class="status-chip">runtime snapshot</span>
+              <p class="kpi-value animate-number" data-value="${goroutineCount}">0</p>
+              <span class="status-chip">Go runtime</span>
             </article>
             <article class="card kpi-card card-static">
-              <p class="card-label">Heap alloc</p>
+              <p class="card-label">Process Mem (Heap)</p>
               <p class="kpi-value">${escapeHtml(heapUsage)}</p>
               <span class="status-chip">GC cycles ${gcCycles.toLocaleString()}</span>
             </article>
             <article class="card kpi-card card-static">
+              <p class="card-label">CPU Cores (Host)</p>
+              <p class="kpi-value animate-number" data-value="${payload.cpus || 0}">0</p>
+              <span class="status-chip">assigned</span>
+            </article>
+            <article class="card kpi-card card-static">
               <p class="card-label">Queue workers</p>
-              <p class="kpi-value">${workerCount.toLocaleString()}</p>
+              <p class="kpi-value animate-number" data-value="${workerCount}">0</p>
               <span class="status-chip">${queueCount.toLocaleString()} queues</span>
             </article>
             <article class="card kpi-card card-static">
               <p class="card-label">Feature flags</p>
-              <p class="kpi-value">${flags.length.toLocaleString()}</p>
+              <p class="kpi-value animate-number" data-value="${flags.length}">0</p>
               <span class="status-chip">${envRows.length.toLocaleString()} env vars</span>
             </article>
             <article class="card kpi-card card-static">
@@ -2195,6 +2242,11 @@
           </section>
 
           <section class="cards system-signal-grid">
+            <article class="card card-static system-signal-card">
+              <p class="card-label">CPU host metrics</p>
+              <p class="section-subtitle">Real-time hardware load %</p>
+              ${renderSystemCPUChart(payload)}
+            </article>
             <article class="card card-static system-signal-card">
               <p class="card-label">Memory composition</p>
               <p class="section-subtitle">Current runtime distribution</p>
@@ -2377,6 +2429,7 @@
 
       bindSystemQueueActions();
       bindFeatureFlagActions();
+      runNumberAnimations(els.app);
     } catch (err) {
       const retryID = "retry-system";
       els.app.innerHTML = renderRecoverableError("Could not load system pulse", errorText(err), retryID);
@@ -2408,19 +2461,114 @@
       .join("");
   }
 
+  function renderSystemCPUChart(payload) {
+    const goroutines = Number(payload.goroutines || 0);
+    const cores = Number(payload.cpus || 1);
+    
+    // Real CPU load mapped directly via gopsutil/cpu in backend
+    const usage = Math.max(0, Math.min(100, Number(payload.cpu_load || 0)));
+    const idle = Math.max(0, 100 - usage);
+
+    const chartId = "sys-cpu-chart-" + Date.now() + "-" + Math.random().toString(36).slice(2, 6);
+
+    setTimeout(function () {
+      var canvas = document.getElementById(chartId);
+      if (!canvas || typeof Chart === "undefined") { return; }
+
+      var chart = new Chart(canvas, {
+        type: "doughnut",
+        data: {
+          labels: ["Load (%)", "Idle (%)"],
+          datasets: [{
+            data: [usage, idle],
+            backgroundColor: ["#0ea5e9", "rgba(148, 163, 184, 0.15)"],
+            borderWidth: 0,
+            borderRadius: 4,
+            spacing: 2,
+            hoverOffset: 4,
+          }],
+        },
+        options: {
+          cutout: "80%",
+          plugins: {
+            legend: {
+              display: true,
+              position: "right",
+              labels: { color: "#94a3b8", usePointStyle: true, pointStyle: "circle", boxWidth: 8, font: { size: 11 } },
+            },
+            tooltip: {
+              callbacks: {
+                label: function (ctx) {
+                  return " " + ctx.label + ": " + Math.round(ctx.raw) + "%";
+                },
+              },
+            },
+          },
+        },
+      });
+      registerChart(chart);
+    }, 0);
+
+    return `
+      <div class="chart-container system-chart-container">
+        <canvas id="${chartId}"></canvas>
+      </div>
+      <div style="text-align: center; margin-top: 12px; border-top: 1px solid rgba(132, 160, 195, 0.15); padding-top: 8px;">
+        <span style="font-size: 11px; text-transform: uppercase; font-weight: 600; color: var(--text-soft); letter-spacing: 0.5px;">GoFrame process: <strong style="color: var(--text-main); font-weight: 700; font-size: 13px;">${Number(payload.process_cpu_load || 0).toFixed(1)}%</strong></span>
+      </div>
+    `;
+  }
+
   function renderSystemMemoryBars(memory) {
     const alloc = Number(memory && memory.alloc_bytes || 0);
     const heapAlloc = Number(memory && memory.heap_alloc_bytes || 0);
     const heapSys = Number(memory && memory.heap_sys_bytes || 0);
     const stackInUse = Number(memory && memory.stack_in_use_bytes || 0);
-    const maxValue = Math.max(1, alloc, heapAlloc, heapSys, stackInUse);
+    const chartId = "sys-mem-chart-" + Date.now() + "-" + Math.random().toString(36).slice(2, 6);
 
-    return renderMetricBars([
-      { label: "Alloc", value: alloc, max: maxValue, display: formatBytes(alloc) },
-      { label: "Heap alloc", value: heapAlloc, max: maxValue, display: formatBytes(heapAlloc) },
-      { label: "Heap sys", value: heapSys, max: maxValue, display: formatBytes(heapSys) },
-      { label: "Stack in use", value: stackInUse, max: maxValue, display: formatBytes(stackInUse) },
-    ]);
+    setTimeout(function () {
+      var canvas = document.getElementById(chartId);
+      if (!canvas || typeof Chart === "undefined") { return; }
+
+      var chart = new Chart(canvas, {
+        type: "doughnut",
+        data: {
+          labels: ["Heap alloc", "Heap sys", "Stack in use", "Other alloc"],
+          datasets: [{
+            data: [heapAlloc, heapSys, stackInUse, Math.max(0, alloc - heapAlloc - stackInUse)],
+            backgroundColor: ["#0ea5e9", "#6366f1", "#10b981", "#cbd5e1"],
+            borderWidth: 0,
+            borderRadius: 4,
+            spacing: 2,
+            hoverOffset: 4,
+          }],
+        },
+        options: {
+          cutout: "80%",
+          plugins: {
+            legend: {
+              display: true,
+              position: "right",
+              labels: { color: "#94a3b8", usePointStyle: true, pointStyle: "circle", boxWidth: 8, font: { size: 11 } },
+            },
+            tooltip: {
+              callbacks: {
+                label: function (ctx) {
+                  return " " + ctx.label + ": " + formatBytes(ctx.raw);
+                },
+              },
+            },
+          },
+        },
+      });
+      registerChart(chart);
+    }, 0);
+
+    return `
+      <div class="chart-container system-chart-container">
+        <canvas id="${chartId}"></canvas>
+      </div>
+    `;
   }
 
   function renderSystemDatabaseUtilizationBars(rows) {
@@ -2431,42 +2579,60 @@
         const inUse = Number(row && row.in_use || 0);
         const base = Math.max(1, maxOpen, open);
         return {
-          label: String((row && row.alias) || "default"),
-          value: inUse,
+          alias: String((row && row.alias) || "default"),
+          inUse: inUse,
+          idle: Math.max(0, open - inUse),
           max: base,
-          display: `${inUse}/${base}`,
         };
       });
 
     if (items.length === 0) {
       return `<div class="table-empty">No database pools available</div>`;
     }
-    return renderMetricBars(items);
-  }
 
-  function renderMetricBars(items) {
-    const rows = Array.isArray(items) ? items : [];
-    if (rows.length === 0) {
-      return `<div class="table-empty">No metrics available</div>`;
-    }
+    const chartId = "sys-db-chart-" + Date.now() + "-" + Math.random().toString(36).slice(2, 6);
+
+    setTimeout(function () {
+      var canvas = document.getElementById(chartId);
+      if (!canvas || typeof Chart === "undefined") { return; }
+
+      var chart = new Chart(canvas, {
+        type: "bar",
+        data: {
+          labels: items.map(function (i) { return i.alias; }),
+          datasets: [
+            {
+              label: "In Use",
+              data: items.map(function (i) { return i.inUse; }),
+              backgroundColor: "#2dd4bf",
+              borderRadius: 4,
+            },
+            {
+              label: "Idle",
+              data: items.map(function (i) { return i.idle; }),
+              backgroundColor: "rgba(45, 212, 191, 0.2)",
+              borderRadius: 4,
+            },
+          ],
+        },
+        options: {
+          indexAxis: "y",
+          scales: {
+            x: { stacked: true, grid: { color: "rgba(37, 77, 128, 0.2)" }, ticks: { color: "#6f92bd", precision: 0 } },
+            y: { stacked: true, grid: { display: false }, ticks: { color: "#94a3b8" } },
+          },
+          plugins: {
+            legend: { display: true, labels: { color: "#94a3b8", usePointStyle: true, boxWidth: 8 } },
+            tooltip: { mode: "index", intersect: false },
+          },
+        },
+      });
+      registerChart(chart);
+    }, 0);
+
     return `
-      <div class="metric-bars">
-        ${rows.map(function (row) {
-          const value = Number(row.value || 0);
-          const max = Math.max(1, Number(row.max || 0));
-          const percent = Math.max(0, Math.min(100, Math.round((value / max) * 100)));
-          return `
-            <div class="metric-bar-row">
-              <div class="metric-bar-head">
-                <span>${escapeHtml(row.label || "-")}</span>
-                <strong>${escapeHtml(String(row.display || value))}</strong>
-              </div>
-              <div class="metric-bar-track">
-                <span class="metric-bar-fill" style="width:${percent}%;"></span>
-              </div>
-            </div>
-          `;
-        }).join("")}
+      <div class="chart-container system-chart-container">
+        <canvas id="${chartId}"></canvas>
       </div>
     `;
   }
@@ -2712,7 +2878,8 @@
   }
 
   function connectLiveStream() {
-    if ((window.location.hash || "#/") !== "#/live") {
+    const hash = window.location.hash || "#/";
+    if (hash !== "#/live" && hash !== "#/") {
       return;
     }
     const url = API.liveWebSocketURL();
@@ -2736,7 +2903,13 @@
         if (liveStreamEvents.length > LIVE_STREAM_EVENT_CAP) {
           liveStreamEvents.length = LIVE_STREAM_EVENT_CAP;
         }
-        refreshLiveStreamRows();
+
+        const hash = window.location.hash || "#/";
+        if (hash === "#/live") {
+          refreshLiveStreamRows();
+        } else if (hash === "#/") {
+          pushEventToCharts(payload);
+        }
       } catch (_) {}
     };
 
@@ -2775,6 +2948,33 @@
       liveStreamSocket = null;
     }
     liveStreamConnected = false;
+  }
+
+  function pushEventToCharts(event) {
+    if (!event) return;
+    const isRequest = event.request || event.type === "request" || event.type === "http";
+    const isSession = event.session || event.type === "session" || event.type === "ws";
+    
+    if (!isRequest && !isSession) return;
+    
+    for (const chart of activeCharts) {
+      if (chart.canvas && chart.canvas.id.indexOf("overview-trend-canvas") > -1) {
+        if (isRequest) {
+          const reqDataset = chart.data.datasets.find(ds => ds.label && ds.label.includes("Requests"));
+          if (reqDataset && reqDataset.data.length > 0) {
+            reqDataset.data[reqDataset.data.length - 1] += 1;
+            chart.update('none');
+          }
+        }
+        if (isSession) {
+          const sessDataset = chart.data.datasets.find(ds => ds.label && ds.label.includes("Sessions"));
+          if (sessDataset && sessDataset.data.length > 0) {
+            sessDataset.data[sessDataset.data.length - 1] += 1;
+            chart.update('none');
+          }
+        }
+      }
+    }
   }
 
   function refreshLiveStreamRows() {
@@ -3240,96 +3440,93 @@
   }
 
   function renderSessionChartCard(title, subtitle, points) {
-    return `
-      <article class="card session-chart-card">
-        <p class="card-label">${escapeHtml(title)}</p>
-        <p class="section-subtitle">${escapeHtml(subtitle)}</p>
-        ${renderSessionChart(points)}
-      </article>
-    `;
-  }
-
-  function renderSessionChart(points) {
     if (!Array.isArray(points) || points.length === 0) {
-      return `<div class="table-empty">No telemetry points</div>`;
+      return `
+        <article class="card session-chart-card">
+          <p class="card-label">${escapeHtml(title)}</p>
+          <p class="section-subtitle">${escapeHtml(subtitle)}</p>
+          <div class="table-empty">No telemetry points</div>
+        </article>
+      `;
     }
 
-    const width = 360;
-    const height = 152;
-    const padLeft = 28;
-    const padRight = 12;
-    const padTop = 10;
-    const padBottom = 20;
-    const graphW = width - padLeft - padRight;
-    const graphH = height - padTop - padBottom;
-
-    const values = points.map(function (p) {
-      return Number(p.active || 0);
-    });
+    const values = points.map(function (p) { return Number(p.active || 0); });
     const max = Math.max(1, ...values);
-    const avg = Math.round(values.reduce(function (acc, value) {
-      return acc + Number(value || 0);
-    }, 0) / values.length);
+    const avg = Math.round(values.reduce(function (acc, v) { return acc + v; }, 0) / values.length);
     const latest = values[values.length - 1] || 0;
     const prev = values.length > 1 ? values[values.length - 2] : latest;
     const delta = latest - prev;
     const trendLabel = delta > 0 ? `+${delta}` : String(delta);
+    const chartId = "session-chart-" + Date.now() + "-" + Math.random().toString(36).slice(2, 6);
 
-    const coords = values.map(function (value, idx) {
-      const x = padLeft + (idx / Math.max(1, values.length - 1)) * graphW;
-      const y = padTop + graphH - (value / max) * graphH;
-      return [x, y];
-    });
+    setTimeout(function () {
+      var canvas = document.getElementById(chartId);
+      if (!canvas || typeof Chart === "undefined") { return; }
 
-    const path = coords
-      .map(function (c, idx) {
-        return `${idx === 0 ? "M" : "L"}${c[0].toFixed(1)} ${c[1].toFixed(1)}`;
-      })
-      .join(" ");
-
-    const areaPath = `${path} L${(padLeft + graphW).toFixed(1)} ${(padTop + graphH).toFixed(1)} L${padLeft.toFixed(1)} ${(padTop + graphH).toFixed(1)} Z`;
-    const latestPoint = coords.length > 0 ? coords[coords.length - 1] : null;
-    const yTickCount = 3;
-    const yTicks = [];
-    for (let idx = 0; idx <= yTickCount; idx += 1) {
-      const ratio = idx / yTickCount;
-      const y = padTop + graphH - ratio * graphH;
-      const tickValue = Math.round(max * ratio);
-      yTicks.push({ y: y, value: tickValue });
-    }
-
-    const xTickDivider = Math.max(1, Math.floor(points.length / 3));
-    const xTicks = points
-      .map(function (point, idx) {
-        if (idx % xTickDivider !== 0 && idx !== points.length - 1) {
-          return "";
-        }
-        return `<span>${escapeHtml(formatOverviewTimeLabel(point.timestamp))}</span>`;
-      })
-      .join("");
+      var labels = points.map(function (p) { return formatOverviewTimeLabel(p.timestamp); });
+      var chart = new Chart(canvas, {
+        type: "line",
+        data: {
+          labels: labels,
+          datasets: [{
+            label: escapeHtml(title),
+            data: values,
+            borderColor: "#0ea5e9", // Clean unified blue
+            backgroundColor: function (ctx) {
+              var c = ctx.chart;
+              var area = c.chartArea;
+              if (!area) { return "rgba(14, 165, 233, 0.15)"; }
+              var gradient = c.ctx.createLinearGradient(0, area.top, 0, area.bottom);
+              gradient.addColorStop(0, "rgba(14, 165, 233, 0.28)");
+              gradient.addColorStop(1, "rgba(14, 165, 233, 0.02)");
+              return gradient;
+            },
+            fill: true,
+            tension: 0.4,
+            pointBackgroundColor: "#0ea5e9",
+            pointBorderColor: "#fff",
+            pointHoverRadius: 5,
+            pointHoverBackgroundColor: "#0ea5e9",
+          }],
+        },
+        options: {
+          interaction: { mode: "index", intersect: false },
+          scales: {
+            x: {
+              grid: { color: "rgba(148, 163, 184, 0.1)" },
+              ticks: { maxTicksLimit: 4, color: "#94a3b8", font: { family: '"Inter", sans-serif', size: 9 } },
+            },
+            y: {
+              beginAtZero: true,
+              grid: { color: "rgba(148, 163, 184, 0.1)" },
+              ticks: { color: "#94a3b8", font: { family: '"Inter", sans-serif', size: 9 }, precision: 0 },
+            },
+          },
+          plugins: { legend: { display: false } },
+        },
+      });
+      registerChart(chart);
+    }, 0);
 
     return `
-      <div class="session-chart-wrap">
-        <svg viewBox="0 0 ${width} ${height}" class="session-chart" role="img" aria-label="Session active chart">
-          ${yTicks.map(function (tick) {
-            return `
-              <line class="session-chart-grid-line" x1="${padLeft.toFixed(1)}" y1="${tick.y.toFixed(1)}" x2="${(padLeft + graphW).toFixed(1)}" y2="${tick.y.toFixed(1)}"></line>
-              <text class="session-chart-y-label" x="${(padLeft - 6).toFixed(1)}" y="${(tick.y + 4).toFixed(1)}" text-anchor="end">${escapeHtml(String(tick.value))}</text>
-            `;
-          }).join("")}
-          <path class="session-chart-area" d="${areaPath}"></path>
-          <path class="session-chart-line" d="${path}"></path>
-          ${latestPoint ? `<circle class="session-chart-point" cx="${latestPoint[0].toFixed(1)}" cy="${latestPoint[1].toFixed(1)}" r="3"></circle>` : ""}
-        </svg>
-        <div class="session-chart-labels">${xTicks}</div>
+      <article class="card session-chart-card">
+        <p class="card-label">${escapeHtml(title)}</p>
+        <p class="section-subtitle">${escapeHtml(subtitle)}</p>
+        <div class="chart-container session-chart-container">
+          <canvas id="${chartId}"></canvas>
+        </div>
         <div class="session-chart-meta">
           <span class="status-chip">Latest: ${latest}</span>
           <span class="status-chip">Avg: ${avg}</span>
           <span class="status-chip">Peak: ${max}</span>
           <span class="status-chip ${delta >= 0 ? "metric-success" : "metric-warning"}">Trend: ${trendLabel}</span>
         </div>
-      </div>
+      </article>
     `;
+  }
+
+  function renderSessionChart(points) {
+    return renderSessionChartCard("Active", "Session telemetry", points);
   }
 
   function renderSessionRows(rows) {
@@ -4784,6 +4981,38 @@
         `;
       },
     };
+  }
+
+  function runNumberAnimations(container) {
+    const elements = container.querySelectorAll(".animate-number[data-value]");
+    elements.forEach(function (el) {
+      const target = Number(el.getAttribute("data-value") || 0);
+      if (target <= 0 || !Number.isFinite(target)) {
+        el.textContent = el.getAttribute("data-value");
+        return;
+      }
+      
+      const duration = 1200;
+      const start = performance.now();
+      
+      function update(time) {
+        const current = time - start;
+        const progress = Math.min(current / duration, 1);
+        
+        const easeOutQuad = 1 - (1 - progress) * (1 - progress);
+        const currentVal = Math.floor(easeOutQuad * target);
+        
+        el.textContent = currentVal.toLocaleString();
+        
+        if (progress < 1) {
+          requestAnimationFrame(update);
+        } else {
+          el.textContent = target.toLocaleString();
+        }
+      }
+      
+      requestAnimationFrame(update);
+    });
   }
 
   init();

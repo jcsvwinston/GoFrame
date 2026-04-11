@@ -12,6 +12,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/shirou/gopsutil/v3/cpu"
+	"github.com/shirou/gopsutil/v3/process"
 	"github.com/jcsvwinston/GoFrame/pkg/db"
 	"github.com/jcsvwinston/GoFrame/pkg/tasks"
 )
@@ -28,8 +30,10 @@ type systemSnapshotResponse struct {
 	GoOS        string                  `json:"go_os"`
 	GoArch      string                  `json:"go_arch"`
 	GOMAXPROCS  int                     `json:"gomaxprocs"`
-	CPUs        int                     `json:"cpus"`
-	Goroutines  systemGoroutinesInfo    `json:"goroutines"`
+	CPUs           int                     `json:"cpus"`
+	CPULoad        float64                 `json:"cpu_load"`
+	ProcessCPULoad float64                 `json:"process_cpu_load"`
+	Goroutines     systemGoroutinesInfo    `json:"goroutines"`
 	Memory      systemMemoryInfo        `json:"memory"`
 	Databases   []systemDatabasePoolRow `json:"databases"`
 	Jobs        tasks.RuntimeSnapshot   `json:"jobs"`
@@ -103,6 +107,8 @@ func (p *Panel) handleSystemSnapshot(w http.ResponseWriter, r *http.Request) {
 		GoArch:      runtime.GOARCH,
 		GOMAXPROCS:  runtime.GOMAXPROCS(0),
 		CPUs:        runtime.NumCPU(),
+		CPULoad:        getCPULoad(),
+		ProcessCPULoad: getProcessCPULoad(),
 		Goroutines: systemGoroutinesInfo{
 			Count:       runtime.NumGoroutine(),
 			StateCounts: gatherGoroutineStateCounts(),
@@ -354,4 +360,23 @@ func maskSystemEnvValue(value string, masked bool) string {
 		return value
 	}
 	return "***"
+}
+
+func getCPULoad() float64 {
+	percents, err := cpu.Percent(0, false)
+	if err == nil && len(percents) > 0 {
+		return percents[0]
+	}
+	return 0
+}
+
+func getProcessCPULoad() float64 {
+	p, err := process.NewProcess(int32(os.Getpid()))
+	if err == nil {
+		percent, err := p.Percent(0)
+		if err == nil {
+			return percent
+		}
+	}
+	return 0
 }
