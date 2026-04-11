@@ -71,6 +71,7 @@ func (p *Panel) publishLiveClusterEvent(event liveEventEnvelope) {
 	if strings.TrimSpace(event.NodeID) == "" {
 		event.NodeID = p.liveNodeID()
 	}
+	p.live.nodes.touch(event.NodeID, time.Now().UTC())
 	relay.publish(event)
 }
 
@@ -114,7 +115,21 @@ func (p *Panel) ingestClusterLiveEvent(sourceNode string, event liveEventEnvelop
 		return
 	}
 
+	if p.logger != nil {
+		p.logger.Info("cluster event ingested", "node", nodeID, "type", event.Type)
+	}
+
+
+
+	ts := parseRFC3339(event.Timestamp)
+	if ts.IsZero() {
+		ts = time.Now().UTC()
+	}
+	p.live.nodes.touch(nodeID, ts)
+
 	switch strings.TrimSpace(event.Type) {
+	case "node.heartbeat":
+		return
 	case "http.request":
 		if event.Request == nil {
 			return
@@ -267,10 +282,24 @@ func (r *liveClusterRelay) awaitShutdown() {
 
 func (r *liveClusterRelay) runPublisher(ctx context.Context) {
 	defer r.wg.Done()
+	ticker := time.NewTicker(10 * time.Second)
+	defer ticker.Stop()
+
 	for {
 		select {
 		case <-ctx.Done():
 			return
+		case <-ticker.C:
+			// Periodic heartbeat to keep node visible in topology even if idle
+			event := liveEventEnvelope{
+				Type:      "node.heartbeat",
+				Timestamp: time.Now().UTC().Format(time.RFC3339),
+			}
+			if r.logger != nil {
+				r.logger.Info("publishing node heartbeat", "node", r.nodeID)
+			}
+			r.publish(event)
+
 		case event := <-r.sendCh:
 			wire := liveClusterWireEvent{
 				Version:     "1",

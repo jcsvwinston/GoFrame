@@ -1,6 +1,7 @@
 package router
 
 import (
+	"bufio"
 	"compress/flate"
 	"compress/gzip"
 	"context"
@@ -119,13 +120,19 @@ func headerWritten(w http.ResponseWriter) bool {
 // ---------------------------------------------------------------------------
 
 // TimeoutMiddleware wraps the stdlib http.TimeoutHandler to cancel requests
-// that exceed the given duration.
+// that exceed the given duration. It automatically skips WebSocket upgrades.
 func TimeoutMiddleware(timeout time.Duration) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		if timeout <= 0 {
 			return next
 		}
-		return http.TimeoutHandler(next, timeout, `{"error":{"code":"TIMEOUT","message":"request timeout"}}`)
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if IsWebSocketUpgrade(r) {
+				next.ServeHTTP(w, r)
+				return
+			}
+			http.TimeoutHandler(next, timeout, `{"error":{"code":"TIMEOUT","message":"request timeout"}}`).ServeHTTP(w, r)
+		})
 	}
 }
 
@@ -145,7 +152,7 @@ func Compress(level int) func(http.Handler) http.Handler {
 
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if !strings.Contains(r.Header.Get("Accept-Encoding"), "gzip") {
+			if IsWebSocketUpgrade(r) || !strings.Contains(r.Header.Get("Accept-Encoding"), "gzip") {
 				next.ServeHTTP(w, r)
 				return
 			}
@@ -180,6 +187,14 @@ func (g *gzipResponseWriter) Flush() {
 	if f, ok := g.ResponseWriter.(http.Flusher); ok {
 		f.Flush()
 	}
+}
+
+// Hijack implements http.Hijacker if the underlying writer supports it.
+func (g *gzipResponseWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+	if hj, ok := g.ResponseWriter.(http.Hijacker); ok {
+		return hj.Hijack()
+	}
+	return nil, nil, fmt.Errorf("hijacker not supported by the underlying writer")
 }
 
 // ---------------------------------------------------------------------------
@@ -250,6 +265,23 @@ func (w *WrapResponseWriter) Flush() {
 	if f, ok := w.ResponseWriter.(http.Flusher); ok {
 		f.Flush()
 	}
+}
+
+// Hijack implements http.Hijacker if the underlying writer supports it.
+func (w *WrapResponseWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+	if hj, ok := w.ResponseWriter.(http.Hijacker); ok {
+		return hj.Hijack()
+	}
+	return nil, nil, fmt.Errorf("hijacker not supported by the underlying writer")
+}
+
+func IsWebSocketUpgrade(r *http.Request) bool {
+	if r == nil {
+		return false
+	}
+	connection := strings.ToLower(strings.TrimSpace(r.Header.Get("Connection")))
+	upgrade := strings.ToLower(strings.TrimSpace(r.Header.Get("Upgrade")))
+	return strings.Contains(connection, "upgrade") && upgrade == "websocket"
 }
 
 // clientIPFromRequest extracts the client IP. Exported for reuse across

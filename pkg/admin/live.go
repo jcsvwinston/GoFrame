@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"path"
@@ -41,6 +42,7 @@ type liveRuntime struct {
 	sql      *sqlQueryRingBuffer
 	bus      *liveEventBus
 	sessions *liveSessionStore
+	nodes    *liveNodeStore
 }
 
 type liveSnapshotResponse struct {
@@ -183,7 +185,44 @@ func newLiveRuntime() *liveRuntime {
 		sql:      newSQLQueryRingBuffer(defaultLiveSQLBufferSize),
 		bus:      newLiveEventBus(defaultLiveSubscriberBuffer),
 		sessions: newLiveSessionStore(defaultLiveSessionTTL),
+		nodes:    newLiveNodeStore(),
 	}
+}
+
+type liveNodeStore struct {
+	mu    sync.RWMutex
+	nodes map[string]time.Time
+}
+
+func newLiveNodeStore() *liveNodeStore {
+	return &liveNodeStore{nodes: make(map[string]time.Time)}
+}
+
+func (s *liveNodeStore) touch(nodeID string, timestamp time.Time) {
+	if s == nil || nodeID == "" {
+		return
+	}
+	s.mu.Lock()
+	s.nodes[nodeID] = timestamp
+	s.mu.Unlock()
+	slog.Info("node presence touched", "node", nodeID, "ts", timestamp.Format(time.RFC3339))
+}
+
+
+func (s *liveNodeStore) active(window time.Duration) map[string]time.Time {
+	if s == nil {
+		return nil
+	}
+	now := time.Now().UTC()
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	out := make(map[string]time.Time)
+	for id, last := range s.nodes {
+		if now.Sub(last) <= window {
+			out[id] = last
+		}
+	}
+	return out
 }
 
 func newRequestRingBuffer(capacity int) *requestRingBuffer {
@@ -466,7 +505,7 @@ func (p *Panel) liveTrafficMiddleware(next http.Handler) http.Handler {
 			next.ServeHTTP(w, r.WithContext(contextWithLiveObserved(r)))
 			return
 		}
-		if isWebSocketUpgrade(r) {
+		if router.IsWebSocketUpgrade(r) {
 			next.ServeHTTP(w, r.WithContext(contextWithLiveObserved(r)))
 			return
 		}
@@ -485,14 +524,7 @@ func contextWithLiveObserved(r *http.Request) context.Context {
 	return context.WithValue(r.Context(), liveTrafficObservedKey{}, true)
 }
 
-func isWebSocketUpgrade(r *http.Request) bool {
-	if r == nil {
-		return false
-	}
-	connection := strings.ToLower(strings.TrimSpace(r.Header.Get("Connection")))
-	upgrade := strings.ToLower(strings.TrimSpace(r.Header.Get("Upgrade")))
-	return strings.Contains(connection, "upgrade") && upgrade == "websocket"
-}
+
 
 func (p *Panel) recordLiveRequest(r *http.Request, status int, duration time.Duration) {
 	if p == nil || p.live == nil || r == nil {
@@ -933,7 +965,8 @@ func (p *Panel) handleLiveSnapshot(w http.ResponseWriter, r *http.Request) {
 	allRequests := p.live.requests.latestFilteredByNode(requestStats.Stored, resp.ExcludePatterns, "")
 	allQueries := p.live.sql.latest(sqlStats.Stored)
 	allSessions := p.live.sessions.snapshot(maxLiveListLimit)
-	resp.Nodes = buildLiveNodeSnapshots(now, p.liveNodeID(), allRequests, allQueries, allSessions)
+	activeNodes := p.live.nodes.active(liveNodeDegradedWindow)
+	resp.Nodes = buildLiveNodeSnapshots(now, p.liveNodeID(), activeNodes, allRequests, allQueries, allSessions)
 	resp.Requests = p.live.requests.latestFilteredByNode(requestLimit, resp.ExcludePatterns, nodeFilter)
 	resp.Queries = filterLiveSQLByNode(p.live.sql.latest(sqlLimit), nodeFilter, sqlLimit)
 	resp.Sessions = filterLiveSessionsByNode(p.live.sessions.snapshot(sessionLimit), nodeFilter, sessionLimit)
@@ -985,7 +1018,7 @@ func filterLiveSessionsByNode(rows []liveSessionActivity, nodeID string, limit i
 	return out
 }
 
-func buildLiveNodeSnapshots(now time.Time, selfNodeID string, requests []liveRequestEvent, queries []liveSQLEvent, sessions []liveSessionActivity) []liveNodeSnapshot {
+func buildLiveNodeSnapshots(now time.Time, selfNodeID string, activeNodes map[string]time.Time, requests []liveRequestEvent, queries []liveSQLEvent, sessions []liveSessionActivity) []liveNodeSnapshot {
 	type nodeAccumulator struct {
 		id         string
 		lastSeen   time.Time
@@ -999,15 +1032,25 @@ func buildLiveNodeSnapshots(now time.Time, selfNodeID string, requests []liveReq
 	ensure := func(raw string) *nodeAccumulator {
 		id := strings.TrimSpace(raw)
 		if id == "" {
-			id = "local"
+			return nil
 		}
-		if existing, ok := nodes[id]; ok {
-			return existing
+		if acc, ok := nodes[id]; ok {
+			return acc
 		}
-		entry := &nodeAccumulator{id: id}
-		nodes[id] = entry
-		return entry
+		acc := &nodeAccumulator{id: id}
+		nodes[id] = acc
+		return acc
 	}
+
+	// Bootstrap from presence registry
+	for id, last := range activeNodes {
+		acc := ensure(id)
+		if acc != nil && last.After(acc.lastSeen) {
+			acc.lastSeen = last
+			acc.lastEvent = "heartbeat"
+		}
+	}
+
 	mark := func(entry *nodeAccumulator, ts time.Time, eventType string) {
 		if entry == nil {
 			return
