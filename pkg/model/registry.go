@@ -99,6 +99,24 @@ func (r *Registry) Count() int {
 	return len(r.models)
 }
 
+// TenantFieldName returns the name of the tenant field column for a model, if declared.
+func (m *ModelMeta) TenantFieldName() string {
+	for _, f := range m.Fields {
+		if f.IsTenantField {
+			return f.Column
+		}
+	}
+	// Convention: check common tenant field names as fallback
+	for _, candidate := range []string{"tenant_id", "tenant"} {
+		for _, f := range m.Fields {
+			if f.Column == candidate {
+				return f.Column
+			}
+		}
+	}
+	return ""
+}
+
 // applyConfig applies ModelConfig overrides to the extracted field metadata.
 func (r *Registry) applyConfig(meta *ModelMeta, cfg ModelConfig) {
 	// Build lookup sets for O(1) membership tests.

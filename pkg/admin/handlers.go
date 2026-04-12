@@ -64,6 +64,14 @@ func (p *Panel) handleListModels(w http.ResponseWriter, r *http.Request) {
 		CountsMode       string                `json:"counts_mode"`
 		CountsAvailable  bool                  `json:"counts_available"`
 		SessionsCount    int                   `json:"sessions_active"`
+
+		// Multi-tenant/site info
+		MultiTenantEnabled bool     `json:"multi_tenant_enabled"`
+		MultiTenantDefault string   `json:"multi_tenant_default"`
+		TenantIDs          []string `json:"tenant_ids,omitempty"`
+		MultiSiteEnabled   bool     `json:"multi_site_enabled"`
+		MultiSiteDefault   string   `json:"multi_site_default"`
+		SiteNames          []string `json:"site_names,omitempty"`
 	}
 
 	models := p.registry.All()
@@ -258,16 +266,22 @@ func (p *Panel) handleListModels(w http.ResponseWriter, r *http.Request) {
 		"models": result,
 		"title":  p.config.Title,
 		"runtime": runtimeInfo{
-			Environment:      strings.TrimSpace(p.config.Environment),
-			Databases:        dbRuntime,
-			Engines:          engines,
-			EngineGroups:     engineRuntime,
-			TraceURLTemplate: strings.TrimSpace(p.config.TraceURLTemplate),
-			ModelsTotal:      len(result),
-			RecordsTotal:     recordsTotal,
-			CountsMode:       countsMode,
-			CountsAvailable:  includeCounts,
-			SessionsCount:    sessionsCount,
+			Environment:        strings.TrimSpace(p.config.Environment),
+			Databases:          dbRuntime,
+			Engines:            engines,
+			EngineGroups:       engineRuntime,
+			TraceURLTemplate:   strings.TrimSpace(p.config.TraceURLTemplate),
+			ModelsTotal:        len(result),
+			RecordsTotal:       recordsTotal,
+			CountsMode:         countsMode,
+			CountsAvailable:    includeCounts,
+			SessionsCount:      sessionsCount,
+			MultiTenantEnabled: p.config.MultiTenantEnabled,
+			MultiTenantDefault: p.config.MultiTenantDefault,
+			TenantIDs:          p.config.MultiTenantIDs,
+			MultiSiteEnabled:   p.config.MultiSiteEnabled,
+			MultiSiteDefault:   p.config.MultiSiteDefault,
+			SiteNames:          p.config.MultiSiteNames,
 		},
 	})
 }
@@ -285,21 +299,22 @@ func (p *Panel) handleGetSchema(w http.ResponseWriter, r *http.Request) {
 	}
 
 	type fieldInfo struct {
-		Name         string         `json:"name"`
-		Column       string         `json:"column"`
-		Label        string         `json:"label"`
-		Type         string         `json:"type"`
-		HTMLType     string         `json:"html_type"`
-		IsPK         bool           `json:"is_pk"`
-		IsRequired   bool           `json:"is_required"`
-		IsReadOnly   bool           `json:"is_readonly"`
-		IsList       bool           `json:"is_list"`
-		IsSearch     bool           `json:"is_search"`
-		IsFilter     bool           `json:"is_filter"`
-		IsExcluded   bool           `json:"is_excluded"`
-		IsForeignKey bool           `json:"is_fk"`
-		ForeignModel string         `json:"fk_model,omitempty"`
-		Choices      []model.Choice `json:"choices,omitempty"`
+		Name          string         `json:"name"`
+		Column        string         `json:"column"`
+		Label         string         `json:"label"`
+		Type          string         `json:"type"`
+		HTMLType      string         `json:"html_type"`
+		IsPK          bool           `json:"is_pk"`
+		IsRequired    bool           `json:"is_required"`
+		IsReadOnly    bool           `json:"is_readonly"`
+		IsList        bool           `json:"is_list"`
+		IsSearch      bool           `json:"is_search"`
+		IsFilter      bool           `json:"is_filter"`
+		IsExcluded    bool           `json:"is_excluded"`
+		IsForeignKey  bool           `json:"is_fk"`
+		IsTenantField bool           `json:"is_tenant_field"`
+		ForeignModel  string         `json:"fk_model,omitempty"`
+		Choices       []model.Choice `json:"choices,omitempty"`
 	}
 
 	fields := make([]fieldInfo, 0, len(meta.Fields))
@@ -313,10 +328,12 @@ func (p *Panel) handleGetSchema(w http.ResponseWriter, r *http.Request) {
 			IsPK: f.IsPK, IsRequired: f.IsRequired, IsReadOnly: f.IsReadOnly,
 			IsList: f.IsList, IsSearch: f.IsSearch, IsFilter: f.IsFilter,
 			IsExcluded: f.IsExcluded, IsForeignKey: f.IsForeignKey,
-			ForeignModel: f.ForeignModel, Choices: f.Choices,
+			IsTenantField: f.IsTenantField,
+			ForeignModel:  f.ForeignModel, Choices: f.Choices,
 		})
 	}
 
+	tenantField := p.resolveTenantField(meta.Name)
 	writeJSON(w, http.StatusOK, map[string]interface{}{
 		"name":         meta.Name,
 		"plural":       meta.Plural,
@@ -326,6 +343,7 @@ func (p *Panel) handleGetSchema(w http.ResponseWriter, r *http.Request) {
 		"read_only":    meta.Config.ReadOnly,
 		"fields":       fields,
 		"foreign_keys": meta.ForeignKeys,
+		"tenant_field": tenantField,
 	})
 }
 
@@ -383,6 +401,17 @@ func (p *Panel) handleListRecords(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		writeErr(w, err)
 		return
+	}
+
+	// Apply tenant filtering when multi-tenant is enabled
+	if tenantCtx := tenantContextFromRequest(r); tenantCtx != nil && tenantCtx.Enabled && tenantCtx.AutoFilter {
+		tenantField := p.resolveTenantField(meta.Name)
+		if tenantField != "" && tenantCtx.TenantID != "" {
+			if filters == nil {
+				filters = make(map[string]string)
+			}
+			filters[tenantField] = tenantCtx.TenantID
+		}
 	}
 
 	if !pageSet {
@@ -476,6 +505,25 @@ func (p *Panel) handleCreateRecord(w http.ResponseWriter, r *http.Request) {
 	if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
 		writeErr(w, gferrors.BadRequest("invalid JSON: "+err.Error()))
 		return
+	}
+
+	// Auto-inject tenant ID on create when multi-tenant is enabled
+	if tenantCtx := tenantContextFromRequest(r); tenantCtx != nil && tenantCtx.Enabled && tenantCtx.TenantID != "" {
+		tenantField := p.resolveTenantField(meta.Name)
+		if tenantField != "" {
+			// Only inject if not already provided in payload
+			if _, exists := data[tenantField]; !exists {
+				// Also check Go field name variant
+				goFieldName := columnToGoField(meta, tenantField)
+				if goFieldName != "" {
+					if _, exists2 := data[goFieldName]; !exists2 {
+						data[tenantField] = tenantCtx.TenantID
+					}
+				} else {
+					data[tenantField] = tenantCtx.TenantID
+				}
+			}
+		}
 	}
 
 	entity, err := payloadToEntity(meta, data)
@@ -1137,4 +1185,14 @@ func buildBulkExportURL(currentPath string, ids []uint, databaseAlias string) st
 		q.Set("db", alias)
 	}
 	return base + "/export?" + q.Encode()
+}
+
+// columnToGoField converts a database column name to a Go struct field name.
+func columnToGoField(meta *model.ModelMeta, column string) string {
+	for _, f := range meta.Fields {
+		if f.Column == column {
+			return f.Name
+		}
+	}
+	return ""
 }

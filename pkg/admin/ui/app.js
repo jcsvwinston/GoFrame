@@ -101,7 +101,7 @@
   function destroyAllCharts() {
     while (activeCharts.length > 0) {
       const chart = activeCharts.pop();
-      try { chart.destroy(); } catch (_) {}
+      try { chart.destroy(); } catch (_) { }
     }
   }
 
@@ -141,7 +141,7 @@
             try {
               const payload = await res.json();
               msg = (payload && payload.error && payload.error.message) || msg;
-            } catch (_) {}
+            } catch (_) { }
 
             if (transientStatus.has(res.status) && attempt < maxAttempts) {
               await sleep(backoff(attempt));
@@ -267,10 +267,72 @@
         const protocol = window.location.protocol === "https:" ? "wss://" : "ws://";
         return protocol + window.location.host + root + "/live/ws";
       },
+      exportCreate: (cfg) => req("/export", { method: "POST", body: JSON.stringify(cfg) }),
+      exportList: () => req("/export/list"),
+      exportStatus: (id) => req(`/export/status?id=${encodeURIComponent(id)}`),
+      exportDownload: (key) => { window.open(root + `/export/download?key=${encodeURIComponent(key)}`, "_blank"); },
+      importUpload: (file) => {
+        const fd = new FormData();
+        fd.append("file", file);
+        return fetch(root + "/import/upload", { method: "POST", body: fd }).then(function (r) {
+          if (!r.ok) throw new Error("Upload failed");
+          return r.json();
+        });
+      },
+      importValidate: (key, cfg) => req(`/import/validate?key=${encodeURIComponent(key)}`, { method: "POST", body: JSON.stringify(cfg) }),
+      importExecute: (key, cfg) => req(`/import/execute?key=${encodeURIComponent(key)}`, { method: "POST", body: JSON.stringify(cfg) }),
     };
   })();
 
   function init() {
+    // Apply i18n labels
+    if (window.AdminI18n) {
+      var _t = window.AdminI18n.t.bind(window.AdminI18n);
+
+      // Update nav labels
+      document.querySelectorAll('[data-nav="overview"] .nav-label').forEach(function (el) { el.textContent = _t("nav.overview"); });
+      document.querySelectorAll('[data-nav="data-studio"] .nav-label').forEach(function (el) { el.textContent = _t("nav.data_studio"); });
+      document.querySelectorAll('[data-nav="system"] .nav-label').forEach(function (el) { el.textContent = _t("nav.system_pulse"); });
+      document.querySelectorAll('[data-nav="network"] .nav-label').forEach(function (el) { el.textContent = _t("nav.network_inspector"); });
+      document.querySelectorAll('[data-nav="infra"] .nav-label').forEach(function (el) { el.textContent = _t("nav.infra_manager"); });
+      document.querySelectorAll('[data-nav="health"] .nav-label').forEach(function (el) { el.textContent = _t("nav.health"); });
+      document.querySelectorAll('[data-nav="rbac"] .nav-label').forEach(function (el) { el.textContent = _t("nav.access_control"); });
+      document.querySelectorAll('[data-nav="audit"] .nav-label').forEach(function (el) { el.textContent = _t("nav.audit_log"); });
+      document.querySelectorAll('[data-nav="migrations"] .nav-label').forEach(function (el) { el.textContent = _t("nav.migrations"); });
+      document.querySelectorAll('[data-nav="deployment"] .nav-label').forEach(function (el) { el.textContent = _t("nav.deployment"); });
+      document.querySelectorAll('[data-nav="jobs"] .nav-label').forEach(function (el) { el.textContent = _t("nav.jobs"); });
+      document.querySelectorAll('[data-nav="cache"] .nav-label').forEach(function (el) { el.textContent = _t("nav.cache"); });
+      document.querySelectorAll('[data-nav="storage"] .nav-label').forEach(function (el) { el.textContent = _t("nav.storage"); });
+      document.querySelectorAll('[data-nav="sites"] .nav-label').forEach(function (el) { el.textContent = _t("nav.sites"); });
+
+      // Update topbar
+      var cmdkTitle = document.querySelector("#cmdk-open .command-title");
+      if (cmdkTitle) cmdkTitle.textContent = _t("cmd.search");
+      var refreshBtn = document.getElementById("refresh-btn");
+      if (refreshBtn) refreshBtn.textContent = _t("btn.refresh");
+      var newRecordBtn = document.getElementById("new-record-btn");
+      if (newRecordBtn) newRecordBtn.textContent = _t("btn.new_record");
+      var sidebarFoot = document.querySelector(".sidebar-foot-label");
+      if (sidebarFoot) sidebarFoot.textContent = _t("runtime.all_systems");
+
+      // Locale selector
+      var localeSel = document.getElementById("locale-selector");
+      if (localeSel) {
+        localeSel.value = window.AdminI18n.getLocale();
+        localeSel.addEventListener("change", function () {
+          window.AdminI18n.setLocale(localeSel.value);
+          location.reload();
+        });
+      }
+
+      // Theme label
+      var themeLabel = document.getElementById("theme-toggle-label");
+      if (themeLabel) {
+        var currentTheme = document.documentElement.getAttribute("data-theme");
+        themeLabel.textContent = currentTheme === "light" ? _t("theme.dark") : _t("theme.light");
+      }
+    }
+
     hydrateThemePreference();
     state.sidebarCollapsed = readSidebarPreference();
     applySidebarLayout();
@@ -379,6 +441,66 @@
     });
   }
 
+  function populateSelectors() {
+    var tenantSel = document.getElementById("tenant-selector");
+    var siteSel = document.getElementById("site-selector");
+    var runtime = state.runtime || {};
+
+    // Tenant selector
+    if (tenantSel) {
+      var tenants = Array.isArray(runtime.tenants) ? runtime.tenants : [];
+      if (tenants.length > 0) {
+        tenantSel.style.display = "";
+        var html = '<option value="">All Tenants</option>';
+        tenants.forEach(function (t) {
+          html += '<option value="' + escapeHtml(t.id || t.name || "") + '">' + escapeHtml(t.name || t.id || "") + '</option>';
+        });
+        tenantSel.innerHTML = html;
+        var currentTenant = new URLSearchParams(window.location.search).get("tenant") || "";
+        tenantSel.value = currentTenant;
+        tenantSel.onchange = function () {
+          var tenant = tenantSel.value;
+          var url = new URL(window.location);
+          if (tenant) {
+            url.searchParams.set("tenant", tenant);
+          } else {
+            url.searchParams.delete("tenant");
+          }
+          state.currentDBAlias = "";
+          window.location.href = url.toString();
+        };
+      } else {
+        tenantSel.style.display = "none";
+      }
+    }
+
+    // Site selector
+    if (siteSel) {
+      var sites = Array.isArray(runtime.sites) ? runtime.sites : [];
+      if (sites.length > 1) {
+        siteSel.style.display = "";
+        var html = '<option value="">All Sites</option>';
+        sites.forEach(function (s) {
+          html += '<option value="' + escapeHtml(s.id || s.name || "") + '" title="' + escapeHtml(s.name || s.id || "") + '">' + escapeHtml(s.name || s.id || "") + '</option>';
+        });
+        siteSel.innerHTML = html;
+        siteSel.onchange = function () {
+          var site = siteSel.value;
+          var url = new URL(window.location);
+          if (site) {
+            url.searchParams.set("site", site);
+          } else {
+            url.searchParams.delete("site");
+          }
+          state.currentDBAlias = "";
+          window.location.href = url.toString();
+        };
+      } else {
+        siteSel.style.display = "none";
+      }
+    }
+  }
+
   async function refreshModels(quiet, mode) {
     const payload = await API.models(mode);
     state.models = payload.models || [];
@@ -390,9 +512,11 @@
     els.siteTitle.textContent = payload.title || "GoFrame Admin";
     document.title = payload.title || "GoFrame Admin";
     updateRuntimeEnvironmentPill();
+    populateSelectors();
     renderModelNav();
     renderPalette(els.cmdkInput.value || "");
     updateNewButton();
+    loadExportHistory();
     if (!quiet) {
       toast("Models updated", "success");
     }
@@ -517,13 +641,13 @@
         ? "infra"
         : route.view === "data-studio"
           ? "data-studio"
-        : route.view === "live"
-          ? "network"
-          : route.view === "system"
-            ? "system"
-            : route.model
-              ? "data-studio"
-              : "overview";
+          : route.view === "live"
+            ? "network"
+            : route.view === "system"
+              ? "system"
+              : route.model
+                ? "data-studio"
+                : "overview";
     setActiveNav(navKey);
     renderBreadcrumbs(route);
     stopLiveStream();
@@ -642,7 +766,7 @@
       offset = 2;
     }
 
-    if (parts.length === offset+1) {
+    if (parts.length === offset + 1) {
       return {
         view: "list",
         model: model,
@@ -652,11 +776,11 @@
       };
     }
 
-    if (parts[offset+1] === "new") {
+    if (parts[offset + 1] === "new") {
       return { view: "new", model: model, db: dbAlias };
     }
 
-    return { view: "edit", model: model, db: dbAlias, id: decodeURIComponent(parts[offset+1] || "") };
+    return { view: "edit", model: model, db: dbAlias, id: decodeURIComponent(parts[offset + 1] || "") };
   }
 
   function renderBreadcrumbs(route) {
@@ -1681,7 +1805,7 @@
         }
         const details = els.app.querySelector('.detail-grid');
         if (details) {
-          details.innerHTML = 
+          details.innerHTML =
             UI.kv("Current active", String(currentActive)) +
             UI.kv("Active (last 5m)", String(active5m)) +
             UI.kv("Active (last hour)", String(active1h)) +
@@ -2463,7 +2587,7 @@
   function renderSystemCPUChart(payload) {
     const goroutines = Number(payload.goroutines || 0);
     const cores = Number(payload.cpus || 1);
-    
+
     // Real CPU load mapped directly via gopsutil/cpu in backend
     const usage = Math.max(0, Math.min(100, Number(payload.cpu_load || 0)));
     const idle = Math.max(0, 100 - usage);
@@ -2909,10 +3033,10 @@
         } else if (hash === "#/") {
           pushEventToCharts(payload);
         }
-      } catch (_) {}
+      } catch (_) { }
     };
 
-    liveStreamSocket.onerror = function () {};
+    liveStreamSocket.onerror = function () { };
 
     liveStreamSocket.onclose = function () {
       liveStreamConnected = false;
@@ -2943,7 +3067,7 @@
     if (liveStreamSocket) {
       try {
         liveStreamSocket.close();
-      } catch (_) {}
+      } catch (_) { }
       liveStreamSocket = null;
     }
     liveStreamConnected = false;
@@ -2953,9 +3077,9 @@
     if (!event) return;
     const isRequest = event.request || event.type === "request" || event.type === "http";
     const isSession = event.session || event.type === "session" || event.type === "ws";
-    
+
     if (!isRequest && !isSession) return;
-    
+
     for (const chart of activeCharts) {
       if (chart.canvas && chart.canvas.id.indexOf("overview-trend-canvas") > -1) {
         if (isRequest) {
@@ -2998,11 +3122,11 @@
     const targetNode = String(nodeFilter || "").trim().toLowerCase();
     const filtered = targetNode
       ? events.filter(function (event) {
-          const eventNode = String(event.node_id || (event.request && event.request.node_id) || (event.sql && event.sql.node_id) || (event.session && event.session.node_id) || "")
-            .trim()
-            .toLowerCase();
-          return eventNode === targetNode;
-        })
+        const eventNode = String(event.node_id || (event.request && event.request.node_id) || (event.sql && event.sql.node_id) || (event.session && event.session.node_id) || "")
+          .trim()
+          .toLowerCase();
+        return eventNode === targetNode;
+      })
       : events;
     if (filtered.length === 0) {
       return `<div class="table-empty">No streamed events for this node</div>`;
@@ -3202,8 +3326,8 @@
     const targetNode = String(nodeFilter || "").trim().toLowerCase();
     const filtered = targetNode
       ? rows.filter(function (row) {
-          return String((row && row.node_id) || "").trim().toLowerCase() === targetNode;
-        })
+        return String((row && row.node_id) || "").trim().toLowerCase() === targetNode;
+      })
       : rows;
     if (filtered.length === 0) {
       return `<tr><td class="table-empty" colspan="7">No nodes match current scope</td></tr>`;
@@ -3439,7 +3563,7 @@
   }
 
   function updateSessionChartCard(chartId, points) {
-    var chart = activeCharts.find(function(c) { return c && c.canvas && c.canvas.id === chartId; });
+    var chart = activeCharts.find(function (c) { return c && c.canvas && c.canvas.id === chartId; });
     if (!chart || !Array.isArray(points)) return;
     var values = points.map(function (p) { return Number(p.active || 0); });
     var labels = points.map(function (p) { return formatOverviewTimeLabel(p.timestamp); });
@@ -3653,7 +3777,9 @@
           <input class="input" id="list-search" type="search" placeholder="Search records" value="${escapeHtml(state.search)}">
           <button class="btn btn-ghost" id="bulk-delete" ${schema.read_only ? "disabled" : ""}>Delete selected</button>
           <button class="btn btn-ghost" id="bulk-export">Export selected</button>
-          <a class="btn btn-ghost" href="${API.exportURL(name, dbAlias)}" target="_blank" rel="noopener">Export CSV</a>
+          <button class="btn btn-ghost" id="full-export-btn">Export</button>
+          <button class="btn btn-ghost" id="import-btn" ${schema.read_only ? "disabled" : ""}>Import</button>
+          <a class="btn btn-ghost" href="${API.exportURL(name, dbAlias)}" target="_blank" rel="noopener">CSV</a>
           ${schema.read_only ? "" : `<div class="status-chip" id="selection-hint">0 selected</div>`}
           <button class="btn btn-primary" id="list-new" ${schema.read_only ? "disabled" : ""}>New</button>
           </section>
@@ -3703,6 +3829,8 @@
     const searchInput = document.getElementById("list-search");
     const bulkDelete = document.getElementById("bulk-delete");
     const bulkExport = document.getElementById("bulk-export");
+    const fullExportBtn = document.getElementById("full-export-btn");
+    const importBtn = document.getElementById("import-btn");
     const selectionHint = document.getElementById("selection-hint");
     const checkAll = document.getElementById("check-all");
 
@@ -3838,6 +3966,18 @@
         }
       });
     }
+
+    if (fullExportBtn) {
+      fullExportBtn.addEventListener("click", function () {
+        showExportModal(name, dbAlias, schema);
+      });
+    }
+    if (importBtn) {
+      importBtn.addEventListener("click", function () {
+        showImportModal(name, dbAlias, schema);
+      });
+    }
+
     syncSelectionState();
 
     document.querySelectorAll("[data-sort-col]").forEach(function (th) {
@@ -3977,10 +4117,10 @@
       const tabHead = useTabs ? renderFormTabs(grouped, activeTab) : "";
       const panelMarkup = useTabs
         ? grouped
-            .map(function (group, idx) {
-              return renderTabPanel(group.key, idx === 0, renderFieldGrid(group.fields, record, editing));
-            })
-            .join("")
+          .map(function (group, idx) {
+            return renderTabPanel(group.key, idx === 0, renderFieldGrid(group.fields, record, editing));
+          })
+          .join("")
         : renderFieldGrid(formFields, record, editing);
 
       const detailPanels = editing ? renderDetailPanels(record) : "";
@@ -4089,11 +4229,11 @@
     return `
       <div class="tab-strip" role="tablist" aria-label="Form sections">
         ${groups
-          .map(function (group) {
-            const active = group.key === activeTab ? "active" : "";
-            const selected = group.key === activeTab ? "true" : "false";
-            const tabIdx = group.key === activeTab ? "0" : "-1";
-            return `
+        .map(function (group) {
+          const active = group.key === activeTab ? "active" : "";
+          const selected = group.key === activeTab ? "true" : "false";
+          const tabIdx = group.key === activeTab ? "0" : "-1";
+          return `
               <button
                 type="button"
                 id="tab-${escapeHtml(group.key)}"
@@ -4107,8 +4247,8 @@
                 ${escapeHtml(group.label)}
               </button>
             `;
-          })
-          .join("")}
+        })
+        .join("")}
       </div>
     `;
   }
@@ -4625,7 +4765,7 @@
     if (persist) {
       try {
         window.localStorage.setItem(THEME_PREF_KEY, normalized);
-      } catch (_) {}
+      } catch (_) { }
       toast(`Theme switched to ${normalized}`, "success");
     }
   }
@@ -4637,7 +4777,7 @@
       } else {
         window.localStorage.removeItem(SIDEBAR_PREF_KEY);
       }
-    } catch (_) {}
+    } catch (_) { }
   }
 
   function applySidebarLayout() {
@@ -4853,7 +4993,7 @@
 
   function setButtonPending(button, label) {
     if (!button) {
-      return function () {};
+      return function () { };
     }
     const previousHTML = button.innerHTML;
     button.disabled = true;
@@ -5000,29 +5140,202 @@
         el.textContent = el.getAttribute("data-value");
         return;
       }
-      
+
       const duration = 1200;
       const start = performance.now();
-      
+
       function update(time) {
         const current = time - start;
         const progress = Math.min(current / duration, 1);
-        
+
         const easeOutQuad = 1 - (1 - progress) * (1 - progress);
         const currentVal = Math.floor(easeOutQuad * target);
-        
+
         el.textContent = currentVal.toLocaleString();
-        
+
         if (progress < 1) {
           requestAnimationFrame(update);
         } else {
           el.textContent = target.toLocaleString();
         }
       }
-      
+
       requestAnimationFrame(update);
     });
   }
+
+  // ─── Export/Import Modals ──────────────────────────────────────────────
+
+  function showOverlay(id) {
+    var el = document.getElementById(id);
+    if (el) el.classList.remove("hidden");
+  }
+  function hideOverlay(id) {
+    var el = document.getElementById(id);
+    if (el) el.classList.add("hidden");
+  }
+
+  window.showExportModal = function (name, dbAlias, schema) {
+    var body = document.getElementById("export-modal-body");
+    body.innerHTML =
+      '<p style="margin-bottom:12px;color:var(--text-secondary)">Export <strong>' + escapeHtml((schema && schema.plural) || name) + '</strong></p>' +
+      '<label style="display:block;margin-bottom:4px;font-size:13px">Format</label>' +
+      '<select id="export-format" class="input" style="width:100%;margin-bottom:16px">' +
+      '<option value="csv">CSV</option>' +
+      '<option value="json">JSON</option>' +
+      '<option value="sql">SQL Dump</option>' +
+      '</select>' +
+      '<button class="btn btn-primary" id="export-execute" style="width:100%">Export Now</button>' +
+      '<button class="btn btn-ghost" id="export-cancel" style="width:100%;margin-top:8px">Cancel</button>';
+
+    showOverlay("export-modal");
+
+    document.getElementById("export-execute").addEventListener("click", async function () {
+      var btn = document.getElementById("export-execute");
+      btn.textContent = "Exporting...";
+      btn.disabled = true;
+      try {
+        var fmt = document.getElementById("export-format").value;
+        var result = await API.exportCreate({ models: [name], database: dbAlias, format: fmt });
+        hideOverlay("export-modal");
+        if (result.url) {
+          window.open(result.url, "_blank");
+        }
+        toast("Export complete: " + result.records + " records", "success");
+      } catch (err) {
+        toast(errorText(err), "error");
+      }
+      btn.textContent = "Export Now";
+      btn.disabled = false;
+    });
+
+    document.getElementById("export-cancel").addEventListener("click", function () {
+      hideOverlay("export-modal");
+    });
+  };
+
+  window.showImportModal = function (name, dbAlias, schema) {
+    var body = document.getElementById("import-modal-body");
+    body.innerHTML =
+      '<p style="margin-bottom:12px;color:var(--text-secondary)">Import into <strong>' + escapeHtml((schema && schema.plural) || name) + '</strong></p>' +
+      '<div id="import-step1">' +
+      '<label style="display:block;margin-bottom:4px;font-size:13px">File (CSV or JSON)</label>' +
+      '<input type="file" id="import-file" class="input" accept=".csv,.json" style="width:100%;margin-bottom:12px">' +
+      '<label style="display:block;margin-bottom:4px;font-size:13px">On conflict</label>' +
+      '<select id="import-on-conflict" class="input" style="width:100%;margin-bottom:16px">' +
+      '<option value="skip">Skip duplicates</option>' +
+      '<option value="update">Update existing</option>' +
+      '<option value="error">Report error</option>' +
+      '</select>' +
+      '<button class="btn btn-primary" id="import-upload-btn" style="width:100%">Upload & Validate</button>' +
+      '</div>' +
+      '<div id="import-step2" style="display:none">' +
+      '<div id="import-preview" style="max-height:200px;overflow:auto;margin-bottom:12px"></div>' +
+      '<button class="btn btn-primary" id="import-execute" style="width:100%">Import</button>' +
+      '</div>' +
+      '<button class="btn btn-ghost" id="import-cancel" style="width:100%;margin-top:8px">Cancel</button>';
+
+    showOverlay("import-modal");
+    var uploadKey = null;
+
+    document.getElementById("import-upload-btn").addEventListener("click", async function () {
+      var fileInput = document.getElementById("import-file");
+      if (!fileInput.files.length) { toast("Select a file", "warning"); return; }
+      var btn = document.getElementById("import-upload-btn");
+      btn.textContent = "Uploading...";
+      btn.disabled = true;
+      try {
+        var uploaded = await API.importUpload(fileInput.files[0]);
+        uploadKey = uploaded.key;
+        var conflict = document.getElementById("import-on-conflict").value;
+        var validation = await API.importValidate(uploadKey, { model: name, database: dbAlias, format: uploaded.format, on_conflict: conflict });
+
+        document.getElementById("import-step1").style.display = "none";
+        document.getElementById("import-step2").style.display = "block";
+
+        var preview = document.getElementById("import-preview");
+        if (validation.errors && validation.errors.length > 0) {
+          preview.innerHTML = '<div style="color:#ef4444;font-size:13px"><strong>' + validation.errors.length + ' errors:</strong><br>' +
+            validation.errors.slice(0, 10).map(function (e) { return "Row " + e.row + ": " + e.message; }).join("<br>") +
+            (validation.errors.length > 10 ? "<br>...and " + (validation.errors.length - 10) + " more" : "") + '</div>';
+          document.getElementById("import-execute").disabled = true;
+          document.getElementById("import-execute").textContent = "Fix errors first";
+        } else {
+          preview.innerHTML = '<div style="color:#22c55e;font-size:13px"><strong>' + validation.total_records + ' records valid</strong> — ready to import</div>';
+          document.getElementById("import-execute").disabled = false;
+          document.getElementById("import-execute").textContent = "Import " + validation.total_records + " records";
+        }
+      } catch (err) {
+        toast(errorText(err), "error");
+      }
+      btn.textContent = "Upload & Validate";
+      btn.disabled = false;
+    });
+
+    document.getElementById("import-execute").addEventListener("click", async function () {
+      if (!uploadKey) return;
+      var btn = document.getElementById("import-execute");
+      btn.textContent = "Importing...";
+      btn.disabled = true;
+      try {
+        var conflict = document.getElementById("import-on-conflict").value;
+        var report = await API.importExecute(uploadKey, { model: name, database: dbAlias, format: "csv", on_conflict: conflict });
+        hideOverlay("import-modal");
+        var msg = "Imported: " + report.imported + ", Skipped: " + report.skipped + ", Updated: " + report.updated;
+        if (report.failed > 0) msg += ", Failed: " + report.failed;
+        toast(msg, report.failed > 0 ? "warning" : "success");
+        renderList(name, { page: state.page, search: state.search });
+      } catch (err) {
+        toast(errorText(err), "error");
+      }
+      btn.textContent = "Import";
+      btn.disabled = false;
+    });
+
+    document.getElementById("import-cancel").addEventListener("click", function () {
+      hideOverlay("import-modal");
+    });
+  };
+
+  // ─── Export History ──────────────────────────────────────────────
+  function loadExportHistory() {
+    var container = document.getElementById("export-history-dropdown");
+    if (!container) return;
+    API.exportList().then(function (exports) {
+      if (!exports || exports.length === 0) {
+        container.style.display = "none";
+        return;
+      }
+      container.style.display = "";
+      var menu = document.getElementById("export-history-menu");
+      var html = "";
+      exports.slice(0, 10).forEach(function (exp) {
+        var statusIcon = exp.status === "completed" ? "✓" : (exp.status === "failed" ? "✗" : "⏳");
+        html += '<div class="dropdown-item">' +
+          '<div>' +
+          '<span>' + statusIcon + ' </span>' +
+          '<span>' + (exp.filename || exp.id || "").substring(0, 30) + '</span><br>' +
+          '<span style="color:var(--text-muted);font-size:11px">' + (exp.records || 0) + ' records · ' + new Date(exp.created_at).toLocaleString() + '</span>' +
+          '</div>' +
+          (exp.url ? '<a class="dl-link" href="' + exp.url + '" target="_blank">Download</a>' : '') +
+          '</div>';
+      });
+      menu.innerHTML = html || '<div class="dropdown-empty">No recent exports</div>';
+
+      document.getElementById("export-history-btn").addEventListener("click", function (e) {
+        e.stopPropagation();
+        menu.classList.toggle("hidden");
+      });
+    }).catch(function () { });
+  }
+
+  // Close dropdown on outside click
+  document.addEventListener("click", function (e) {
+    var menu = document.getElementById("export-history-menu");
+    if (menu && !menu.contains(e.target) && e.target.id !== "export-history-btn") {
+      menu.classList.add("hidden");
+    }
+  });
 
   init();
 })();

@@ -236,5 +236,83 @@ Baseline SLO interpretation:
 - 2026-04-08: Immediate backlog item 7 added:
   - Admin Live Runtime Inspector vNext specification drafted in `docs/ADMIN_LIVE_RUNTIME_INSPECTOR_SPEC.md`
   - scoped for additive rollout and compatibility-safe execution
+- 2026-04-11: P0/P1/P2 admin features delivered (tenant-aware CRUD, RBAC/Casbin, audit logging,
+  migrations UI, health dashboard, jobs, sites, deployment detection, cache, storage browser, email stats).
+  Admin panel updated in `SPEC.md`. Full documentation in `docs/ADMIN_PANEL.md`.
+- 2026-04-11: P3 (Data Import/Export Wizard) design documented below. **Implementation blocked**
+  until storage abstraction is resolved (see storage dependency analysis).
+
+## P3 Backlog: Data Import/Export Wizard (COMPLETED — 2026-04-11)
+
+**Status:** Fully implemented with multi-node support via S3 shared storage.
+
+### What's implemented
+
+**Backend (Go):**
+- Export formats: CSV, JSON, SQL dump (CREATE TABLE + INSERT)
+- Import formats: CSV, JSON with full validation pipeline
+- On-conflict strategies: skip, update, error
+- Tenant-aware: auto-filter exports, auto-inject tenant_id on imports
+- Storage via `pkg/storage`: files stream to S3, never held in memory
+- Multi-node safe: any node can upload, validate, export, import (S3 is shared)
+- Signed URLs for secure downloads (24h TTL)
+- Temporary file cleanup via `_tmp/` prefix + TTL cleaner
+
+**Frontend (Data Studio integration):**
+- "Export" button → modal with format selector (CSV/JSON/SQL)
+- "Import" button → 2-step wizard: upload+validate → review+execute
+- Validation preview shows errors before importing
+- On-conflict selector: skip/update/error
+- Toolbar shows: Delete selected | Export selected | Export all | Import | CSV
+
+**API endpoints:**
+- `POST /api/export` — Create export (returns storage key + signed URL)
+- `GET /api/export/list` — List completed exports
+- `GET /api/export/status?id=` — Check export status
+- `GET /api/export/download?key=` — Download exported file
+- `POST /api/import/upload` — Upload file for import (max 50MB)
+- `POST /api/import/validate?key=` — Validate without writing
+- `POST /api/import/execute?key=` — Execute validated import
+
+### Multi-node architecture
+
+```
+User → [LB] → Node A (upload file → S3)
+                      ↓
+                Any Node (validate → S3 read)
+                      ↓
+                Any Node (import → DB write)
+                      ↓
+                Any Node (export → DB read → S3 write)
+                      ↓
+                User downloads via SignedURL (direct S3 → browser)
+```
+
+**Zero node affinity. Zero coordination. Any node can handle any step.**
+
+### Storage requirements that were NOT YET RESOLVED (now resolved)
+
+1. ~~Large export files (100MB–5GB) need persistent storage~~ → **RESOLVED: S3 streaming**
+2. ~~Import uploads need temporary storage with cleanup/TTL~~ → **RESOLVED: `_tmp/` prefix + cleaner**
+3. ~~Cluster environments: shared storage across nodes~~ → **RESOLVED: S3 is inherently shared**
+4. ~~K8s pods are ephemeral~~ → **RESOLVED: S3 is external to pods**
+5. ~~Multi-tenant isolation at storage level~~ → **RESOLVED: automatic tenant prefixing**
+6. ~~Streaming/chunked processing for files >50MB~~ → **RESOLVED: io.Reader streaming**
+7. ~~Lifecycle management~~ → **RESOLVED: TTL cleanup + S3 lifecycle policies**
+
+### Storage backend options — Decision
+
+**Selected:** S3-compatible first (implemented). Local FS for development only.
+
+| Option | Status | Notes |
+|--------|--------|-------|
+| S3/MinIO | ✅ Implemented | AWS S3, MinIO, R2, DigitalOcean Spaces via MinIO SDK |
+| Local FS | ✅ Implemented | Development only, not for production |
+| GCS native | ⏳ Pending | Config defined, S3 interoperability works as workaround |
+| Azure Blob native | ⏳ Pending | Config defined, S3 interoperability works as workaround |
+| NFS mount | ❌ Not needed | S3 solves the shared storage requirement better |
+| DB LOB | ❌ Rejected | Terrible for large files, bloats backups |
+
+**Decision required before P3 proceeds.** → **DECIDED: S3-compatible first. P3 unblocked.**
 
 This file is the canonical roadmap for enterprise and long-term strategy.

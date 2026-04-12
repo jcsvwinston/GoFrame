@@ -16,11 +16,13 @@ import (
 
 	"github.com/jcsvwinston/GoFrame/pkg/admin"
 	"github.com/jcsvwinston/GoFrame/pkg/auth"
+	"github.com/jcsvwinston/GoFrame/pkg/authz"
 	"github.com/jcsvwinston/GoFrame/pkg/db"
 	"github.com/jcsvwinston/GoFrame/pkg/mail"
 	"github.com/jcsvwinston/GoFrame/pkg/model"
 	"github.com/jcsvwinston/GoFrame/pkg/observe"
 	"github.com/jcsvwinston/GoFrame/pkg/router"
+	"github.com/jcsvwinston/GoFrame/pkg/storage"
 )
 
 // App is the main GoFrame application container. It wires the minimum runtime
@@ -35,14 +37,16 @@ type App struct {
 	Session *auth.SessionManager
 	Models  *model.Registry
 	Admin   *admin.Panel
+	Storage storage.Store
 
 	databaseDefaultAlias string
 	scopeResolver        *requestScopeResolver
 
-	mu           sync.Mutex
-	server       *http.Server
-	shutdownFns  []func(context.Context) error
-	adminMounted bool
+	mu             sync.Mutex
+	server         *http.Server
+	shutdownFns    []func(context.Context) error
+	adminMounted   bool
+	storageCleaner *storage.Cleaner
 }
 
 // New creates an application container with default wiring.
@@ -172,6 +176,48 @@ func New(cfg *Config) (*App, error) {
 	if adminClusterRedisURL == "" {
 		adminClusterRedisURL = strings.TrimSpace(effective.RedisURL)
 	}
+
+	// Create RBAC enforcer if policy file exists
+	var rbacEnforcer *authz.Enforcer
+	rbacPolicyPath := rbacPolicyPath(effective)
+	if rbacPolicyPath != "" {
+		var err error
+		rbacEnforcer, err = authz.New(logger, rbacPolicyPath)
+		if err != nil {
+			_ = closeDatabases(dbs)
+			_ = telemetryShutdown(context.Background())
+			return nil, wrapOp("New RBAC enforcer", err)
+		}
+		logger.Info("RBAC enforcer initialized", "policy_path", rbacPolicyPath)
+	}
+
+	// Initialize storage
+	storCfg := effective.toStorageConfig()
+	baseStore, err := storage.New(storCfg, logger)
+	if err != nil {
+		_ = closeDatabases(dbs)
+		_ = telemetryShutdown(context.Background())
+		return nil, wrapOp("New storage", err)
+	}
+
+	// Wrap with tenant prefixing
+	store := storage.NewWithTenant(baseStore, func(ctx context.Context) string {
+		scope, ok := RequestScopeFromContext(ctx)
+		if !ok || scope.Tenant == "" {
+			return ""
+		}
+		return scope.Tenant
+	})
+
+	// Start background cleaner
+	cleaner, err := storage.NewCleaner(baseStore, storCfg.Cleanup, logger)
+	if err == nil && cleaner != nil {
+		cleaner.Start()
+	}
+
+	// Mount public storage paths
+	publicMapper := storage.NewPublicMapperForConfig(baseStore, storCfg)
+
 	adminPanel := admin.NewPanel(dbConn, reg, logger, admin.PanelConfig{
 		Prefix:              effective.AdminPrefix,
 		Title:               effective.AdminTitle,
@@ -191,6 +237,28 @@ func New(cfg *Config) (*App, error) {
 		Session:             sessionManager,
 		SessionStore:        sessionStoreLabel,
 		SessionRuntime:      sessionRuntimeIdentity,
+
+		// Multi-tenant config
+		MultiTenantEnabled:    effective.MultiTenant.Enabled,
+		MultiTenantDefault:    effective.MultiTenant.DefaultTenant,
+		MultiTenantAutoFilter: true,
+		MultiTenantIDs:        tenantIDs(effective),
+		MultiSiteEnabled:      effective.MultiSite.Enabled,
+		MultiSiteDefault:      effective.MultiSite.DefaultSite,
+		MultiSiteNames:        siteNames(effective),
+
+		// RBAC config
+		RBACEnforcer: rbacEnforcer,
+
+		// Audit config
+		AuditEnabled: true,
+		AuditMaxSize: 10000,
+
+		// Migrations path
+		MigrationsPath: "migrations",
+
+		// Storage for exports/imports
+		Store: store,
 	})
 	if err := adminPanel.EnableLiveClusterRelay(); err != nil {
 		if sessionStoreShutdown != nil {
@@ -212,8 +280,15 @@ func New(cfg *Config) (*App, error) {
 		Session:              sessionManager,
 		Models:               reg,
 		Admin:                adminPanel,
+		Storage:              store,
 		databaseDefaultAlias: defaultAlias,
 		scopeResolver:        scopeResolver,
+		storageCleaner:       cleaner,
+	}
+
+	// Mount public storage paths
+	if publicMapper != nil {
+		publicMapper.MountAll(r)
 	}
 
 	// DB close should always happen on app shutdown.
@@ -228,6 +303,12 @@ func New(cfg *Config) (*App, error) {
 	}
 	a.OnShutdown(func(ctx context.Context) error {
 		return a.Admin.Close(ctx)
+	})
+	a.OnShutdown(func(ctx context.Context) error {
+		if cleaner != nil {
+			cleaner.Stop()
+		}
+		return baseStore.Close()
 	})
 
 	if err := a.MountAdmin(); err != nil {
@@ -797,4 +878,51 @@ func buildSessionManager(cfg *Config, database *db.DB) (*auth.SessionManager, fu
 	default:
 		return nil, nil, fmt.Errorf("unsupported session_store %q (supported: memory, sql, redis)", store)
 	}
+}
+
+// tenantIDs returns a list of configured tenant IDs for the admin selector.
+func tenantIDs(cfg *Config) []string {
+	if cfg == nil || !cfg.MultiTenant.Enabled || len(cfg.MultiTenant.Tenants) == 0 {
+		return nil
+	}
+	ids := make([]string, 0, len(cfg.MultiTenant.Tenants))
+	for id := range cfg.MultiTenant.Tenants {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	return ids
+}
+
+// siteNames returns a list of configured site names for the admin selector.
+func siteNames(cfg *Config) []string {
+	if cfg == nil || !cfg.MultiSite.Enabled || len(cfg.MultiSite.Sites) == 0 {
+		return nil
+	}
+	names := make([]string, 0, len(cfg.MultiSite.Sites))
+	for name := range cfg.MultiSite.Sites {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
+}
+
+// rbacPolicyPath returns the RBAC policy file path if it exists.
+func rbacPolicyPath(cfg *Config) string {
+	if cfg == nil {
+		return ""
+	}
+	path := strings.TrimSpace(cfg.AdminRBACPolicyFile)
+	if path == "" {
+		// Check default locations
+		for _, p := range []string{"admin_rbac.csv", "config/admin_rbac.csv", "rbac/admin_rbac.csv"} {
+			if _, err := os.Stat(p); err == nil {
+				return p
+			}
+		}
+		return ""
+	}
+	if _, err := os.Stat(path); err != nil {
+		return ""
+	}
+	return path
 }

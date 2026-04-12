@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jcsvwinston/GoFrame/pkg/storage"
 	"github.com/knadh/koanf/parsers/yaml"
 	"github.com/knadh/koanf/providers/env"
 	"github.com/knadh/koanf/providers/file"
@@ -69,6 +70,7 @@ type Config struct {
 	AdminClusterNodeID       string   `koanf:"admin_cluster_node_id"`
 	AdminClusterToken        string   `koanf:"admin_cluster_token"`
 	AdminTraceURLTemplate    string   `koanf:"admin_trace_url_template"`
+	AdminRBACPolicyFile      string   `koanf:"admin_rbac_policy_file"`
 
 	// Mail
 	MailDriver       string `koanf:"mail_driver"`
@@ -101,9 +103,12 @@ type Config struct {
 	StaticPrefix string `koanf:"static_prefix"`
 	StaticRoot   string `koanf:"static_root"`
 
-	// File storage
+	// File storage (legacy — deprecated, use StorageConfig below)
 	StorageDriver string `koanf:"storage_driver"`
 	StoragePath   string `koanf:"storage_path"`
+
+	// Storage (new unified config)
+	Storage StorageConfig `koanf:"storage"`
 
 	// Environment
 	Env   string `koanf:"env"`
@@ -131,6 +136,59 @@ type SiteConfig struct {
 	Hosts                       []string `koanf:"hosts"`
 	Database                    string   `koanf:"database"`
 	TenantDatabaseAliasTemplate string   `koanf:"tenant_database_alias_template"`
+}
+
+// StorageConfig is the unified storage configuration.
+type StorageConfig struct {
+	// Default visibility for new objects (private|public).
+	DefaultVisibility string `koanf:"default"`
+
+	// Provider selects the storage backend (s3|gcs|azure|local).
+	Provider string `koanf:"provider"`
+
+	// PublicPaths maps public URL paths to storage key prefixes.
+	PublicPaths map[string]string `koanf:"public_paths"`
+
+	// PublicURLBase is the base URL for public objects (CDN or direct provider).
+	PublicURLBase string `koanf:"public_url_base"`
+
+	// S3 configuration
+	S3 struct {
+		Endpoint        string `koanf:"endpoint"`
+		Bucket          string `koanf:"bucket"`
+		Region          string `koanf:"region"`
+		AccessKeyID     string `koanf:"access_key_id"`     // Direct value or ${ENV_VAR}
+		SecretAccessKey string `koanf:"secret_access_key"` // Direct value or ${ENV_VAR}
+		UsePathStyle    bool   `koanf:"use_path_style"`
+		PublicBucket    string `koanf:"public_bucket"`
+	} `koanf:"s3"`
+
+	// GCS configuration
+	GCS struct {
+		Bucket       string `koanf:"bucket"`
+		PublicBucket string `koanf:"public_bucket"`
+	} `koanf:"gcs"`
+
+	// Azure configuration
+	Azure struct {
+		AccountName     string `koanf:"account_name"` // Direct value or ${ENV_VAR}
+		AccountKey      string `koanf:"account_key"`  // Direct value or ${ENV_VAR}
+		Container       string `koanf:"container"`
+		PublicContainer string `koanf:"public_container"`
+	} `koanf:"azure"`
+
+	// Local configuration (development only)
+	Local struct {
+		Path string `koanf:"path"`
+	} `koanf:"local"`
+
+	// Cleanup config
+	Cleanup struct {
+		Enabled  bool   `koanf:"enabled"`
+		Interval string `koanf:"interval"`
+		Prefix   string `koanf:"prefix"`
+		MaxAge   string `koanf:"max_age"`
+	} `koanf:"cleanup"`
 }
 
 // MultiTenantConfig describes tenant resolution and tenant->database mapping.
@@ -232,6 +290,48 @@ func defaults() Config {
 
 		StorageDriver: "local",
 		StoragePath:   "uploads/",
+
+		Storage: StorageConfig{
+			DefaultVisibility: "private",
+			Provider:          "local",
+			PublicPaths:       map[string]string{},
+			PublicURLBase:     "",
+			S3: struct {
+				Endpoint        string `koanf:"endpoint"`
+				Bucket          string `koanf:"bucket"`
+				Region          string `koanf:"region"`
+				AccessKeyID     string `koanf:"access_key_id"`
+				SecretAccessKey string `koanf:"secret_access_key"`
+				UsePathStyle    bool   `koanf:"use_path_style"`
+				PublicBucket    string `koanf:"public_bucket"`
+			}{},
+			GCS: struct {
+				Bucket       string `koanf:"bucket"`
+				PublicBucket string `koanf:"public_bucket"`
+			}{},
+			Azure: struct {
+				AccountName     string `koanf:"account_name"`
+				AccountKey      string `koanf:"account_key"`
+				Container       string `koanf:"container"`
+				PublicContainer string `koanf:"public_container"`
+			}{},
+			Local: struct {
+				Path string `koanf:"path"`
+			}{
+				Path: "storage/",
+			},
+			Cleanup: struct {
+				Enabled  bool   `koanf:"enabled"`
+				Interval string `koanf:"interval"`
+				Prefix   string `koanf:"prefix"`
+				MaxAge   string `koanf:"max_age"`
+			}{
+				Enabled:  false,
+				Interval: "1h",
+				Prefix:   "_tmp/",
+				MaxAge:   "24h",
+			},
+		},
 
 		Env:   "development",
 		Debug: false,
@@ -670,4 +770,74 @@ func normalizeHostPatterns(hosts []string) []string {
 
 func normalizeAlias(value string) string {
 	return strings.ToLower(strings.TrimSpace(value))
+}
+
+// toStorageConfig converts the app Config to storage.Config.
+func (c *Config) toStorageConfig() storage.Config {
+	cfg := storage.Config{
+		DefaultVisibility: storage.Visibility(c.Storage.DefaultVisibility),
+		PublicPaths:       make(map[string]string),
+		PublicURLBase:     c.Storage.PublicURLBase,
+	}
+
+	// Determine provider
+	switch strings.ToLower(c.Storage.Provider) {
+	case "s3", "minio", "r2":
+		cfg.Provider = storage.ProviderS3
+	case "gcs":
+		cfg.Provider = storage.ProviderGCS
+	case "azure":
+		cfg.Provider = storage.ProviderAzure
+	default:
+		cfg.Provider = storage.ProviderLocal
+	}
+
+	// Copy public paths
+	for k, v := range c.Storage.PublicPaths {
+		cfg.PublicPaths[k] = v
+	}
+
+	// Provider-specific config
+	cfg.S3 = storage.S3Config{
+		Endpoint:        c.Storage.S3.Endpoint,
+		Bucket:          c.Storage.S3.Bucket,
+		Region:          c.Storage.S3.Region,
+		AccessKeyID:     storage.CredentialSource{Value: c.Storage.S3.AccessKeyID},
+		SecretAccessKey: storage.CredentialSource{Value: c.Storage.S3.SecretAccessKey},
+		UsePathStyle:    c.Storage.S3.UsePathStyle,
+		PublicBucket:    c.Storage.S3.PublicBucket,
+	}
+
+	cfg.GCS = storage.GCSConfig{
+		Bucket:       c.Storage.GCS.Bucket,
+		PublicBucket: c.Storage.GCS.PublicBucket,
+	}
+
+	cfg.Azure = storage.AzureConfig{
+		AccountName:     storage.CredentialSource{Value: c.Storage.Azure.AccountName},
+		AccountKey:      storage.CredentialSource{Value: c.Storage.Azure.AccountKey},
+		Container:       c.Storage.Azure.Container,
+		PublicContainer: c.Storage.Azure.PublicContainer,
+	}
+
+	cfg.Local = storage.LocalConfig{
+		Path: c.Storage.Local.Path,
+	}
+
+	cfg.Cleanup = storage.CleanupConfig{
+		Enabled:  c.Storage.Cleanup.Enabled,
+		Interval: c.Storage.Cleanup.Interval,
+		Prefix:   c.Storage.Cleanup.Prefix,
+		MaxAge:   c.Storage.Cleanup.MaxAge,
+	}
+
+	// Fallback to legacy config if new config is empty
+	if cfg.Local.Path == "" {
+		cfg.Local.Path = c.StoragePath
+		if cfg.Local.Path == "" {
+			cfg.Local.Path = "storage/"
+		}
+	}
+
+	return cfg
 }

@@ -2402,16 +2402,19 @@ body.theme-frameworkos[data-theme="light"] .table-wrap table td code {
   background-color: var(--bg-page);
   overflow-x: hidden;
 }
+
 .auth-wrapper {
   width: 100%;
   max-width: 440px;
   padding: 24px;
   box-sizing: border-box;
 }
+
 .auth-header {
   text-align: center;
   margin-bottom: 24px;
 }
+
 .auth-header h1 {
   margin: 0 0 8px;
   font-size: 28px;
@@ -2419,14 +2422,17 @@ body.theme-frameworkos[data-theme="light"] .table-wrap table td code {
   color: var(--text-main);
   letter-spacing: -0.5px;
 }
+
 .auth-header p {
   margin: 0;
   color: var(--text-soft);
   font-size: 14px;
 }
+
 .auth-field-group {
   margin-bottom: 16px;
 }
+
 .auth-field-group label {
   display: block;
   margin-bottom: 6px;
@@ -2436,6 +2442,7 @@ body.theme-frameworkos[data-theme="light"] .table-wrap table td code {
   letter-spacing: 0.5px;
   color: var(--text-muted);
 }
+
 .auth-btn {
   width: 100%;
   margin-top: 24px;
@@ -2443,6 +2450,7 @@ body.theme-frameworkos[data-theme="light"] .table-wrap table td code {
   font-size: 15px;
   justify-content: center;
 }
+
 .auth-notice {
   border-radius: var(--radius-sm);
   padding: 12px 14px;
@@ -2451,13 +2459,148 @@ body.theme-frameworkos[data-theme="light"] .table-wrap table td code {
   display: flex;
   align-items: center;
 }
+
 .auth-notice.error {
   background: rgba(239, 68, 68, 0.1);
   border: 1px solid rgba(239, 68, 68, 0.25);
   color: #ef4444;
 }
+
 .auth-notice.info {
   background: rgba(14, 165, 233, 0.1);
   border: 1px solid rgba(14, 165, 233, 0.25);
   color: #0ea5e9;
+}
+
+/* New P0/P1/P2 feature styles */
+.info-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 16px;
+  margin-top: 16px;
+}
+
+.info-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px;
+  background: var(--bg-secondary);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-subtle);
+}
+
+.info-item label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+.info-item span {
+  font-size: 14px;
+  color: var(--text-primary);
+}
+
+.status-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.status-badge.ok {
+  background: rgba(34, 197, 94, 0.15);
+  color: #22c55e;
+  border: 1px solid rgba(34, 197, 94, 0.3);
+}
+
+.status-badge.warn {
+  background: rgba(245, 158, 11, 0.15);
+  color: #f59e0b;
+  border: 1px solid rgba(245, 158, 11, 0.3);
+}
+
+.status-badge.error {
+  background: rgba(239, 68, 68, 0.15);
+  color: #ef4444;
+  border: 1px solid rgba(239, 68, 68, 0.3);
+}
+
+.health-summary {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 16px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.health-summary .status-badge {
+  font-size: 14px;
+  padding: 4px 12px;
+}
+
+/* Export history dropdown */
+.dropdown {
+  position: relative;
+  display: inline-block;
+}
+
+.dropdown-menu {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  margin-top: 4px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-lg);
+  min-width: 280px;
+  max-height: 320px;
+  overflow-y: auto;
+  z-index: 100;
+}
+
+.dropdown-menu.hidden {
+  display: none;
+}
+
+.dropdown-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  font-size: 13px;
+  border-bottom: 1px solid var(--border-subtle);
+  cursor: pointer;
+}
+
+.dropdown-item:last-child {
+  border-bottom: none;
+}
+
+.dropdown-item:hover {
+  background: var(--bg-secondary);
+}
+
+.dropdown-item .dl-link {
+  color: var(--accent);
+  text-decoration: none;
+  font-size: 12px;
+}
+
+.dropdown-item .dl-link:hover {
+  text-decoration: underline;
+}
+
+.dropdown-empty {
+  padding: 16px;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 13px;
 }

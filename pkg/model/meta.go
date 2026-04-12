@@ -424,6 +424,9 @@ func parseDBTag(tag string, f *FieldMeta) error {
 		case lower == "fk":
 			f.IsForeignKey = true
 
+		case lower == "tenant":
+			f.IsTenantField = true
+
 		case strings.HasPrefix(lower, "fk:"):
 			spec := strings.TrimSpace(raw[len("fk:"):])
 			if err := parseForeignKeySpec(spec, f); err != nil {

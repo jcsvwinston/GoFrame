@@ -20,6 +20,7 @@ type FieldMeta struct {
 	IsFilter      bool   // Shown as filter option
 	IsExcluded    bool   // Excluded from admin entirely
 	IsForeignKey  bool   // This field is a foreign key reference
+	IsTenantField bool   // This field holds the tenant ID for multi-tenant isolation
 	ForeignModel  string // Name of the related model (e.g. "User" for UserID)
 	ForeignTable  string // Name of the related table (e.g. "users")
 	ForeignColumn string // Name of the referenced column (e.g. "id")

@@ -18,10 +18,12 @@ import (
 	"time"
 
 	"github.com/jcsvwinston/GoFrame/pkg/auth"
+	"github.com/jcsvwinston/GoFrame/pkg/authz"
 	"github.com/jcsvwinston/GoFrame/pkg/db"
 	"github.com/jcsvwinston/GoFrame/pkg/model"
 	"github.com/jcsvwinston/GoFrame/pkg/router"
 	"github.com/jcsvwinston/GoFrame/pkg/signals"
+	"github.com/jcsvwinston/GoFrame/pkg/storage"
 )
 
 //go:embed ui/*
@@ -68,6 +70,29 @@ type PanelConfig struct {
 	Session             *auth.SessionManager // optional session manager for admin telemetry
 	SessionStore        string               // configured session store label (memory|sql|redis)
 	SessionRuntime      auth.SessionRuntimeIdentity
+
+	// Multi-tenant configuration
+	MultiTenantEnabled    bool     // whether multi-tenant mode is active
+	MultiTenantDefault    string   // default tenant ID when none specified
+	MultiTenantAutoFilter bool     // auto-filter CRUD queries by tenant (default true when multi-tenant enabled)
+	MultiTenantField      string   // override tenant field name (empty = auto-detect from model)
+	MultiTenantIDs        []string // known tenant IDs for the selector UI (empty = discover from scope)
+	MultiSiteEnabled      bool     // whether multi-site mode is active
+	MultiSiteDefault      string   // default site name
+	MultiSiteNames        []string // known site names for the selector UI
+
+	// RBAC configuration
+	RBACEnforcer *authz.Enforcer // optional Casbin enforcer for fine-grained authorization
+
+	// Audit logging configuration
+	AuditEnabled bool // whether audit logging is enabled
+	AuditMaxSize int  // max audit entries in memory (default 10000)
+
+	// Migrations path
+	MigrationsPath string // path to migration files directory
+
+	// Storage for exports/imports
+	Store storage.Store
 }
 
 // Panel is the admin panel instance that provides CRUD UI for registered models.
@@ -87,6 +112,22 @@ type Panel struct {
 	liveNode       string
 	liveClusterMu  sync.RWMutex
 	liveCluster    *liveClusterRelay
+
+	// Tenant resolution cache: model name -> tenant column
+	tenantFields map[string]string
+
+	// RBAC enforcer for fine-grained authorization
+	rbac *authz.Enforcer
+
+	// Audit log store
+	audit *auditStore
+
+	// Storage for exports/imports
+	store storage.Store
+
+	// Export results cache (in-memory for quick status lookup)
+	exportMu      sync.RWMutex
+	exportResults map[string]ExportResult
 }
 
 // NewPanel creates a new admin panel.
@@ -114,6 +155,16 @@ func NewPanel(database *db.DB, registry *model.Registry, logger *slog.Logger, cf
 		bootEnv:        buildSystemEnvironmentRows(env),
 		defaultDBAlias: defaultDatabaseAlias(cfg),
 		liveNode:       resolvePanelLiveNodeID(cfg),
+		tenantFields:   make(map[string]string),
+		rbac:           cfg.RBACEnforcer,
+		audit: func() *auditStore {
+			if cfg.AuditEnabled {
+				return newAuditStore(cfg.AuditMaxSize)
+			}
+			return nil
+		}(),
+		store:         cfg.Store,
+		exportResults: make(map[string]ExportResult),
 	}
 }
 
@@ -287,11 +338,15 @@ func (p *Panel) Handler() *router.Mux {
 		r.Post("/login", loginHandler.ServeHTTP)
 		r.Group(func(sub *router.Mux) {
 			sub.Use(p.authMiddleware)
+			sub.Use(p.tenantContextMiddleware)
+			sub.Use(p.auditMiddleware)
 			sub.Use(p.sessionActivityMiddleware)
 			sub.Use(p.liveTrafficMiddleware)
 			p.mountRoutes(sub, uiContent)
 		})
 	} else {
+		r.Use(p.tenantContextMiddleware)
+		r.Use(p.auditMiddleware)
 		r.Use(p.sessionActivityMiddleware)
 		r.Use(p.liveTrafficMiddleware)
 		p.mountRoutes(r, uiContent)
@@ -324,6 +379,46 @@ func (p *Panel) mountRoutes(r *router.Mux, uiContent fs.FS) {
 	r.Delete("/api/system/flags/{name}", p.handleDeleteSystemFlag)
 	r.Post("/api/system/jobs/queues/{name}/actions/{action}", p.handleSystemQueueAction)
 
+	// RBAC management endpoints
+	r.Get("/api/rbac/policies", p.handleListRBACPolicies)
+	r.Post("/api/rbac/policies", p.handleAddRBACPolicy)
+	r.Delete("/api/rbac/policies", p.handleRemoveRBACPolicy)
+	r.Post("/api/rbac/roles/assign", p.handleAssignRBACRole)
+	r.Post("/api/rbac/roles/remove", p.handleRemoveRBACRole)
+	r.Get("/api/rbac/roles", p.handleGetRBACRoles)
+	r.Get("/api/rbac/check", p.handleCheckRBACPermission)
+
+	// Audit log endpoints
+	r.Get("/api/audit", p.handleListAuditLog)
+	r.Post("/api/audit/clear", p.handleClearAuditLog)
+
+	// Management endpoints
+	r.Get("/api/migrations", p.handleListMigrations)
+	r.Post("/api/migrations/apply", p.handleApplyMigrations)
+	r.Get("/api/health", p.handleHealthCheck)
+	r.Get("/api/jobs", p.handleListJobQueues)
+	r.Get("/api/sites", p.handleListSites)
+
+	// P2 features
+	r.Get("/api/deployment", p.handleDeploymentInfo)
+	r.Get("/api/cache", p.handleCacheStats)
+	r.Post("/api/cache/flush", p.handleFlushCache)
+	r.Get("/api/storage", p.handleListStorage)
+	r.Get("/api/email", p.handleEmailStats)
+
+	// P3: Export/Import (Data Studio integration)
+	r.Post("/api/export", p.handleExportCreate)
+	r.Get("/api/export/list", p.handleExportList)
+	r.Get("/api/export/status", p.handleExportStatus)
+	r.Get("/api/export/download", p.handleExportDownload)
+	r.Post("/api/import/upload", p.handleImportUpload)
+	r.Post("/api/import/validate", p.handleImportValidate)
+	r.Post("/api/import/execute", p.handleImportExecute)
+
+	// Fixtures (Django-style dumpdata/loaddata)
+	r.Post("/api/fixtures/dumpdata", p.handleDumpdata)
+	r.Post("/api/fixtures/loaddata", p.handleLoaddata)
+
 	// Serve the SPA interface fallback for all authenticated requests
 	r.Get("/{path...}", p.handleSPA(uiContent))
 }
@@ -354,6 +449,47 @@ func (p *Panel) authMiddleware(next http.Handler) http.Handler {
 			return
 		}
 		ctx := context.WithValue(r.Context(), adminAuthContextKey{}, user)
+		next.ServeHTTP(w, r.WithContext(ctx))
+	})
+}
+
+func (p *Panel) tenantContextMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if p == nil {
+			next.ServeHTTP(w, r)
+			return
+		}
+
+		tenantCtx := &TenantContext{
+			Enabled:    p.config.MultiTenantEnabled,
+			TenantID:   p.config.MultiTenantDefault,
+			AutoFilter: p.config.MultiTenantAutoFilter,
+		}
+
+		// Extract tenant from request scope (subdomain/header resolution)
+		if scope, ok := requestScopeFromContext(r.Context()); ok {
+			if scope.Tenant != "" {
+				tenantCtx.TenantID = scope.Tenant
+			}
+		}
+
+		// Allow explicit tenant override via query parameter
+		if explicit := requestTenant(r); explicit != "" {
+			tenantCtx.TenantID = explicit
+		}
+
+		// When multi-tenant is enabled but no tenant specified, use default
+		if tenantCtx.Enabled && tenantCtx.TenantID == "" {
+			tenantCtx.TenantID = p.config.MultiTenantDefault
+		}
+
+		// If tenant is empty string or "all", disable auto-filtering (view all tenants)
+		if tenantCtx.TenantID == "" || tenantCtx.TenantID == "all" {
+			tenantCtx.AutoFilter = false
+			tenantCtx.TenantID = ""
+		}
+
+		ctx := context.WithValue(r.Context(), adminTenantCtxKey, tenantCtx)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
@@ -546,6 +682,29 @@ func (p *Panel) authorizeAction(w http.ResponseWriter, r *http.Request, modelNam
 		writeErr(w, authErrorToDomain(err))
 		return false
 	}
+
+	// If RBAC enforcer is configured, use it for authorization
+	if p.rbac != nil {
+		// Superusers bypass policy checks
+		if user.IsSuperuser {
+			return true
+		}
+
+		resource := "admin:" + modelName
+		if p.rbac.Can(user.ID, resource, action) {
+			return true
+		}
+		if p.rbac.Can(user.Role, resource, action) {
+			return true
+		}
+		if p.rbac.Can(user.Username, resource, action) {
+			return true
+		}
+		writeErr(w, authDeniedDomain(modelName, action))
+		return false
+	}
+
+	// Fallback to default auth provider
 	if !p.config.Auth.Authorize(user, modelName, action) {
 		writeErr(w, authDeniedDomain(modelName, action))
 		return false
@@ -560,4 +719,29 @@ func (p *Panel) authenticatedUser(r *http.Request) (*auth.User, error) {
 		}
 	}
 	return p.config.Auth.Authenticate(r)
+}
+
+// resolveTenantField returns the tenant column name for a model.
+// It caches the result for performance.
+func (p *Panel) resolveTenantField(modelName string) string {
+	if field, ok := p.tenantFields[modelName]; ok {
+		return field
+	}
+
+	meta, ok := p.registry.Get(modelName)
+	if !ok {
+		p.tenantFields[modelName] = ""
+		return ""
+	}
+
+	// Check for override in config
+	if p.config.MultiTenantField != "" {
+		p.tenantFields[modelName] = p.config.MultiTenantField
+		return p.config.MultiTenantField
+	}
+
+	// Auto-detect from model metadata
+	field := meta.TenantFieldName()
+	p.tenantFields[modelName] = field
+	return field
 }
