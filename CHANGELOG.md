@@ -185,7 +185,7 @@ while in pre-1.0 mode (`v0.x.y`).
 - `goframe generate` now follows the same canonical scaffold layout as `new`/`startapp`:
   - models under `internal/models`
   - controller scaffolds and tests under `internal/controllers`
-- `goframe new` scaffold now writes `go.mod` with `go 1.24` to align with framework minimum support.
+- `goframe new` scaffold now writes `go.mod` with `go 1.25` to align with framework minimum support.
 - `goframe sendtestemail` and deploy health messaging now reference generic plugin naming (`goframe-plugin-<driver>`) with legacy fallback details.
 - Documentation consolidated with a canonical docs entrypoint (`docs/INDEX.md`), active-vs-historical separation, and refreshed cross-links.
 - Fixed stale local absolute link in `docs/DETAILED_TUTORIAL.md` to a portable relative reference.

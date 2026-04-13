@@ -898,7 +898,7 @@ func TestRun_NewProjectScaffold(t *testing.T) {
 	if !strings.Contains(goMod, "module example.com/blogapp") {
 		t.Fatalf("go.mod missing module path: %s", goMod)
 	}
-	if !strings.Contains(goMod, "go 1.24") {
+	if !strings.Contains(goMod, "go 1.25") {
 		t.Fatalf("go.mod missing expected go version: %s", goMod)
 	}
 

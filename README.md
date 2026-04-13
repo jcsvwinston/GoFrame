@@ -185,7 +185,7 @@ Operations and release docs:
 
 ## Compatibility
 
-- Minimum supported Go: `1.24`
+- Minimum supported Go: `1.25`
 - Recommended for development/release: `1.26.x`
 - Multi-DB config uses `database_default` + `databases.<alias>.url`.
 - MultiTenant defaults to `require_isolated_db: true` to prevent shared-DB tenant routing.

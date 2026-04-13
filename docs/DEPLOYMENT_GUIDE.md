@@ -64,7 +64,7 @@ go build -ldflags "-X main.version=${VERSION} -X main.commit=${COMMIT} -X main.d
 ### Single-stage Dockerfile
 
 ```dockerfile
-FROM golang:1.24-alpine AS builder
+FROM golang:1.25-alpine AS builder
 
 WORKDIR /app
 COPY go.mod go.sum ./
@@ -94,7 +94,7 @@ ENTRYPOINT ["/bin/server"]
 ### Multi-stage Dockerfile with migrations
 
 ```dockerfile
-FROM golang:1.24-alpine AS builder
+FROM golang:1.25-alpine AS builder
 WORKDIR /app
 COPY go.mod go.sum ./
 RUN go mod download

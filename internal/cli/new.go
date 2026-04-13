@@ -122,7 +122,7 @@ func defaultModulePath(projectName string) string {
 
 const newGoModTemplate = `module %s
 
-go 1.24
+go 1.25
 `
 
 const newConfigTemplate = `database_default: default
