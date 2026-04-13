@@ -772,7 +772,30 @@ func includeModelCounts(r *http.Request) bool {
 }
 
 func (p *Panel) modelCount(ctx context.Context, meta *model.ModelMeta, databaseAlias string) (int64, bool, error) {
-	return -1, false, nil
+	handle, err := p.databaseHandle(databaseAlias)
+	if err != nil {
+		return 0, false, err
+	}
+	sqlDB, err := handle.SqlDB()
+	if err != nil {
+		return 0, false, err
+	}
+
+	table := meta.Table
+	if table == "" {
+		// Try to get table name from model's TableName method or default
+		table = strings.ToLower(meta.Name) + "s"
+	}
+
+	query := fmt.Sprintf("SELECT COUNT(*) FROM %s", table)
+	var total int64
+	if err := sqlDB.QueryRowContext(ctx, query).Scan(&total); err != nil {
+		if isTableMissingErr(err) {
+			return 0, false, nil // Table doesn't exist yet; not an error, just unavailable
+		}
+		return 0, false, fmt.Errorf("admin.modelCount table=%s: %w", table, err)
+	}
+	return total, true, nil
 }
 
 func isTableMissingErr(err error) bool {

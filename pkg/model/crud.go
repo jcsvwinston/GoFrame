@@ -85,12 +85,29 @@ func (c *CRUD) FindAll(ctx context.Context, opts QueryOpts) (*PaginatedResult, e
 
 	whereExpr, whereArgs := c.buildWhere(opts)
 
-	var total int64 = -1
+	var total int64
 
 	columns := c.selectedColumns(opts.Fields)
 	if len(columns) == 0 {
 		return nil, fmt.Errorf("model.CRUD.FindAll model=%s: no valid columns selected", c.meta.Name)
 	}
+
+	// Execute COUNT query
+	countQuery := fmt.Sprintf("SELECT COUNT(*) FROM %s", c.meta.Table)
+	if whereExpr != "" {
+		countQuery += " WHERE " + whereExpr
+	}
+	countRows, err := c.queryContext(ctx, "select.count", countQuery, whereArgs...)
+	if err != nil {
+		return nil, fmt.Errorf("model.CRUD.FindAll model=%s count: %w", c.meta.Name, err)
+	}
+	if countRows.Next() {
+		if err := countRows.Scan(&total); err != nil {
+			_ = countRows.Close()
+			return nil, fmt.Errorf("model.CRUD.FindAll model=%s count scan: %w", c.meta.Name, err)
+		}
+	}
+	_ = countRows.Close()
 
 	orderBy := strings.TrimSpace(opts.OrderBy)
 	if orderBy == "" {
