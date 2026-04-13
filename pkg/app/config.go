@@ -157,8 +157,8 @@ type StorageConfig struct {
 		Endpoint        string `koanf:"endpoint"`
 		Bucket          string `koanf:"bucket"`
 		Region          string `koanf:"region"`
-		AccessKeyID     string `koanf:"access_key_id"`     // Direct value or ${ENV_VAR}
-		SecretAccessKey string `koanf:"secret_access_key"` // Direct value or ${ENV_VAR}
+		AccessKeyID     string `koanf:"access_key_id"`     // Direct value (use env vars at OS level)
+		SecretAccessKey string `koanf:"secret_access_key"` // Direct value (use env vars at OS level)
 		UsePathStyle    bool   `koanf:"use_path_style"`
 		PublicBucket    string `koanf:"public_bucket"`
 	} `koanf:"s3"`
@@ -171,8 +171,8 @@ type StorageConfig struct {
 
 	// Azure configuration
 	Azure struct {
-		AccountName     string `koanf:"account_name"` // Direct value or ${ENV_VAR}
-		AccountKey      string `koanf:"account_key"`  // Direct value or ${ENV_VAR}
+		AccountName     string `koanf:"account_name"` // Direct value (use env vars at OS level)
+		AccountKey      string `koanf:"account_key"`  // Direct value (use env vars at OS level)
 		Container       string `koanf:"container"`
 		PublicContainer string `koanf:"public_container"`
 	} `koanf:"azure"`

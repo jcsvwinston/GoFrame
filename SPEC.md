@@ -156,9 +156,9 @@ Provider-agnostic file storage abstraction with a durable interface designed to 
 
 Supported providers:
 - **S3-compatible** (AWS S3, MinIO, Cloudflare R2, DigitalOcean Spaces) — fully implemented
+- **GCS** (Google Cloud Storage) — fully implemented
+- **Azure Blob Storage** — fully implemented
 - **Local filesystem** (development only) — fully implemented
-- **GCS** (Google Cloud Storage) — config defined, driver pending
-- **Azure Blob Storage** — config defined, driver pending
 
 Credential injection (`CredentialSource`):
 

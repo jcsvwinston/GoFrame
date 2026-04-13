@@ -106,6 +106,8 @@ func TestHealthHandler(t *testing.T) {
 package controllers
 
 import (
+    "encoding/json"
+    "log/slog"
     "net/http"
     "net/http/httptest"
     "testing"
@@ -114,8 +116,8 @@ import (
 )
 
 func TestListArticlesHandler(t *testing.T) {
-    r := router.New()
-    r.GET("/api/articles", ListArticlesHandler)
+    r := router.New(slog.Default())
+    r.Get("/api/articles", ListArticlesHandler)
 
     req := httptest.NewRequest(http.MethodGet, "/api/articles", nil)
     rec := httptest.NewRecorder()

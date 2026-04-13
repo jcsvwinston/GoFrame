@@ -133,14 +133,14 @@ To disable or configure:
 | System Pulse | `#/system` | Go runtime, DB pools, feature flags, queues |
 | Network Inspector | `#/live` | Live HTTP traffic, SQL queries, WebSocket stream |
 | Infra Manager | `#/sessions` | Active sessions with time-series charts |
-| Health | `#/health` | Database/Redis connectivity checks |
+| Health | `#/health` | Database connectivity checks (Redis: URL-only, no ping) |
 | Access Control | `#/rbac` | RBAC policies and role management |
 | Audit Log | `#/audit` | CRUD operation audit trail |
-| Migrations | `#/migrations` | Migration status and application |
+| Migrations | `#/migrations` | Migration file listing (apply via `goframe migrate` CLI) |
 | Deployment | `#/deployment` | Runtime info, cluster topology |
 | Jobs | `#/jobs` | Background job queue status |
-| Cache | `#/cache` | Redis cache management |
-| Storage | `#/storage` | File browser |
+| Cache | `#/cache` | Redis URL presence check (detailed stats: use `redis-cli`) |
+| Storage | `#/storage` | Local filesystem browser (cloud providers: future) |
 | Sites | `#/sites` | Multi-site listing |
 
 ## API Endpoints
@@ -185,15 +185,15 @@ All endpoints are under `/admin/api/`.
 ### Management
 | Method | Path | Description |
 |--------|------|-------------|
-| GET | `/migrations` | List migration status |
-| POST | `/migrations/apply?steps=` | Apply migrations |
+| GET | `/migrations` | List migration files and status |
+| POST | `/migrations/apply?steps=` | Count pending; apply via `goframe migrate` CLI |
 | GET | `/jobs` | Background job status |
 | GET | `/sites` | List sites |
 | GET | `/deployment` | Deployment info |
-| GET | `/cache` | Cache stats |
-| POST | `/cache/flush` | Flush cache |
-| GET | `/storage?path=` | List storage files |
-| GET | `/email` | Email stats |
+| GET | `/cache` | Redis URL presence (stub: use `redis-cli` for details) |
+| POST | `/cache/flush` | Stub: use `redis-cli FLUSHDB` |
+| GET | `/storage?path=` | Local filesystem listing (cloud: future) |
+| GET | `/email` | Stub: requires mail driver integration |
 
 ## Deployment Scenarios
 

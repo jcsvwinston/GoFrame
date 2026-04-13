@@ -107,8 +107,14 @@ This file is the canonical entrypoint for GoFrame documentation.
 When documents conflict or contradict, use this precedence order:
 
 1. `README.md` (root)
-2. `SPEC.md` (technical baseline)
-3. Strategy/governance docs (`ENTERPRISE_LONG_TERM_ROADMAP.md`, `COMPATIBILITY_SLO.md`, `VERSIONING.md`)
+2. Contract/governance docs in `docs/`:
+   - `docs/API_CONTRACT_INVENTORY.md`
+   - `docs/CLI_CONTRACT_MATRIX.md`
+   - `docs/CONFIG_KEY_REGISTRY.md`
+   - `docs/COMPATIBILITY_SLO.md`
+   - `docs/VERSIONING.md`
+   - `docs/ENTERPRISE_LONG_TERM_ROADMAP.md`
+3. `SPEC.md` (technical baseline — defers to governance on conflicts)
 4. Feature guides (individual `.md` files in `docs/`)
 5. `DEVELOPER_MANUAL.md` (monolith reference — overlaps with standalone guides)
 6. Historical behavior from git history only
@@ -118,4 +124,4 @@ When documents conflict or contradict, use this precedence order:
 - External provider binaries: `goframe-plugin-<provider>`
 - Legacy mail fallback naming: `goframe-mail-<driver>`
 - Storage providers: `s3` (AWS S3, MinIO, R2), `gcs` (Google Cloud Storage), `azure` (Azure Blob), `local` (development only)
-- Credential sources: `value` (literal), `env_var` (environment variable), `file` (mounted file), `secret_manager` (cloud secret via `env:` prefix)
+- Credential sources (pkg/storage layer): `value`, `env_var`, `file`, `secret_manager`; app YAML config currently exposes direct strings only

@@ -61,16 +61,9 @@ All providers implement the same `Store` interface. Switching providers requires
 
 ## Configuration
 
-Storage is configured via YAML under the `storage` key. The framework supports four credential injection methods via `storage.CredentialSource`:
+Storage is configured via YAML under the `storage` key.
 
-| Source | Field | When to use |
-|--------|-------|-------------|
-| Direct value | `value:` | Testing, non-sensitive config |
-| Environment variable | `env_var:` | **Primary for production** --- orchestrators inject secrets |
-| File path | `file:` | K8s secrets mounted as volumes, GCP service account JSON files |
-| Secret manager | `secret_manager:` | Cloud secret via `env:` prefix for env vars injected by Secret Manager |
-
-Credential resolution priority: `Value` > `EnvVar` > `File` > `SecretManager` (with `env:` prefix).
+> **Note on credential sources:** The `storage.CredentialSource` type in `pkg/storage` supports four resolution methods (`value`, `env_var`, `file`, `secret_manager`). However, the application-level YAML config currently exposes credentials as plain strings only (direct values). Full `CredentialSource` support at the YAML level is planned for a future release. For production secret injection, use environment variables at the OS/container level before starting the process.
 
 ### S3 (AWS)
 
@@ -85,13 +78,10 @@ storage:
     bucket: "myapp-private-bucket"
     public_bucket: "myapp-public-bucket"
     region: "us-east-1"
-    access_key_id:
-      env_var: AWS_ACCESS_KEY_ID
-    secret_access_key:
-      env_var: AWS_SECRET_ACCESS_KEY
+    access_key_id: "${AWS_ACCESS_KEY_ID}"
+    secret_access_key: "${AWS_SECRET_ACCESS_KEY}"
     # For temporary STS credentials (optional):
-    # session_token:
-    #   env_var: AWS_SESSION_TOKEN
+    # session_token: "${AWS_SESSION_TOKEN}"
 ```
 
 ### S3 (MinIO)
@@ -105,10 +95,8 @@ storage:
     bucket: "myapp"
     region: "us-east-1"         # MinIO ignores region but the field is required
     use_path_style: true        # Required for MinIO
-    access_key_id:
-      env_var: MINIO_ACCESS_KEY
-    secret_access_key:
-      env_var: MINIO_SECRET_KEY
+    access_key_id: "${MINIO_ACCESS_KEY}"
+    secret_access_key: "${MINIO_SECRET_KEY}"
 ```
 
 ### S3 (Cloudflare R2)
@@ -122,10 +110,8 @@ storage:
     bucket: "myapp"
     region: "auto"
     use_path_style: false
-    access_key_id:
-      env_var: R2_ACCESS_KEY_ID
-    secret_access_key:
-      env_var: R2_SECRET_ACCESS_KEY
+    access_key_id: "${R2_ACCESS_KEY_ID}"
+    secret_access_key: "${R2_SECRET_ACCESS_KEY}"
 ```
 
 ### GCS
@@ -140,16 +126,10 @@ storage:
   gcs:
     bucket: "myapp-private"
     public_bucket: "myapp-public"
-    # Option 1: ADC (no credentials needed on GKE/Cloud Run with Workload Identity)
-    # credentials: {}
-
-    # Option 2: Volume-mounted service account JSON (K8s)
-    credentials:
-      file: /etc/secrets/gcs-sa.json
-
-    # Option 3: Environment variable (Cloud Run injects the path)
-    # credentials:
-    #   env_var: GOOGLE_APPLICATION_CREDENTIALS
+    # GCS uses Application Default Credentials (ADC) on GKE/Cloud Run
+    # For local dev, set GOOGLE_APPLICATION_CREDENTIALS as an env var
+    # pointing to your service account JSON file path.
+    # No credential fields are needed in YAML.
 ```
 
 ### Azure Blob Storage
@@ -162,13 +142,8 @@ storage:
   public_paths:
     "/media": "storage/public/media/"
   azure:
-    account_name:
-      env_var: AZURE_ACCOUNT_NAME
-    account_key:
-      env_var: AZURE_STORAGE_KEY
-    # Or reference a Key Vault secret:
-    # account_key:
-    #   secret_manager: "env:AZURE_STORAGE_KEY"
+    account_name: "${AZURE_ACCOUNT_NAME}"
+    account_key: "${AZURE_STORAGE_KEY}"
     container: "myapp-private"
     public_container: "myapp-public"
 ```
@@ -513,7 +488,7 @@ The cleaner runs in a background goroutine, paginates through all objects matchi
 
 ### Security
 
-- [ ] **Never use `value:` credentials in production** --- use `env_var:` or `file:` exclusively.
+- [ ] **Never hardcode credentials** --- use environment variables or a secret manager.
 - [ ] **Enable bucket versioning** (S3/GCS) for audit trails and accidental deletion recovery.
 - [ ] **Enable default encryption** on all buckets/containers (SSE-S3, SSE-KMS, or customer-managed keys).
 - [ ] **Block all public access** at the bucket level unless using a dedicated public bucket.
@@ -565,10 +540,8 @@ storage:
   s3:
     bucket: "my-bucket"
     region: "us-east-1"
-    access_key_id:
-      env_var: AWS_ACCESS_KEY_ID
-    secret_access_key:
-      env_var: AWS_SECRET_ACCESS_KEY
+    access_key_id: "${AWS_ACCESS_KEY_ID}"
+    secret_access_key: "${AWS_SECRET_ACCESS_KEY}"
 ```
 
 ### Migration steps
@@ -582,7 +555,7 @@ storage:
    | `gcs` | `gcs` |
    | `azure` | `azure` |
 
-2. **Move credentials**: Replace inline credential strings with `CredentialSource` blocks using `env_var:` or `file:`.
+2. **Move credentials**: Replace inline credential strings with environment variable references (e.g. `"${AWS_ACCESS_KEY_ID}"`) and ensure your deployment injects those env vars.
 
 3. **Update initialization code**: Replace manual provider construction with `storage.New()`:
 
