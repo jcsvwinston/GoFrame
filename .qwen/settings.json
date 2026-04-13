@@ -9,7 +9,25 @@
       "Bash(git commit *)",
       "Bash(git push *)",
       "Bash(git rm *)",
-      "Bash(rm *)"
+      "Bash(rm *)",
+      "Bash(docker-compose *)",
+      "Bash(docker compose up *)",
+      "Bash(docker *)",
+      "Bash(mkdir *)",
+      "Bash(curl *)",
+      "Bash(chmod *)",
+      "Bash(file *)",
+      "Bash(python3 *)",
+      "Bash(open *)",
+      "Bash(sleep *)",
+      "Bash(lsof *)",
+      "Bash(kill *)",
+      "Bash(xargs *)",
+      "Bash(mv *)",
+      "Bash(npm create *)",
+      "Bash(npx *)",
+      "Bash(npm install)",
+      "Bash(npm run *)"
     ]
   },
   "$version": 3
