@@ -15,6 +15,7 @@ services:
       - GOFRAME_EXAMPLE_ADMIN_CLUSTER_NODE_ID=node1
       - GOFRAME_EXAMPLE_SESSION_STORE=redis
       - GOFRAME_EXAMPLE_SESSION_REDIS_URL=redis://redis:6379/2
+      - GOFRAME_EXAMPLE_ADMIN_BOOTSTRAP_PASSWORD=admin123
     ports:
       - "8091:8091"
     depends_on:
@@ -29,6 +30,7 @@ services:
       - GOFRAME_EXAMPLE_ADMIN_CLUSTER_NODE_ID=node2
       - GOFRAME_EXAMPLE_SESSION_STORE=redis
       - GOFRAME_EXAMPLE_SESSION_REDIS_URL=redis://redis:6379/2
+      - GOFRAME_EXAMPLE_ADMIN_BOOTSTRAP_PASSWORD=admin123
     ports:
       - "8092:8092"
     depends_on:

@@ -143,6 +143,11 @@ func applyExampleEnvOverrides(cfg *app.Config) {
 	if adminTitle != "" {
 		cfg.AdminTitle = adminTitle
 	}
+
+	bootstrapPassword := strings.TrimSpace(os.Getenv("GOFRAME_EXAMPLE_ADMIN_BOOTSTRAP_PASSWORD"))
+	if bootstrapPassword != "" {
+		cfg.AdminBootstrapPassword = bootstrapPassword
+	}
 }
 
 func getenvInt(name string, fallback int) int {

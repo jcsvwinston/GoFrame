@@ -80,43 +80,53 @@ GoFrame uses its own router/mux abstractions (not Chi as a runtime dependency):
 
 ## 3.4 Admin (`pkg/admin`)
 
-Embedded admin panel provides:
+Embedded admin panel (React + TypeScript + Tailwind CSS) provides:
 
-- model listing + schema endpoint
+- Modern login page with theme support (dark/light)
+- Model listing + schema endpoint
 - CRUD API with tenant-aware filtering (multi-tenant support)
-- list/search/filter/order pagination
-- CSV export (existing), plus JSON and SQL dump export
-- Import: CSV/JSON upload → validation → execute with conflict resolution
-- Data Studio toolbar: Export selected | Export all (CSV/JSON/SQL) | Import wizard
-- bulk actions with per-row error reporting
-- action-level authorization hooks (`AdminAuth.Authorize`)
+- List/search/filter/order pagination
+- Export (CSV, JSON, SQL) and import (CSV/JSON) with validation
+- Bulk actions with per-row error reporting
+- Action-level authorization hooks (`AdminAuth.Authorize`)
 - RBAC integration via Casbin enforcer (optional)
-- audit logging for CRUD operations (in-memory, bounded)
-- session inventory endpoint and UI telemetry
-- live traffic inspection (HTTP, SQL, sessions) with cluster relay
-- system pulse (Go runtime, DB pool, feature flags, jobs)
-- health check dashboard (DB, Redis, mail connectivity)
-- migration listing and status
-- job queue details (via Asynq runtime)
-- multi-site listing and management
-- deployment info (standalone/Docker/K8s detection, cluster topology)
-- cache management endpoints
-- file storage browser
-- email stats
+- Audit logging for CRUD operations (in-memory, bounded)
+- Session inventory endpoint and UI telemetry
+- Live traffic inspection (HTTP, SQL, sessions) with cluster relay
+- System pulse (Go runtime, DB pool, feature flags, jobs)
+- Health check dashboard (DB, Redis, mail connectivity)
+- Migration listing and status
+- Job queue details (via Asynq runtime)
+- Multi-site listing and management
+- Deployment info (standalone/Docker/K8s detection, cluster topology)
+- Cache management endpoints
+- File storage browser
+- Email stats
+- Data Studio for export/import operations
+
+**UI Architecture:**
+- React 19 with TypeScript
+- Vite 6 bundler
+- Tailwind CSS 3 styling
+- shadcn/ui component library
+- Zustand 5 state management
+- React Router 7 for navigation
+- Recharts 2 for data visualization
+- Zero CDN dependencies (all packages installed locally)
 
 Multi-tenant features:
-- tenant field detection via `db:"tenant"` tag or convention (`tenant_id`)
-- auto-filter CRUD queries by tenant when multi-tenant enabled
-- auto-inject tenant ID on record creation
-- tenant selector in UI header
-- tenant context propagated via request middleware
+- Tenant field detection via `db:"tenant"` tag or convention (`tenant_id`)
+- Auto-filter CRUD queries by tenant when multi-tenant enabled
+- Auto-inject tenant ID on record creation
+- Tenant selector in UI header
+- Tenant context propagated via request middleware
 
 RBAC features:
 - Casbin enforcer integration (optional, via `admin_rbac_policy_file`)
-- policy management API (add/remove policies)
-- role management API (assign/remove roles)
-- permission checking
-- superuser bypass
+- Policy management API (add/remove policies)
+- Role management API (assign/remove roles)
+- Permission checking
+- Superuser bypass
 - UI for viewing policies and roles
 
 Audit logging:

@@ -166,6 +166,19 @@ func New(cfg *Config) (*App, error) {
 	r.Use(scopeResolver.Middleware())
 	r.Use(sessionManager.Middleware())
 	sessionRuntimeIdentity := auth.DetectSessionRuntimeIdentity()
+	// Override host with explicit cluster node ID so multi-node sessions
+	// show distinct identities instead of the raw container hostname.
+	if explicit := strings.TrimSpace(effective.AdminClusterNodeID); explicit != "" {
+		sessionRuntimeIdentity.Host = explicit
+		if sessionRuntimeIdentity.Instance == "" {
+			sessionRuntimeIdentity.Instance = explicit
+		}
+		// In Docker (non-K8s) the pod field stays empty; use node ID as pod
+		// label so the admin UI shows a meaningful identifier.
+		if sessionRuntimeIdentity.Pod == "" {
+			sessionRuntimeIdentity.Pod = explicit
+		}
+	}
 	r.Use(auth.RuntimeMetadataMiddleware(sessionManager, sessionRuntimeIdentity, 30*time.Second))
 	reg := model.NewRegistry()
 	sessionStoreLabel := strings.ToLower(strings.TrimSpace(effective.SessionStore))

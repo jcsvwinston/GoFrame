@@ -3,9 +3,10 @@ package admin
 import (
 	"context"
 	"database/sql"
+	"embed"
 	"errors"
 	"fmt"
-	"html/template"
+	"io/fs"
 	"net/http"
 	"strings"
 
@@ -21,54 +22,8 @@ const (
 	adminSessionSuperuserKey = "__goframe_admin_superuser"
 )
 
-var adminLoginTemplate = template.Must(template.New("admin-login").Parse(`<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>GoFrame Admin Login</title>
-  <link rel="stylesheet" href="{{.Prefix}}/static/style.css">
-  <script>
-    (function() {
-      var theme = localStorage.getItem("gf-theme") || "dark";
-      if (theme) document.documentElement.setAttribute("data-theme", theme);
-    })();
-  </script>
-</head>
-<body class="auth-body theme-frameworkos">
-  <div class="bg-shape bg-shape-a"></div>
-  <div class="bg-shape bg-shape-b"></div>
-  
-  <div class="auth-wrapper">
-    <div class="brand-mark" style="margin: 0 auto 24px; width: 56px; height: 56px; display: flex; align-items: center; justify-content: center; font-size: 26px;">GF</div>
-    <main class="card" style="padding: 36px 32px; box-shadow: var(--shadow-md);">
-      <div class="auth-header">
-        <h1>Admin Portal</h1>
-        <p>Enter your credentials to access the system</p>
-      </div>
-
-      {{if .Info}}<div class="auth-notice info">{{.Info}}</div>{{end}}
-      {{if .Error}}<div class="auth-notice error">{{.Error}}</div>{{end}}
-
-      <form method="post" action="{{.Action}}">
-        <input type="hidden" name="next" value="{{.Next}}">
-        
-        <div class="auth-field-group">
-          <label for="username">Username or email</label>
-          <input id="username" class="input" name="username" type="text" autocomplete="username" required>
-        </div>
-        
-        <div class="auth-field-group">
-          <label for="password">Password</label>
-          <input id="password" class="input" name="password" type="password" autocomplete="current-password" required>
-        </div>
-        
-        <button class="btn btn-primary auth-btn" type="submit">Sign In</button>
-      </form>
-    </main>
-  </div>
-</body>
-</html>`))
+//go:embed all:ui/dist/*
+var loginUIFS embed.FS
 
 // DatabaseAdminAuth is the default admin auth provider wired by pkg/app.
 // Behavior:
@@ -232,15 +187,22 @@ func (a *DatabaseAdminAuth) handleLoginPOST(w http.ResponseWriter, r *http.Reque
 }
 
 func (a *DatabaseAdminAuth) renderLoginPage(w http.ResponseWriter, status int, next, errorMsg, infoMsg string) {
+	// Serve the React login page from ui/dist/index.html
+	loginUIContent, err := fs.Sub(loginUIFS, "ui/dist")
+	if err != nil {
+		http.Error(w, "login UI not found", http.StatusInternalServerError)
+		return
+	}
+
+	content, err := fs.ReadFile(loginUIContent, "index.html")
+	if err != nil {
+		http.Error(w, "login UI not found", http.StatusInternalServerError)
+		return
+	}
+
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(status)
-	_ = adminLoginTemplate.Execute(w, map[string]string{
-		"Prefix": a.prefix,
-		"Action": a.prefix + "/login",
-		"Next":   next,
-		"Error":  strings.TrimSpace(errorMsg),
-		"Info":   strings.TrimSpace(infoMsg),
-	})
+	_, _ = w.Write(content)
 }
 
 func (a *DatabaseAdminAuth) sanitizeNext(raw string) string {

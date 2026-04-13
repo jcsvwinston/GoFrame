@@ -26,7 +26,7 @@ import (
 	"github.com/jcsvwinston/GoFrame/pkg/storage"
 )
 
-//go:embed ui/*
+//go:embed all:ui/dist/*
 var uiFS embed.FS
 
 type adminAuthContextKey struct{}
@@ -327,7 +327,7 @@ func (p *Panel) Handler() *router.Mux {
 	r := router.NewMux()
 
 	// Serve embedded UI static assets unconditionally so the login page can use them
-	uiContent, _ := fs.Sub(uiFS, "ui")
+	uiContent, _ := fs.Sub(uiFS, "ui/dist")
 	fileServer := http.FileServer(http.FS(uiContent))
 	r.Get("/static/{filepath...}", http.StripPrefix("/static", fileServer).ServeHTTP)
 

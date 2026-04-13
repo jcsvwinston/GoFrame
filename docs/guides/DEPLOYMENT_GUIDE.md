@@ -1,0 +1,785 @@
+# Deployment Guide
+
+Reference date: 2026-04-10.
+Status: Current.
+
+This guide covers deploying GoFrame applications to production, including containerization, reverse proxy configuration, TLS, horizontal scaling, and operational best practices.
+
+## Table of Contents
+
+- [Overview](#overview)
+- [Build and Release](#build-and-release)
+- [Docker Deployment](#docker-deployment)
+- [Kubernetes Deployment](#kubernetes-deployment)
+- [Reverse Proxy Configuration](#reverse-proxy-configuration)
+- [TLS/HTTPS Setup](#tlshttps-setup)
+- [Horizontal Scaling](#horizontal-scaling)
+- [Database Backup and Recovery](#database-backup-and-recovery)
+- [Log Aggregation](#log-aggregation)
+- [Production Hardening Checklist](#production-hardening-checklist)
+
+---
+
+## Overview
+
+A GoFrame application consists of two runtime processes:
+
+1. **Server** (`cmd/server`): HTTP server handling web requests.
+2. **Worker** (`cmd/worker`): Background job processor for Asynq tasks.
+
+Both processes share the same binary but run different entry points.
+
+---
+
+## Build and Release
+
+### Build from source
+
+```bash
+# Build server
+go build -o bin/server ./cmd/server
+
+# Build worker
+go build -o bin/worker ./cmd/worker
+
+# Build CLI (optional, for operations)
+go build -o bin/goframe ./cmd/goframe
+```
+
+### Version-injected build
+
+```bash
+VERSION="1.0.0"
+COMMIT=$(git rev-parse --short HEAD)
+DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+
+go build -ldflags "-X main.version=${VERSION} -X main.commit=${COMMIT} -X main.date=${DATE}" \
+  -o bin/server ./cmd/server
+```
+
+---
+
+## Docker Deployment
+
+### Single-stage Dockerfile
+
+```dockerfile
+FROM golang:1.25-alpine AS builder
+
+WORKDIR /app
+COPY go.mod go.sum ./
+RUN go mod download
+
+COPY . .
+RUN CGO_ENABLED=0 go build -o /bin/server ./cmd/server
+RUN CGO_ENABLED=0 go build -o /bin/worker ./cmd/worker
+
+FROM alpine:3.20
+
+RUN apk --no-cache add ca-certificates tzdata
+
+RUN adduser -D -u 1000 appuser
+USER appuser
+
+COPY --from=builder /bin/server /bin/server
+COPY --from=builder /bin/worker /bin/worker
+COPY goframe.yaml /etc/app/goframe.yaml
+COPY internal/config/ /etc/app/config/
+
+WORKDIR /etc/app
+
+ENTRYPOINT ["/bin/server"]
+```
+
+### Multi-stage Dockerfile with migrations
+
+```dockerfile
+FROM golang:1.25-alpine AS builder
+WORKDIR /app
+COPY go.mod go.sum ./
+RUN go mod download
+COPY . .
+RUN CGO_ENABLED=0 go build -o /bin/server ./cmd/server
+RUN CGO_ENABLED=0 go build -o /bin/worker ./cmd/worker
+RUN CGO_ENABLED=0 go build -o /bin/goframe ./cmd/goframe
+
+FROM alpine:3.20
+RUN apk --no-cache add ca-certificates tzdata
+RUN adduser -D -u 1000 appuser
+USER appuser
+
+COPY --from=builder /bin/server /bin/server
+COPY --from=builder /bin/worker /bin/worker
+COPY --from=builder /bin/goframe /bin/goframe
+COPY goframe.yaml /etc/app/goframe.yaml
+COPY migrations/ /etc/app/migrations/
+
+WORKDIR /etc/app
+
+# Default: run server
+CMD ["/bin/server"]
+```
+
+### Docker Compose (development)
+
+```yaml
+version: "3.9"
+services:
+  server:
+    build: .
+    ports:
+      - "8080:8080"
+    environment:
+      - GOFRAME_ENV=development
+      - GOFRAME_DATABASE_DEFAULT=default
+      - GOFRAME_DATABASES_DEFAULT_URL=sqlite://goframe.db
+      - GOFRAME_REDIS_URL=redis://redis:6379/0
+    depends_on:
+      - redis
+    volumes:
+      - ./goframe.yaml:/etc/app/goframe.yaml
+
+  worker:
+    build: .
+    command: ["/bin/worker"]
+    environment:
+      - GOFRAME_ENV=development
+      - GOFRAME_REDIS_URL=redis://redis:6379/0
+    depends_on:
+      - redis
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: goframe
+      POSTGRES_PASSWORD: goframe
+      POSTGRES_DB: goframe
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+volumes:
+  pgdata:
+```
+
+### Docker Compose (production)
+
+```yaml
+version: "3.9"
+services:
+  server:
+    build:
+      context: .
+      target: builder
+    ports:
+      - "8080:8080"
+    environment:
+      - GOFRAME_ENV=production
+      - GOFRAME_JWT_SECRET=${GOFRAME_JWT_SECRET}
+      - GOFRAME_DATABASE_DEFAULT=default
+      - GOFRAME_DATABASES_DEFAULT_URL=${DATABASE_URL}
+      - GOFRAME_REDIS_URL=${REDIS_URL}
+      - GOFRAME_SESSION_STORE=redis
+      - GOFRAME_SESSION_COOKIE_SECURE=true
+    deploy:
+      replicas: 2
+      resources:
+        limits:
+          memory: 512M
+          cpus: "1.0"
+    healthcheck:
+      test: ["CMD", "/bin/goframe", "health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    depends_on:
+      - postgres
+      - redis
+
+  worker:
+    build:
+      context: .
+      target: builder
+    command: ["/bin/worker"]
+    environment:
+      - GOFRAME_ENV=production
+      - GOFRAME_REDIS_URL=${REDIS_URL}
+    deploy:
+      replicas: 1
+      resources:
+        limits:
+          memory: 256M
+          cpus: "0.5"
+    depends_on:
+      - redis
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+
+  redis:
+    image: redis:7-alpine
+    command: redis-server --requirepass ${REDIS_PASSWORD}
+    volumes:
+      - redisdata:/data
+
+volumes:
+  pgdata:
+  redisdata:
+```
+
+---
+
+## Kubernetes Deployment
+
+### Deployment manifest
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: goframe-server
+  labels:
+    app: goframe
+    component: server
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: goframe
+      component: server
+  template:
+    metadata:
+      labels:
+        app: goframe
+        component: server
+    spec:
+      containers:
+      - name: server
+        image: your-registry/goframe:latest
+        ports:
+        - containerPort: 8080
+          name: http
+        env:
+        - name: GOFRAME_ENV
+          value: production
+        - name: GOFRAME_JWT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: goframe-secrets
+              key: jwt-secret
+        - name: GOFRAME_DATABASES_DEFAULT_URL
+          valueFrom:
+            secretKeyRef:
+              name: goframe-secrets
+              key: database-url
+        - name: GOFRAME_REDIS_URL
+          valueFrom:
+            secretKeyRef:
+              name: goframe-secrets
+              key: redis-url
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "250m"
+          limits:
+            memory: "512Mi"
+            cpu: "1000m"
+        livenessProbe:
+          httpGet:
+            path: /api/health
+            port: 8080
+          initialDelaySeconds: 10
+          periodSeconds: 30
+        readinessProbe:
+          httpGet:
+            path: /api/health
+            port: 8080
+          initialDelaySeconds: 5
+          periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: goframe-server
+spec:
+  selector:
+    app: goframe
+    component: server
+  ports:
+  - protocol: TCP
+    port: 80
+    targetPort: 8080
+  type: ClusterIP
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: goframe-worker
+  labels:
+    app: goframe
+    component: worker
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: goframe
+      component: worker
+  template:
+    metadata:
+      labels:
+        app: goframe
+        component: worker
+    spec:
+      containers:
+      - name: worker
+        image: your-registry/goframe:latest
+        command: ["/bin/worker"]
+        env:
+        - name: GOFRAME_ENV
+          value: production
+        - name: GOFRAME_REDIS_URL
+          valueFrom:
+            secretKeyRef:
+              name: goframe-secrets
+              key: redis-url
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "256Mi"
+            cpu: "500m"
+```
+
+### ConfigMap for non-sensitive configuration
+
+```yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: goframe-config
+data:
+  GOFRAME_HOST: "0.0.0.0"
+  GOFRAME_PORT: "8080"
+  GOFRAME_SESSION_STORE: "redis"
+  GOFRAME_SESSION_COOKIE_SECURE: "true"
+  GOFRAME_SESSION_COOKIE_SAME_SITE: "strict"
+  GOFRAME_LOG_LEVEL: "info"
+  GOFRAME_OTLP_ENDPOINT: "http://otel-collector:4318"
+```
+
+---
+
+## Reverse Proxy Configuration
+
+### Caddy (recommended for simplicity)
+
+```caddyfile
+app.example.com {
+    reverse_proxy localhost:8080
+
+    encode gzip
+    log {
+        output file /var/log/caddy/access.log
+    }
+}
+```
+
+### Nginx
+
+```nginx
+upstream goframe {
+    server 127.0.0.1:8080;
+    keepalive 32;
+}
+
+server {
+    listen 80;
+    server_name app.example.com;
+
+    # Redirect to HTTPS
+    return 301 https://$host$request_uri;
+}
+
+server {
+    listen 443 ssl http2;
+    server_name app.example.com;
+
+    ssl_certificate /etc/ssl/certs/app.pem;
+    ssl_certificate_key /etc/ssl/private/app-key.pem;
+    ssl_protocols TLSv1.2 TLSv1.3;
+
+    # Security headers
+    add_header X-Frame-Options DENY;
+    add_header X-Content-Type-Options nosniff;
+    add_header X-XSS-Protection "1; mode=block";
+    add_header Referrer-Policy strict-origin-when-cross-origin;
+
+    # Proxy settings
+    location / {
+        proxy_pass http://goframe;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_http_version 1.1;
+        proxy_set_header Connection "";
+    }
+
+    # WebSocket support for admin live inspector
+    location /admin/api/live/ws {
+        proxy_pass http://goframe;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    # Static assets
+    location /static/ {
+        expires 1y;
+        add_header Cache-Control "public, immutable";
+    }
+
+    access_log /var/log/nginx/goframe-access.log;
+    error_log /var/log/nginx/goframe-error.log;
+}
+```
+
+### Traefik
+
+```yaml
+http:
+  routers:
+    goframe:
+      rule: "Host(`app.example.com`)"
+      service: goframe
+      entryPoints:
+        - websecure
+      tls:
+        certResolver: letsencrypt
+
+  services:
+    goframe:
+      loadBalancer:
+        servers:
+          - url: "http://127.0.0.1:8080"
+```
+
+---
+
+## TLS/HTTPS Setup
+
+### Let's Encrypt with Caddy (automatic)
+
+Caddy handles TLS automatically. Just configure the domain and Caddy obtains/renews certificates.
+
+### Let's Encrypt with Certbot + Nginx
+
+```bash
+# Install certbot
+sudo apt-get install certbot python3-certbot-nginx
+
+# Obtain certificate
+sudo certbot --nginx -d app.example.com
+
+# Auto-renewal (certbot sets up cron automatically)
+sudo certbot renew --dry-run
+```
+
+### Behind load balancer (AWS ALB, Cloudflare)
+
+If TLS is terminated upstream:
+
+```yaml
+# goframe.yaml
+server:
+  host: "0.0.0.0"
+  port: 8080
+
+# Nginx doesn't need TLS config
+# GoFrame reads X-Forwarded-Proto from request headers
+# Session cookies marked Secure if GOFRAME_SESSION_COOKIE_SECURE=true
+```
+
+---
+
+## Horizontal Scaling
+
+### Server instances
+
+GoFrame servers are stateless. Scale horizontally freely:
+
+```bash
+# Docker Compose
+docker compose up --scale server=5
+
+# Kubernetes
+kubectl scale deployment goframe-server --replicas=5
+```
+
+### Shared state requirements
+
+When running multiple server replicas:
+
+| Feature | Requirement |
+|---------|-------------|
+| **Sessions** | Use `sql` or `redis` store (not `memory`) |
+| **Background jobs** | Redis required for Asynq |
+| **Rate limiting** | Redis required for distributed counters |
+| **Caching** | Redis or SQL-backed cache table |
+
+### Worker scaling
+
+```bash
+# Run multiple workers consuming from same Redis queue
+docker compose up --scale worker=3
+```
+
+Asynq workers share queue consumption. Each task is processed by exactly one worker.
+
+---
+
+## Database Backup and Recovery
+
+### PostgreSQL
+
+```bash
+# Backup
+pg_dump -U goframe -h localhost goframe > backup_$(date +%Y%m%d_%H%M%S).sql
+
+# Compressed backup
+pg_dump -U goframe -h localhost goframe | gzip > backup_$(date +%Y%m%d_%H%M%S).sql.gz
+
+# Restore
+psql -U goframe -h localhost goframe < backup_20260410_120000.sql
+
+# Continuous backup (WAL archiving) - configure in postgresql.conf
+wal_level = replica
+archive_mode = on
+archive_command = 'cp %p /backup/wal/%f'
+```
+
+### MySQL
+
+```bash
+# Backup
+mysqldump -u goframe -p goframe > backup_$(date +%Y%m%d_%H%M%S).sql
+
+# Restore
+mysql -u goframe -p goframe < backup_20260410_120000.sql
+```
+
+### SQLite
+
+```bash
+# Backup (while running)
+# Use goframe dumpdata for application data
+goframe dumpdata --config goframe.yaml > fixture.json
+
+# File-level backup (stop server first)
+cp goframe.db goframe.db.backup
+
+# Or use .backup command in sqlite3
+sqlite3 goframe.db ".backup 'goframe.db.backup'"
+```
+
+### GoFrame fixtures
+
+```bash
+# Export all data as JSON fixtures
+goframe dumpdata --config goframe.yaml > fixtures.json
+
+# Import fixtures
+goframe loaddata --config goframe.yaml fixtures.json
+
+# Import with truncate (production requires --force)
+goframe loaddata --config goframe.yaml --truncate --force fixtures.json
+```
+
+### Backup schedule
+
+```bash
+# Cron: daily backup at 2am
+0 2 * * * pg_dump -U goframe goframe | gzip > /backup/db_$(date +\%Y\%m\%d).sql.gz
+
+# Cron: weekly full backup, daily incrementals
+0 2 * * 0 pg_dump -U goframe -Fc goframe > /backup/full_$(date +\%Y\%m\%d).dump
+0 2 * * 1-6 pg_dump -U goframe --data-only goframe | gzip > /backup/daily_$(date +\%Y\%m\%d).sql.gz
+```
+
+---
+
+## Log Aggregation
+
+GoFrame uses structured logging via `log/slog` and exports traces/metrics via OpenTelemetry.
+
+### Log output formats
+
+```yaml
+# goframe.yaml
+log_level: info
+log_format: json   # Options: text, json
+```
+
+### File logging (sidecar)
+
+```bash
+# Run server, redirect logs to file
+./bin/server 2>&1 | tee -a /var/log/goframe/server.log
+
+# Or use systemd journal
+# /etc/systemd/system/goframe-server.service
+[Service]
+StandardOutput=journal
+StandardError=journal
+```
+
+### Loki (Grafana stack)
+
+```yaml
+# Promtail configuration
+scrape_configs:
+  - job_name: goframe
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: goframe
+          __path__: /var/log/goframe/*.log
+    pipeline_stages:
+      - json:
+          expressions:
+            level: level
+            msg: msg
+      - labels:
+          level:
+```
+
+### ELK Stack (Elasticsearch, Logstash, Kibana)
+
+```ruby
+# Logstash configuration
+input {
+  file {
+    path => "/var/log/goframe/*.log"
+    codec => "json"
+  }
+}
+
+filter {
+  mutate {
+    add_field => { "service" => "goframe" }
+  }
+}
+
+output {
+  elasticsearch {
+    hosts => ["localhost:9200"]
+    index => "goframe-%{+YYYY.MM.dd}"
+  }
+}
+```
+
+### OpenTelemetry Collector
+
+```yaml
+# otel-collector-config.yaml
+receivers:
+  otlp:
+    protocols:
+      http:
+        endpoint: "0.0.0.0:4318"
+
+exporters:
+  logging:
+    loglevel: debug
+  otlp/jaeger:
+    endpoint: "jaeger:4317"
+    tls:
+      insecure: true
+  prometheus:
+    endpoint: "0.0.0.0:8889"
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      exporters: [otlp/jaeger, logging]
+    metrics:
+      receivers: [otlp]
+      exporters: [prometheus, logging]
+```
+
+```yaml
+# goframe.yaml
+otlp_endpoint: http://otel-collector:4318
+```
+
+---
+
+## Production Hardening Checklist
+
+### Security
+
+- [ ] `GOFRAME_ENV=production` set
+- [ ] Strong `jwt_secret` (64-byte random hex)
+- [ ] `session_cookie_secure: true` (HTTPS only)
+- [ ] `session_cookie_same_site: strict`
+- [ ] CSRF middleware enabled for state-changing endpoints
+- [ ] Rate limiting configured (`rate_limit_burst`, `rate_limit_by_route`)
+- [ ] CORS origins restricted (no `*` in production)
+- [ ] Admin panel secured (`goframe createuser` run)
+- [ ] Database credentials in secrets manager (not env files)
+- [ ] TLS enabled (Let's Encrypt or load balancer)
+
+### Reliability
+
+- [ ] Health check endpoint configured (`/api/health`)
+- [ ] Readiness probe configured
+- [ ] Liveness probe configured
+- [ ] Graceful shutdown tested (drain connections)
+- [ ] Database connection pooling tuned (`max_open_conns`, `max_idle_conns`)
+- [ ] Redis connection validated (`goframe health`)
+- [ ] Session store set to `redis` or `sql` (not `memory`)
+- [ ] Background workers running and consuming queues
+- [ ] OTel exporter configured and shipping data
+
+### Operations
+
+- [ ] Log aggregation configured (file, Loki, or ELK)
+- [ ] Metrics dashboard created (Grafana/Prometheus)
+- [ ] Alert rules configured (error rate, latency, queue depth)
+- [ ] Database backups scheduled and tested
+- [ ] Migration strategy defined (`goframe migrate` before deploy)
+- [ ] Rollback plan documented
+- [ ] `goframe check --deploy` passes
+
+### Performance
+
+- [ ] Static assets collected (`goframe collectstatic`)
+- [ ] CDN configured for `/static/`
+- [ ] Database indexes verified (`goframe inspectdb`)
+- [ ] Query performance monitored (admin live SQL inspector)
+- [ ] Worker concurrency tuned for workload
+- [ ] Redis memory usage monitored

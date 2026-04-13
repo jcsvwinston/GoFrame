@@ -1,6 +1,7 @@
 dist/
 .tmp/
 .qwen/
+.cache/
 *.db
 *.db-journal
 *.db.bak
