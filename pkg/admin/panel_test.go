@@ -10,6 +10,7 @@ import (
 	"net/http/cookiejar"
 	"net/http/httptest"
 	"net/url"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -432,16 +433,17 @@ func TestPanel_Authorization_ActionLevelExportDenied(t *testing.T) {
 	}
 }
 
-func TestPanel_UIAssetsServedUnderPrefix(t *testing.T) {
+func TestPanel_UIAssetsServedUnderCustomPrefix(t *testing.T) {
 	panel, cleanup := setupPanelForTest(t, db.EngineSQL)
 	defer cleanup()
+	panel.config.Prefix = "/goframe-admin"
 
 	root := router.NewMux()
-	root.Mount("/admin", panel.Handler())
+	root.Mount("/goframe-admin", panel.Handler())
 	srv := httptest.NewServer(root)
 	defer srv.Close()
 
-	indexRes, err := http.Get(srv.URL + "/admin/")
+	indexRes, err := http.Get(srv.URL + "/goframe-admin/")
 	if err != nil {
 		t.Fatalf("index request failed: %v", err)
 	}
@@ -452,29 +454,31 @@ func TestPanel_UIAssetsServedUnderPrefix(t *testing.T) {
 	}
 	indexBody, _ := io.ReadAll(indexRes.Body)
 	indexStr := string(indexBody)
-	if !strings.Contains(indexStr, `static/components.js`) {
-		t.Fatalf("index is missing components script: %s", indexStr)
+	if !strings.Contains(indexStr, `content="/goframe-admin"`) {
+		t.Fatalf("index is missing injected admin prefix: %s", indexStr)
 	}
-	if !strings.Contains(indexStr, `id="cmdk-list" role="listbox"`) {
-		t.Fatalf("index is missing command palette listbox semantics: %s", indexStr)
+	if !strings.Contains(indexStr, `./assets/`) {
+		t.Fatalf("index is missing Vite asset references: %s", indexStr)
 	}
 
-	componentsRes, err := http.Get(srv.URL + "/admin/static/components.js")
+	assetPath := firstMatch(indexStr, `\./assets/[^"]+\.js`)
+	if assetPath == "" {
+		t.Fatalf("index is missing a JavaScript asset path: %s", indexStr)
+	}
+
+	componentsRes, err := http.Get(srv.URL + "/goframe-admin/" + strings.TrimPrefix(assetPath, "./"))
 	if err != nil {
-		t.Fatalf("components request failed: %v", err)
+		t.Fatalf("asset request failed: %v", err)
 	}
 	defer componentsRes.Body.Close()
 	if componentsRes.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(componentsRes.Body)
-		t.Fatalf("components status=%d body=%s", componentsRes.StatusCode, string(body))
+		t.Fatalf("asset status=%d body=%s", componentsRes.StatusCode, string(body))
 	}
 	componentsBody, _ := io.ReadAll(componentsRes.Body)
 	componentsStr := string(componentsBody)
-	if !strings.Contains(componentsStr, "window.AdminUI") {
-		t.Fatalf("components file missing window.AdminUI export: %s", componentsStr)
-	}
-	if !strings.Contains(componentsStr, "function error(") {
-		t.Fatalf("components file missing error helper: %s", componentsStr)
+	if !strings.Contains(componentsStr, "createRoot") {
+		t.Fatalf("expected Vite bundle content in asset: %s", componentsStr)
 	}
 }
 
@@ -773,6 +777,11 @@ func TestPanel_ListRecords_RejectsUnknownDatabaseAlias(t *testing.T) {
 
 func setupPanelForTest(t *testing.T, engine db.Engine) (*Panel, func()) {
 	return setupPanelForTestWithAuth(t, engine, nil)
+}
+
+func firstMatch(input, pattern string) string {
+	re := regexp.MustCompile(pattern)
+	return re.FindString(input)
 }
 
 func setupPanelForTestWithAuth(t *testing.T, engine db.Engine, adminAuth AdminAuth) (*Panel, func()) {

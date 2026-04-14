@@ -4,7 +4,10 @@ set -e
 
 echo "🔧 Building GoFrame Admin UI..."
 
-cd "$(dirname "$0")"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+UI_DIR="$SCRIPT_DIR/ui"
+
+cd "$UI_DIR"
 
 # Install dependencies if needed
 if [ ! -d "node_modules" ]; then

@@ -19,6 +19,7 @@ export interface Model {
   name: string
   table: string
   fields: Field[]
+  count?: number
 }
 
 export interface Field {

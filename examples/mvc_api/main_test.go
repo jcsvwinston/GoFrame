@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -151,8 +152,8 @@ func TestExampleMVCAPIAdmin_Smoke(t *testing.T) {
 	if respAdmin.StatusCode != http.StatusFound {
 		t.Fatalf("admin index status=%d", respAdmin.StatusCode)
 	}
-	if got := respAdmin.Header.Get("Location"); got != "/admin/login" {
-		t.Fatalf("expected redirect to /admin/login, got %q", got)
+	if got := respAdmin.Header.Get("Location"); !strings.HasPrefix(got, "/admin/login?next=") {
+		t.Fatalf("expected redirect to /admin/login with next parameter, got %q", got)
 	}
 
 	adminCookies := mustAdminLogin(t, a.Router, "/admin/login", "admin", "supersecret123")
@@ -162,8 +163,11 @@ func TestExampleMVCAPIAdmin_Smoke(t *testing.T) {
 		t.Fatalf("admin index authenticated status=%d", respAdmin.StatusCode)
 	}
 	bodyAdmin := mustReadBody(t, respAdmin)
-	if !strings.Contains(bodyAdmin, "Command palette") {
-		t.Fatalf("admin index missing expected content")
+	if !strings.Contains(bodyAdmin, `content="/admin"`) {
+		t.Fatalf("admin index missing injected prefix metadata")
+	}
+	if !strings.Contains(bodyAdmin, `./assets/`) {
+		t.Fatalf("admin index missing Vite asset references")
 	}
 
 	respAdminModels := mustRequestWithCookies(t, a.Router, http.MethodGet, "/admin/api/models", nil, nil, adminCookies)
@@ -180,13 +184,18 @@ func TestExampleMVCAPIAdmin_Smoke(t *testing.T) {
 		t.Fatalf("Article model not found in admin models payload: %#v", adminModels.Models)
 	}
 
-	respComponents := mustRequestWithCookies(t, a.Router, http.MethodGet, "/admin/static/components.js", nil, nil, adminCookies)
+	assetPath := regexp.MustCompile(`\./assets/[^"]+\.js`).FindString(bodyAdmin)
+	if assetPath == "" {
+		t.Fatalf("admin index missing javascript asset path")
+	}
+
+	respComponents := mustRequestWithCookies(t, a.Router, http.MethodGet, "/admin/"+strings.TrimPrefix(assetPath, "./"), nil, nil, adminCookies)
 	if respComponents.StatusCode != http.StatusOK {
-		t.Fatalf("components.js status=%d", respComponents.StatusCode)
+		t.Fatalf("vite asset status=%d", respComponents.StatusCode)
 	}
 	bodyComponents := mustReadBody(t, respComponents)
-	if !strings.Contains(bodyComponents, "window.AdminUI") {
-		t.Fatalf("components.js missing window.AdminUI export")
+	if !strings.Contains(bodyComponents, "createRoot") {
+		t.Fatalf("vite asset missing expected bundle content")
 	}
 }
 

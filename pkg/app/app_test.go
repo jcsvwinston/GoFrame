@@ -329,11 +329,18 @@ func TestAppNew_AdminRequiresLoginByDefault(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/admin/api/models", nil)
 	rec := httptest.NewRecorder()
 	a.Router.ServeHTTP(rec, req)
-	if rec.Code != http.StatusFound {
-		t.Fatalf("expected unauthenticated admin access to redirect, got %d", rec.Code)
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("expected unauthenticated admin API access to return 401, got %d", rec.Code)
 	}
-	if loc := rec.Header().Get("Location"); loc != "/admin/login" {
-		t.Fatalf("expected redirect to /admin/login, got %q", loc)
+
+	pageReq := httptest.NewRequest(http.MethodGet, "/admin/", nil)
+	pageRec := httptest.NewRecorder()
+	a.Router.ServeHTTP(pageRec, pageReq)
+	if pageRec.Code != http.StatusFound {
+		t.Fatalf("expected unauthenticated admin page access to redirect, got %d", pageRec.Code)
+	}
+	if loc := pageRec.Header().Get("Location"); !strings.HasPrefix(loc, "/admin/login?next=") {
+		t.Fatalf("expected redirect to /admin/login with next parameter, got %q", loc)
 	}
 }
 
@@ -347,11 +354,8 @@ func TestAppNew_AdminLoginWithBootstrapCredentials(t *testing.T) {
 	protectedReq := httptest.NewRequest(http.MethodGet, "/admin/api/models", nil)
 	protectedRec := httptest.NewRecorder()
 	a.Router.ServeHTTP(protectedRec, protectedReq)
-	if protectedRec.Code != http.StatusFound {
-		t.Fatalf("expected unauthenticated admin access to redirect, got %d", protectedRec.Code)
-	}
-	if loc := protectedRec.Header().Get("Location"); loc != "/admin/login" {
-		t.Fatalf("expected redirect to /admin/login, got %q", loc)
+	if protectedRec.Code != http.StatusUnauthorized {
+		t.Fatalf("expected unauthenticated admin API access to return 401, got %d", protectedRec.Code)
 	}
 
 	form := url.Values{
@@ -383,6 +387,34 @@ func TestAppNew_AdminLoginWithBootstrapCredentials(t *testing.T) {
 	a.Router.ServeHTTP(authRec, authReq)
 	if authRec.Code != http.StatusOK {
 		t.Fatalf("expected authenticated admin access to return 200, got %d body=%s", authRec.Code, authRec.Body.String())
+	}
+}
+
+func TestAppNew_AdminCustomPrefixMountsAndRedirects(t *testing.T) {
+	cfg := testAppConfig()
+	cfg.AdminPrefix = "backoffice/"
+
+	a, err := New(cfg)
+	if err != nil {
+		t.Fatalf("unexpected error creating app: %v", err)
+	}
+	defer a.Shutdown(context.Background())
+
+	pageReq := httptest.NewRequest(http.MethodGet, "/backoffice/", nil)
+	pageRec := httptest.NewRecorder()
+	a.Router.ServeHTTP(pageRec, pageReq)
+	if pageRec.Code != http.StatusFound {
+		t.Fatalf("expected unauthenticated custom admin page access to redirect, got %d", pageRec.Code)
+	}
+	if loc := pageRec.Header().Get("Location"); !strings.HasPrefix(loc, "/backoffice/login?next=") {
+		t.Fatalf("expected redirect to /backoffice/login with next parameter, got %q", loc)
+	}
+
+	apiReq := httptest.NewRequest(http.MethodGet, "/backoffice/api/models", nil)
+	apiRec := httptest.NewRecorder()
+	a.Router.ServeHTTP(apiRec, apiReq)
+	if apiRec.Code != http.StatusUnauthorized {
+		t.Fatalf("expected custom admin API access to return 401, got %d", apiRec.Code)
 	}
 }
 

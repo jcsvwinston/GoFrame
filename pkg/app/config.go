@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jcsvwinston/GoFrame/pkg/admin"
 	"github.com/jcsvwinston/GoFrame/pkg/storage"
 	"github.com/knadh/koanf/parsers/yaml"
 	"github.com/knadh/koanf/providers/env"
@@ -661,6 +662,7 @@ func normalizeAdminConfig(cfg *Config) {
 	if cfg == nil {
 		return
 	}
+	cfg.AdminPrefix = admin.NormalizePrefix(cfg.AdminPrefix)
 	cfg.AdminAuthDatabase = normalizeAlias(cfg.AdminAuthDatabase)
 	cfg.AdminBootstrapUsername = strings.TrimSpace(cfg.AdminBootstrapUsername)
 	if cfg.AdminBootstrapUsername == "" {
@@ -675,6 +677,25 @@ func normalizeAdminConfig(cfg *Config) {
 	cfg.AdminClusterChannel = strings.TrimSpace(cfg.AdminClusterChannel)
 	if cfg.AdminClusterChannel == "" {
 		cfg.AdminClusterChannel = "goframe:admin:live:v1"
+	}
+	if len(cfg.AdminLiveExcludePatterns) == 0 {
+		cfg.AdminLiveExcludePatterns = []string{cfg.AdminPrefix}
+	} else {
+		normalized := make([]string, 0, len(cfg.AdminLiveExcludePatterns))
+		for _, pattern := range cfg.AdminLiveExcludePatterns {
+			trimmed := strings.TrimSpace(pattern)
+			if trimmed == "" {
+				continue
+			}
+			if trimmed == admin.DefaultPrefix && cfg.AdminPrefix != admin.DefaultPrefix {
+				trimmed = cfg.AdminPrefix
+			}
+			normalized = append(normalized, trimmed)
+		}
+		if len(normalized) == 0 {
+			normalized = []string{cfg.AdminPrefix}
+		}
+		cfg.AdminLiveExcludePatterns = normalized
 	}
 	cfg.AdminClusterNodeID = strings.TrimSpace(cfg.AdminClusterNodeID)
 	cfg.AdminClusterToken = strings.TrimSpace(cfg.AdminClusterToken)

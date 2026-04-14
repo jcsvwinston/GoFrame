@@ -47,18 +47,7 @@ func NewDatabaseAdminAuth(sqlDB *sql.DB, session *auth.SessionManager, prefix st
 }
 
 func normalizeAdminPrefix(raw string) string {
-	value := strings.TrimSpace(raw)
-	if value == "" {
-		value = "/admin"
-	}
-	if !strings.HasPrefix(value, "/") {
-		value = "/" + value
-	}
-	value = strings.TrimRight(value, "/")
-	if value == "" {
-		value = "/admin"
-	}
-	return value
+	return NormalizePrefix(raw)
 }
 
 // Authenticate returns an authenticated admin user from server-side session.
@@ -203,11 +192,7 @@ func (a *DatabaseAdminAuth) renderLoginPage(w http.ResponseWriter, status int, n
 	// Inject admin prefix as a <meta> tag to avoid CSP issues with inline scripts.
 	adminPrefix := a.prefix
 	if adminPrefix == "" {
-		adminPrefix = "/admin"
-	}
-	// Ensure prefix starts with /
-	if !strings.HasPrefix(adminPrefix, "/") {
-		adminPrefix = "/" + adminPrefix
+		adminPrefix = DefaultPrefix
 	}
 
 	// Inject <meta name="goframe-admin-prefix" content="..."> immediately

@@ -4,10 +4,13 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { useSearchParams } from 'react-router-dom'
 import { Shield, Sun, Moon } from 'lucide-react'
 
 export default function LoginPage() {
   const { theme, toggleTheme } = useTheme()
+  const [searchParams] = useSearchParams()
+  const next = searchParams.get('next')?.trim() ?? ''
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background to-muted p-4">
@@ -32,6 +35,7 @@ export default function LoginPage() {
         </CardHeader>
         <CardContent>
           <form action={buildAdminPath('/login')} method="POST" className="space-y-4">
+            {next && <input type="hidden" name="next" value={next} />}
             <div className="space-y-2">
               <Label htmlFor="username">Username or Email</Label>
               <Input

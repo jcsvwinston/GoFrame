@@ -1,7 +1,26 @@
 import type { User, Session, Model, Record as AppRecord, AuditLog, RBACPolicy, HealthCheck, SystemMetrics, LiveRequest, FeatureFlag } from '@/types'
 import { buildAdminPath } from '@/config'
 
-async function fetchAPI(path: string, options?: RequestInit) {
+function isRedirectToLogin(response: Response): boolean {
+  const loginPath = buildAdminPath('/login')
+
+  if (response.status === 401) {
+    return true
+  }
+
+  if (!response.redirected || !response.url) {
+    return false
+  }
+
+  try {
+    const redirectedURL = new URL(response.url, window.location.origin)
+    return redirectedURL.pathname === loginPath
+  } catch {
+    return false
+  }
+}
+
+async function fetchAPI<T = unknown>(path: string, options?: RequestInit): Promise<T> {
   const url = buildAdminPath(path)
 
   const response = await fetch(url, {
@@ -13,15 +32,22 @@ async function fetchAPI(path: string, options?: RequestInit) {
     credentials: 'same-origin',
   })
 
-  if (!response.ok) {
-    if (response.status === 401) {
-      window.location.href = buildAdminPath('/login')
-      throw new Error('Unauthorized')
-    }
-    throw new Error(`API Error: ${response.status} ${response.statusText}`)
+  if (isRedirectToLogin(response)) {
+    window.location.href = buildAdminPath('/login')
+    throw new Error('Unauthorized')
   }
 
-  return response.json()
+  if (!response.ok) {
+    const message = await response.text()
+    throw new Error(message || `API Error: ${response.status} ${response.statusText}`)
+  }
+
+  const contentType = response.headers.get('content-type') ?? ''
+  if (!contentType.includes('application/json')) {
+    throw new Error(`Unexpected content type: ${contentType || 'unknown'}`)
+  }
+
+  return response.json() as Promise<T>
 }
 
 export async function login(username: string, password: string): Promise<User> {
@@ -56,12 +82,12 @@ export async function logout(): Promise<void> {
 
 export async function getCurrentUser(): Promise<User | null> {
   try {
-    // Use /api/models as auth check - returns 200 when authenticated
+    // Use /api/models as auth check - returns 200 when authenticated.
     const response = await fetch(buildAdminPath('/api/models'), {
       credentials: 'same-origin',
     })
-    if (!response.ok) return null
-    // Extract username from session info in response
+    if (isRedirectToLogin(response) || !response.ok) return null
+
     return {
       id: 0,
       username: 'admin',
@@ -74,7 +100,16 @@ export async function getCurrentUser(): Promise<User | null> {
 }
 
 export async function getModels(): Promise<Model[]> {
-  return fetchAPI('/api/models')
+  const response = await fetchAPI<{
+    models?: Array<{ name: string; table: string; count?: number }>
+  }>('/api/models')
+
+  return (response.models ?? []).map((model) => ({
+    name: model.name,
+    table: model.table,
+    fields: [],
+    count: model.count,
+  }))
 }
 
 export async function getModelSchema(name: string): Promise<Model> {
@@ -105,42 +140,155 @@ export async function deleteRecord(name: string, id: string): Promise<void> {
 }
 
 export async function getSessions(): Promise<Session[]> {
-  return fetchAPI('/api/sessions')
+  const response = await fetchAPI<{
+    sessions?: Array<{
+      token: string
+      user?: string
+      remote_ip?: string
+      first_seen_at?: string
+      last_seen_at?: string
+    }>
+  }>('/api/sessions')
+
+  return (response.sessions ?? []).map((session) => ({
+    id: session.token,
+    user_id: 0,
+    username: session.user ?? '',
+    ip: session.remote_ip ?? '',
+    user_agent: '',
+    created_at: session.first_seen_at ?? '',
+    last_activity: session.last_seen_at ?? '',
+  }))
 }
 
 export async function getAuditLogs(params?: Record<string, string>): Promise<AuditLog[]> {
   const searchParams = new URLSearchParams(params)
-  return fetchAPI(`/api/audit?${searchParams}`)
+  const response = await fetchAPI<{
+    entries?: Array<{
+      id: number
+      username?: string
+      action: string
+      model_name?: string
+      record_id?: string
+      created_at: string
+    }>
+  }>(`/api/audit?${searchParams}`)
+
+  return (response.entries ?? []).map((entry) => ({
+    id: entry.id,
+    timestamp: entry.created_at,
+    user: entry.username ?? '',
+    action: entry.action,
+    resource: [entry.model_name, entry.record_id].filter(Boolean).join('#'),
+    details: entry.model_name ?? '',
+  }))
 }
 
 export async function getRBACPolicies(): Promise<RBACPolicy[]> {
-  return fetchAPI('/api/rbac/policies')
+  const response = await fetchAPI<{
+    policies?: Array<{ sub: string; obj: string; act: string }>
+  }>('/api/rbac/policies')
+
+  return (response.policies ?? []).map((policy) => ({
+    ptype: 'p',
+    v0: policy.sub,
+    v1: policy.obj,
+    v2: policy.act,
+  }))
 }
 
 export async function createRBACPolicy(policy: Partial<RBACPolicy>): Promise<void> {
   await fetchAPI('/api/rbac/policies', {
     method: 'POST',
-    body: JSON.stringify(policy),
+    body: JSON.stringify({
+      sub: policy.v0,
+      obj: policy.v1,
+      act: policy.v2,
+    }),
   })
 }
 
 export async function deleteRBACPolicy(policy: Partial<RBACPolicy>): Promise<void> {
   await fetchAPI('/api/rbac/policies', {
     method: 'DELETE',
-    body: JSON.stringify(policy),
+    body: JSON.stringify({
+      sub: policy.v0,
+      obj: policy.v1,
+      act: policy.v2,
+    }),
   })
 }
 
 export async function getHealthChecks(): Promise<HealthCheck[]> {
-  return fetchAPI('/api/health')
+  const response = await fetchAPI<{
+    checks?: Array<{ name: string; status: 'healthy' | 'unhealthy' | 'unknown'; message?: string; latency_ms?: number }>
+  }>('/api/health')
+
+  return (response.checks ?? []).map((check) => ({
+    name: check.name,
+    status: check.status,
+    latency: check.latency_ms,
+    error: check.status === 'healthy' ? undefined : check.message,
+  }))
 }
 
 export async function getSystemMetrics(): Promise<SystemMetrics> {
-  return fetchAPI('/api/system/snapshot')
+  const response = await fetchAPI<{
+    goroutines?: { count?: number }
+    memory?: {
+      alloc_bytes?: number
+      heap_alloc_bytes?: number
+      heap_sys_bytes?: number
+      num_gc?: number
+    }
+    process_cpu_load?: number
+    cpu_load?: number
+    databases?: Array<{
+      alias: string
+      open_connections: number
+      in_use: number
+      idle: number
+    }>
+  }>('/api/system/snapshot')
+
+  return {
+    goroutines: response.goroutines?.count ?? 0,
+    memory: {
+      alloc: response.memory?.alloc_bytes ?? 0,
+      total_alloc: response.memory?.heap_alloc_bytes ?? 0,
+      sys: response.memory?.heap_sys_bytes ?? 0,
+      num_gc: response.memory?.num_gc ?? 0,
+    },
+    cpu_usage: response.process_cpu_load ?? response.cpu_load ?? 0,
+    db_pools: (response.databases ?? []).map((database) => ({
+      name: database.alias,
+      open_connections: database.open_connections,
+      in_use: database.in_use,
+      idle: database.idle,
+    })),
+  }
 }
 
 export async function getLiveRequests(): Promise<LiveRequest[]> {
-  return fetchAPI('/api/live/snapshot')
+  const response = await fetchAPI<{
+    requests?: Array<{
+      request_id?: string
+      timestamp: string
+      method: string
+      path: string
+      status: number
+      duration_ms: number
+    }>
+  }>('/api/live/snapshot')
+
+  return (response.requests ?? []).map((request) => ({
+    id: request.request_id ?? `${request.timestamp}-${request.method}-${request.path}`,
+    method: request.method,
+    path: request.path,
+    status: request.status,
+    duration: request.duration_ms,
+    timestamp: request.timestamp,
+  }))
 }
 
 export function getLiveWebSocket(): WebSocket | null {
@@ -154,7 +302,10 @@ export function getLiveWebSocket(): WebSocket | null {
 }
 
 export async function getFeatureFlags(): Promise<FeatureFlag[]> {
-  return fetchAPI('/api/features')
+  const response = await fetchAPI<{
+    flags?: FeatureFlag[]
+  }>('/api/features')
+  return response.flags ?? []
 }
 
 export async function toggleFeatureFlag(name: string, enabled: boolean): Promise<void> {
@@ -165,11 +316,14 @@ export async function toggleFeatureFlag(name: string, enabled: boolean): Promise
 }
 
 export async function exportData(format: 'csv' | 'json' | 'sql', modelName?: string): Promise<string> {
-  const response = await fetchAPI('/api/export', {
+  const response = await fetchAPI<{ url?: string }>('/api/export', {
     method: 'POST',
-    body: JSON.stringify({ format, model: modelName }),
+    body: JSON.stringify({
+      format,
+      models: modelName ? [modelName] : [],
+    }),
   })
-  return response.url
+  return response.url ?? ''
 }
 
 export async function importData(file: File): Promise<void> {

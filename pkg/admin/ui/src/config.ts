@@ -8,6 +8,16 @@
  * and move the GoFrame admin panel to a different path.
  */
 
+function normalizeAdminPrefix(prefix: string): string {
+  const trimmed = prefix.trim()
+  if (!trimmed) {
+    return '/admin'
+  }
+
+  const withLeadingSlash = trimmed.startsWith('/') ? trimmed : `/${trimmed}`
+  return withLeadingSlash.replace(/\/+$/, '') || '/admin'
+}
+
 /**
  * Get the admin panel prefix from the injected <meta> tag.
  * Falls back to '/admin' if not set (backward compatibility).
@@ -16,7 +26,7 @@ export function getAdminPrefix(): string {
   if (typeof document !== 'undefined') {
     const meta = document.querySelector<HTMLMetaElement>('meta[name="goframe-admin-prefix"]')
     if (meta && meta.content) {
-      return meta.content
+      return normalizeAdminPrefix(meta.content)
     }
   }
   return '/admin'

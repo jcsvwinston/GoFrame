@@ -363,9 +363,7 @@ func (a *App) MountAdmin() error {
 	}
 
 	prefix := a.Config.AdminPrefix
-	if prefix == "" {
-		prefix = "/admin"
-	}
+	prefix = admin.NormalizePrefix(prefix)
 
 	a.Router.Mount(prefix, a.Admin.Handler())
 	a.adminMounted = true

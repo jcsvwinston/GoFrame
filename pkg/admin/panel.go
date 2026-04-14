@@ -11,6 +11,7 @@ import (
 	"io/fs"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"os"
 	"sort"
 	"strings"
@@ -132,9 +133,7 @@ type Panel struct {
 
 // NewPanel creates a new admin panel.
 func NewPanel(database *db.DB, registry *model.Registry, logger *slog.Logger, cfg PanelConfig) *Panel {
-	if cfg.Prefix == "" {
-		cfg.Prefix = "/admin"
-	}
+	cfg.Prefix = NormalizePrefix(cfg.Prefix)
 	if cfg.Title == "" {
 		cfg.Title = "GoFrame Admin"
 	}
@@ -372,6 +371,7 @@ func (p *Panel) mountRoutes(r *router.Mux, uiContent fs.FS) {
 	r.Delete("/api/models/{name}/{id}", p.handleDeleteRecord)
 	r.Post("/api/models/{name}/bulk", p.handleBulkAction)
 	r.Get("/api/models/{name}/export", p.handleExportCSV)
+	r.Post("/api/logout", p.handleLogout)
 	r.Get("/api/sessions", p.handleListSessions)
 	r.Get("/api/live/snapshot", p.handleLiveSnapshot)
 	r.Get("/api/live/excludes", p.handleListLiveExcludePatterns)
@@ -383,6 +383,8 @@ func (p *Panel) mountRoutes(r *router.Mux, uiContent fs.FS) {
 	r.Post("/api/system/flags", p.handleCreateSystemFlag)
 	r.Put("/api/system/flags/{name}", p.handleSetSystemFlag)
 	r.Delete("/api/system/flags/{name}", p.handleDeleteSystemFlag)
+	r.Get("/api/features", p.handleListSystemFlags)
+	r.Put("/api/features/{name}", p.handleSetSystemFlag)
 	r.Post("/api/system/jobs/queues/{name}/actions/{action}", p.handleSystemQueueAction)
 
 	// RBAC management endpoints
@@ -460,14 +462,7 @@ func (p *Panel) handleSPA(fsys fs.FS) http.HandlerFunc {
 		}
 
 		// Inject admin prefix as a <meta> tag to avoid CSP issues with inline scripts.
-		adminPrefix := p.config.Prefix
-		if adminPrefix == "" {
-			adminPrefix = "/admin"
-		}
-		// Ensure prefix starts with /
-		if !strings.HasPrefix(adminPrefix, "/") {
-			adminPrefix = "/" + adminPrefix
-		}
+		adminPrefix := NormalizePrefix(p.config.Prefix)
 
 		// Inject <meta name="goframe-admin-prefix" content="..."> immediately
 		// after <head>. This avoids Content-Security-Policy violations that
@@ -490,11 +485,67 @@ func (p *Panel) authMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		user, err := p.config.Auth.Authenticate(r)
 		if err != nil {
-			http.Redirect(w, r, p.config.Prefix+"/login", http.StatusFound)
+			if isAdminAPIRequest(r) {
+				writeErr(w, authErrorToDomain(err))
+				return
+			}
+			http.Redirect(w, r, p.adminLoginURL(r), http.StatusFound)
 			return
 		}
 		ctx := context.WithValue(r.Context(), adminAuthContextKey{}, user)
 		next.ServeHTTP(w, r.WithContext(ctx))
+	})
+}
+
+func isAdminAPIRequest(r *http.Request) bool {
+	if r == nil {
+		return false
+	}
+	path := strings.TrimSpace(r.URL.Path)
+	if strings.HasPrefix(path, "/api/") {
+		return true
+	}
+	if strings.EqualFold(strings.TrimSpace(r.Header.Get("Upgrade")), "websocket") {
+		return true
+	}
+	accept := strings.ToLower(strings.TrimSpace(r.Header.Get("Accept")))
+	return strings.Contains(accept, "application/json")
+}
+
+func (p *Panel) adminLoginURL(r *http.Request) string {
+	loginPath := NormalizePrefix(p.config.Prefix) + "/login"
+	if r == nil || r.URL == nil {
+		return loginPath
+	}
+
+	nextPath := NormalizePrefix(p.config.Prefix) + r.URL.Path
+	if rawQuery := strings.TrimSpace(r.URL.RawQuery); rawQuery != "" {
+		nextPath += "?" + rawQuery
+	}
+
+	query := url.Values{}
+	query.Set("next", nextPath)
+	return loginPath + "?" + query.Encode()
+}
+
+func (p *Panel) handleLogout(w http.ResponseWriter, r *http.Request) {
+	if p == nil || p.config.Session == nil {
+		writeErr(w, fmt.Errorf("admin logout: session manager is not configured"))
+		return
+	}
+	if !sessionContextReady(p.config.Session, r.Context()) {
+		writeErr(w, fmt.Errorf("admin logout: session context is not available"))
+		return
+	}
+
+	if err := p.config.Session.Destroy(r.Context()); err != nil {
+		writeErr(w, fmt.Errorf("admin logout: %w", err))
+		return
+	}
+
+	p.recordAuditEntry(r, AuditEntry{Action: "logout"})
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"logged_out": true,
 	})
 }
 
