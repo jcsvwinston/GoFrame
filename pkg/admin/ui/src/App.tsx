@@ -3,6 +3,7 @@ import { useEffect } from 'react'
 import { useAuth } from '@/stores/authStore'
 import { useTheme } from '@/stores/themeStore'
 import { Toaster } from '@/components/ui/toaster'
+import { getAdminPrefix } from '@/config'
 import LoginPage from '@/features/auth/pages/LoginPage'
 import DashboardLayout from '@/components/layout/DashboardLayout'
 import OverviewPage from '@/features/overview/pages/OverviewPage'
@@ -16,7 +17,7 @@ import AuditLogPage from '@/features/audit/pages/AuditLogPage'
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, isLoading } = useAuth()
-  
+
   if (isLoading) {
     return (
       <div className="flex h-screen items-center justify-center">
@@ -24,11 +25,11 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
       </div>
     )
   }
-  
+
   if (!isAuthenticated) {
     return <Navigate to="/login" replace />
   }
-  
+
   return <>{children}</>
 }
 
@@ -41,8 +42,10 @@ function App() {
     checkAuth()
   }, [checkAuth, initTheme])
 
+  const adminPrefix = getAdminPrefix()
+
   return (
-    <BrowserRouter>
+    <BrowserRouter basename={adminPrefix}>
       <Routes>
         <Route path="/login" element={<LoginPage />} />
         <Route

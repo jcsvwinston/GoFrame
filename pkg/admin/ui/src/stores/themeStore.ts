@@ -7,33 +7,26 @@ interface ThemeState {
 }
 
 export const useTheme = create<ThemeState>((set, get) => ({
-  theme: 'dark',
-  
+  theme: 'light',
+
   initTheme: () => {
-    const savedTheme = localStorage.getItem('theme') as 'dark' | 'light' | null
-    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches
-    const theme = savedTheme || (prefersDark ? 'dark' : 'light')
-    
-    if (theme === 'dark') {
-      document.documentElement.classList.add('dark')
-    } else {
-      document.documentElement.classList.remove('dark')
+    const savedTheme = localStorage.getItem('gf-theme') as 'dark' | 'light' | null
+    if (savedTheme) {
+      set({ theme: savedTheme })
     }
-    
-    set({ theme })
   },
 
   toggleTheme: () => {
     const currentTheme = get().theme
     const newTheme = currentTheme === 'dark' ? 'light' : 'dark'
-    
+
     if (newTheme === 'dark') {
       document.documentElement.classList.add('dark')
     } else {
       document.documentElement.classList.remove('dark')
     }
-    
-    localStorage.setItem('theme', newTheme)
+
+    localStorage.setItem('gf-theme', newTheme)
     set({ theme: newTheme })
   },
 }))

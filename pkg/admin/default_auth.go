@@ -200,6 +200,29 @@ func (a *DatabaseAdminAuth) renderLoginPage(w http.ResponseWriter, status int, n
 		return
 	}
 
+	// Inject admin prefix as a <meta> tag to avoid CSP issues with inline scripts.
+	adminPrefix := a.prefix
+	if adminPrefix == "" {
+		adminPrefix = "/admin"
+	}
+	// Ensure prefix starts with /
+	if !strings.HasPrefix(adminPrefix, "/") {
+		adminPrefix = "/" + adminPrefix
+	}
+
+	// Inject <meta name="goframe-admin-prefix" content="..."> immediately
+	// after <head>. This avoids Content-Security-Policy violations that
+	// occur with inline <script> tags.
+	injection := fmt.Sprintf(`<head><meta name="goframe-admin-prefix" content="%s">`, adminPrefix)
+	contentStr := string(content)
+	if strings.Contains(contentStr, "<head>") {
+		contentStr = strings.Replace(contentStr, "<head>", injection, 1)
+	} else {
+		// If no <head> tag, prepend the meta tag
+		contentStr = injection + "\n" + contentStr
+	}
+	content = []byte(contentStr)
+
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(status)
 	_, _ = w.Write(content)

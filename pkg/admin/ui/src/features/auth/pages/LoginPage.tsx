@@ -1,8 +1,8 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
 import { useAuth } from '@/stores/authStore'
 import { useTheme } from '@/stores/themeStore'
 import { useToast } from '@/components/ui/use-toast'
+import { buildAdminPath } from '@/config'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -10,11 +10,10 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Shield, Sun, Moon, Loader2 } from 'lucide-react'
 
 export default function LoginPage() {
-  const navigate = useNavigate()
   const { login, isLoading } = useAuth()
   const { theme, toggleTheme } = useTheme()
   const { toast } = useToast()
-  
+
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -22,19 +21,21 @@ export default function LoginPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setIsSubmitting(true)
-    
+
     try {
       await login(username, password)
       toast({
         title: 'Login successful',
         description: `Welcome back, ${username}!`,
       })
-      navigate('/', { replace: true })
+      // Full page reload so Go serves the SPA at the configured admin prefix correctly
+      window.location.href = buildAdminPath('/')
     } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown error'
       toast({
         variant: 'destructive',
         title: 'Login failed',
-        description: 'Invalid username or password. Please try again.',
+        description: message,
       })
     } finally {
       setIsSubmitting(false)

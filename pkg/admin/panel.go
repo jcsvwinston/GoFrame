@@ -331,6 +331,12 @@ func (p *Panel) Handler() *router.Mux {
 	fileServer := http.FileServer(http.FS(uiContent))
 	r.Get("/static/{filepath...}", http.StripPrefix("/static", fileServer).ServeHTTP)
 
+	// Serve Vite build assets at /assets/ path (JS, CSS from React build)
+	assetsFS, _ := fs.Sub(uiFS, "ui/dist/assets")
+	assetsServer := http.FileServer(http.FS(assetsFS))
+	r.Get("/assets/{filepath...}", http.StripPrefix("/assets", assetsServer).ServeHTTP)
+	r.Get("/favicon.svg", fileServer.ServeHTTP)
+
 	// Auth middleware if configured
 	if p.config.Auth != nil {
 		loginHandler := p.config.Auth.LoginHandler()
@@ -431,11 +437,50 @@ func (p *Panel) LiveTrafficMiddleware() func(http.Handler) http.Handler {
 
 func (p *Panel) handleSPA(fsys fs.FS) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		// If the request is for a JS/CSS asset, serve it directly
+		if strings.HasSuffix(r.URL.Path, ".js") || strings.HasSuffix(r.URL.Path, ".css") {
+			assetPath := strings.TrimPrefix(r.URL.Path, "/")
+			content, err := fs.ReadFile(fsys, assetPath)
+			if err == nil {
+				if strings.HasSuffix(r.URL.Path, ".js") {
+					w.Header().Set("Content-Type", "application/javascript")
+				} else {
+					w.Header().Set("Content-Type", "text/css")
+				}
+				_, _ = w.Write(content)
+				return
+			}
+		}
+
+		// Otherwise serve index.html for SPA routing
 		content, err := fs.ReadFile(fsys, "index.html")
 		if err != nil {
 			http.Error(w, "admin UI not found", 500)
 			return
 		}
+
+		// Inject admin prefix as a <meta> tag to avoid CSP issues with inline scripts.
+		adminPrefix := p.config.Prefix
+		if adminPrefix == "" {
+			adminPrefix = "/admin"
+		}
+		// Ensure prefix starts with /
+		if !strings.HasPrefix(adminPrefix, "/") {
+			adminPrefix = "/" + adminPrefix
+		}
+
+		// Inject <meta name="goframe-admin-prefix" content="..."> immediately
+		// after <head>. This avoids Content-Security-Policy violations that
+		// occur with inline <script> tags.
+		injection := fmt.Sprintf(`<head><meta name="goframe-admin-prefix" content="%s">`, adminPrefix)
+		contentStr := string(content)
+		if strings.Contains(contentStr, "<head>") {
+			contentStr = strings.Replace(contentStr, "<head>", injection, 1)
+		} else {
+			// If no <head> tag, prepend the meta tag
+			contentStr = injection + "\n" + contentStr
+		}
+		content = []byte(contentStr)
 
 		http.ServeContent(w, r, "index.html", time.Time{}, bytes.NewReader(content))
 	}
