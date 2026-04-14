@@ -323,7 +323,7 @@ export default function RecordTable({ modelName, schema, dbAlias }: Props) {
         {!schema.read_only && (
           <Button size="sm" onClick={handleCreate} className="gap-1.5">
             <Plus className="h-3.5 w-3.5" />
-            New {schema.name}
+            New Record
           </Button>
         )}
       </div>
@@ -440,7 +440,7 @@ export default function RecordTable({ modelName, schema, dbAlias }: Props) {
             {!schema.read_only && !search && activeFilterCount === 0 && (
               <Button size="sm" variant="outline" onClick={handleCreate} className="mt-3 gap-1.5">
                 <Plus className="h-3.5 w-3.5" />
-                Create first {schema.name}
+                New Record
               </Button>
             )}
           </div>

@@ -364,6 +364,7 @@ func (p *Panel) mountRoutes(r *router.Mux, uiContent fs.FS) {
 	// API routes
 	r.Get("/api/models", p.handleListModels)
 	r.Get("/api/models/{name}/schema", p.handleGetSchema)
+	r.Put("/api/models/{name}/schema/fields", p.handleUpdateFieldMeta)
 	r.Get("/api/models/{name}", p.handleListRecords)
 	r.Post("/api/models/{name}", p.handleCreateRecord)
 	r.Get("/api/models/{name}/{id}", p.handleGetRecord)

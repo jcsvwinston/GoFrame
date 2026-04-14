@@ -123,6 +123,26 @@ export async function getModelSchema(name: string): Promise<ModelSchema> {
   return fetchAPI<ModelSchema>(`/api/models/${name}/schema`)
 }
 
+export interface FieldMetaUpdate {
+  is_list?: boolean
+  is_search?: boolean
+  is_filter?: boolean
+  is_excluded?: boolean
+  is_readonly?: boolean
+  label?: string
+  html_type?: string
+}
+
+export async function updateFieldsMeta(
+  modelName: string,
+  fields: { [fieldName: string]: FieldMetaUpdate },
+): Promise<void> {
+  await fetchAPI(`/api/models/${modelName}/schema/fields`, {
+    method: 'PUT',
+    body: JSON.stringify({ fields }),
+  })
+}
+
 export async function getRecordsPaginated(
   name: string,
   params: { page?: number; page_size?: number; search?: string; order_by?: string; db_alias?: string; filters?: Record<string, string> },

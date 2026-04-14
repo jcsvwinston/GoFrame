@@ -6,7 +6,8 @@ import * as api from '@/services/api'
 import type { ModelSummary, ModelSchema, RuntimeInfo } from '@/types'
 import ModelSidebar from '../components/ModelSidebar'
 import RecordTable from '../components/RecordTable'
-import { Database, Loader2, Server } from 'lucide-react'
+import FieldConfigPanel from '../components/FieldConfigPanel'
+import { Database, Loader2, Server, Settings2 } from 'lucide-react'
 
 export default function DataStudioPage() {
   const { toast } = useToast()
@@ -19,6 +20,7 @@ export default function DataStudioPage() {
   const [schema, setSchema] = useState<ModelSchema | null>(null)
   const [loadingSchema, setLoadingSchema] = useState(false)
   const [dbAlias, setDbAlias] = useState<string | undefined>(undefined)
+  const [fieldConfigOpen, setFieldConfigOpen] = useState(false)
 
   // Load models on mount
   useEffect(() => {
@@ -41,23 +43,22 @@ export default function DataStudioPage() {
   }, [])
 
   // Load schema when model is selected
+  const loadSchema = async (name: string) => {
+    setLoadingSchema(true)
+    try {
+      const s = await api.getModelSchema(name)
+      setSchema(s)
+    } catch (err: any) {
+      toast({ variant: 'destructive', title: 'Failed to load schema', description: err.message })
+      setSchema(null)
+    } finally {
+      setLoadingSchema(false)
+    }
+  }
+
   useEffect(() => {
     if (!selectedModel) { setSchema(null); return }
-    let cancelled = false
-    const load = async () => {
-      setLoadingSchema(true)
-      try {
-        const s = await api.getModelSchema(selectedModel)
-        if (!cancelled) setSchema(s)
-      } catch (err: any) {
-        toast({ variant: 'destructive', title: 'Failed to load schema', description: err.message })
-        if (!cancelled) setSchema(null)
-      } finally {
-        if (!cancelled) setLoadingSchema(false)
-      }
-    }
-    load()
-    return () => { cancelled = true }
+    loadSchema(selectedModel)
   }, [selectedModel])
 
   // Databases the selected model lives on
@@ -80,6 +81,11 @@ export default function DataStudioPage() {
   const handleSelectModel = (name: string, alias?: string) => {
     setSelectedModel(name)
     setDbAlias(alias)
+  }
+
+  const handleFieldConfigSaved = () => {
+    toast({ title: 'Field configuration updated' })
+    if (selectedModel) loadSchema(selectedModel)
   }
 
   return (
@@ -136,62 +142,81 @@ export default function DataStudioPage() {
             </div>
           ) : schema ? (
             <>
-              {/* Model header + database selector */}
+              {/* Model header + database selector + field config */}
               <div className="flex items-start justify-between gap-4 pb-3 mb-0">
-                <div className="flex items-center gap-2">
-                  {schema.icon && <span className="text-xl">{schema.icon}</span>}
-                  <div>
-                    <h2 className="text-lg font-semibold leading-tight">{schema.plural || schema.name}</h2>
-                    <p className="text-xs text-muted-foreground">
-                      {schema.table}
-                      {schema.read_only && ' (read-only)'}
-                    </p>
-                  </div>
+                <div>
+                  <h2 className="text-lg font-semibold leading-tight">{schema.plural || schema.name}</h2>
+                  <p className="text-xs text-muted-foreground">
+                    {schema.table}
+                    {schema.read_only && ' (read-only)'}
+                  </p>
                 </div>
 
-                {/* Multi-database selector */}
-                {modelDbs.length > 1 && (
-                  <div className="flex items-center gap-1.5 flex-shrink-0">
-                    <Server className="h-3.5 w-3.5 text-muted-foreground" />
-                    <div className="flex gap-1">
-                      {modelDbs.map((db) => {
-                        const isActive = dbAlias === db.alias || (!dbAlias && db.isDefault)
-                        return (
-                          <Button
-                            key={db.alias}
-                            variant={isActive ? 'default' : 'outline'}
-                            size="sm"
-                            className="h-7 text-xs gap-1.5"
-                            onClick={() => setDbAlias(db.alias)}
-                          >
-                            {db.alias}
-                            <span className="opacity-70 text-[10px]">{db.engine}</span>
-                            {db.countKnown && (
-                              <Badge variant={isActive ? 'secondary' : 'outline'} className="text-[9px] px-1 py-0">
-                                {db.count.toLocaleString()}
-                              </Badge>
-                            )}
-                          </Button>
-                        )
-                      })}
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  {/* Multi-database selector */}
+                  {modelDbs.length > 1 && (
+                    <div className="flex items-center gap-1.5">
+                      <Server className="h-3.5 w-3.5 text-muted-foreground" />
+                      <div className="flex gap-1">
+                        {modelDbs.map((db) => {
+                          const isActive = dbAlias === db.alias || (!dbAlias && db.isDefault)
+                          return (
+                            <Button
+                              key={db.alias}
+                              variant={isActive ? 'default' : 'outline'}
+                              size="sm"
+                              className="h-7 text-xs gap-1.5"
+                              onClick={() => setDbAlias(db.alias)}
+                            >
+                              {db.alias}
+                              <span className="opacity-70 text-[10px]">{db.engine}</span>
+                              {db.countKnown && (
+                                <Badge variant={isActive ? 'secondary' : 'outline'} className="text-[9px] px-1 py-0">
+                                  {db.count.toLocaleString()}
+                                </Badge>
+                              )}
+                            </Button>
+                          )
+                        })}
+                      </div>
                     </div>
-                  </div>
-                )}
+                  )}
 
-                {/* Single-database indicator */}
-                {modelDbs.length === 1 && (
-                  <span className="flex items-center gap-1 text-xs text-muted-foreground flex-shrink-0">
-                    <Server className="h-3 w-3" />
-                    {modelDbs[0].alias}
-                    <span className="opacity-60">({modelDbs[0].engine})</span>
-                  </span>
-                )}
+                  {/* Single-database indicator */}
+                  {modelDbs.length === 1 && (
+                    <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                      <Server className="h-3 w-3" />
+                      {modelDbs[0].alias}
+                      <span className="opacity-60">({modelDbs[0].engine})</span>
+                    </span>
+                  )}
+
+                  {/* Field config button */}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-7 text-xs gap-1.5"
+                    onClick={() => setFieldConfigOpen(true)}
+                    title="Configure fields (list, search, filter...)"
+                  >
+                    <Settings2 className="h-3.5 w-3.5" />
+                    Fields
+                  </Button>
+                </div>
               </div>
 
               <RecordTable
                 modelName={selectedModel}
                 schema={schema}
                 dbAlias={dbAlias}
+              />
+
+              {/* Field Configuration Dialog */}
+              <FieldConfigPanel
+                open={fieldConfigOpen}
+                onClose={() => setFieldConfigOpen(false)}
+                schema={schema}
+                onSaved={handleFieldConfigSaved}
               />
             </>
           ) : (

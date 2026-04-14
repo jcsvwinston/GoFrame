@@ -147,6 +147,105 @@ func (r *Registry) applyConfig(meta *ModelMeta, cfg ModelConfig) {
 	}
 }
 
+// FieldMetaUpdate holds the mutable field properties that can be changed at runtime
+// via the admin panel (like Django's ModelAdmin configuration).
+type FieldMetaUpdate struct {
+	IsList     *bool   `json:"is_list,omitempty"`
+	IsSearch   *bool   `json:"is_search,omitempty"`
+	IsFilter   *bool   `json:"is_filter,omitempty"`
+	IsExcluded *bool   `json:"is_excluded,omitempty"`
+	IsReadOnly *bool   `json:"is_readonly,omitempty"`
+	Label      *string `json:"label,omitempty"`
+	HTMLType   *string `json:"html_type,omitempty"`
+}
+
+// UpdateFieldMeta updates mutable properties of a field at runtime.
+// Returns an error if the model or field is not found.
+func (r *Registry) UpdateFieldMeta(modelName, fieldName string, update FieldMetaUpdate) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	meta, ok := r.models[modelName]
+	if !ok {
+		return fmt.Errorf("model %q not found", modelName)
+	}
+
+	for i := range meta.Fields {
+		if meta.Fields[i].Name == fieldName || meta.Fields[i].Column == fieldName {
+			f := &meta.Fields[i]
+			if update.IsList != nil {
+				f.IsList = *update.IsList
+			}
+			if update.IsSearch != nil {
+				f.IsSearch = *update.IsSearch
+			}
+			if update.IsFilter != nil {
+				f.IsFilter = *update.IsFilter
+			}
+			if update.IsExcluded != nil {
+				f.IsExcluded = *update.IsExcluded
+			}
+			if update.IsReadOnly != nil {
+				f.IsReadOnly = *update.IsReadOnly
+			}
+			if update.Label != nil && *update.Label != "" {
+				f.Label = *update.Label
+			}
+			if update.HTMLType != nil && *update.HTMLType != "" {
+				f.HTMLType = *update.HTMLType
+			}
+			return nil
+		}
+	}
+
+	return fmt.Errorf("field %q not found in model %q", fieldName, modelName)
+}
+
+// BulkUpdateFieldMeta updates multiple fields at once for a model.
+func (r *Registry) BulkUpdateFieldMeta(modelName string, updates map[string]FieldMetaUpdate) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	meta, ok := r.models[modelName]
+	if !ok {
+		return fmt.Errorf("model %q not found", modelName)
+	}
+
+	for i := range meta.Fields {
+		f := &meta.Fields[i]
+		upd, found := updates[f.Name]
+		if !found {
+			upd, found = updates[f.Column]
+		}
+		if !found {
+			continue
+		}
+		if upd.IsList != nil {
+			f.IsList = *upd.IsList
+		}
+		if upd.IsSearch != nil {
+			f.IsSearch = *upd.IsSearch
+		}
+		if upd.IsFilter != nil {
+			f.IsFilter = *upd.IsFilter
+		}
+		if upd.IsExcluded != nil {
+			f.IsExcluded = *upd.IsExcluded
+		}
+		if upd.IsReadOnly != nil {
+			f.IsReadOnly = *upd.IsReadOnly
+		}
+		if upd.Label != nil && *upd.Label != "" {
+			f.Label = *upd.Label
+		}
+		if upd.HTMLType != nil && *upd.HTMLType != "" {
+			f.HTMLType = *upd.HTMLType
+		}
+	}
+
+	return nil
+}
+
 func toSet(slice []string) map[string]bool {
 	if len(slice) == 0 {
 		return nil

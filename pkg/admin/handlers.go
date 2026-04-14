@@ -347,6 +347,42 @@ func (p *Panel) handleGetSchema(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// handleUpdateFieldMeta updates field metadata properties at runtime (like Django ModelAdmin).
+func (p *Panel) handleUpdateFieldMeta(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("name")
+	meta, ok := p.registry.Get(name)
+	if !ok {
+		writeErr(w, gferrors.NotFound("model", name))
+		return
+	}
+	if !p.authorizeAction(w, r, meta.Name, "update_schema") {
+		return
+	}
+
+	var payload struct {
+		Fields map[string]model.FieldMetaUpdate `json:"fields"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+		writeErr(w, gferrors.BadRequest("invalid JSON: "+err.Error()))
+		return
+	}
+
+	if len(payload.Fields) == 0 {
+		writeErr(w, gferrors.BadRequest("no field updates provided"))
+		return
+	}
+
+	if err := p.registry.BulkUpdateFieldMeta(name, payload.Fields); err != nil {
+		writeErr(w, gferrors.BadRequest(err.Error()))
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"ok":      true,
+		"message": fmt.Sprintf("Updated %d field(s) for %s", len(payload.Fields), name),
+	})
+}
+
 // handleListRecords returns a paginated list of records for a model.
 func (p *Panel) handleListRecords(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")

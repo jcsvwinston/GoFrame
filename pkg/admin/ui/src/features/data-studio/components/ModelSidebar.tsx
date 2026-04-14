@@ -2,7 +2,7 @@ import { useState, useMemo } from 'react'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import type { ModelSummary, RuntimeInfo } from '@/types'
-import { Search, ChevronDown, ChevronRight, Server, Table2, Box } from 'lucide-react'
+import { Search, ChevronDown, ChevronRight, Table2, Box } from 'lucide-react'
 
 interface Props {
   models: ModelSummary[]
@@ -13,45 +13,6 @@ interface Props {
 }
 
 type ViewMode = 'all' | 'engine' | 'database'
-
-/** Map known icon strings to lucide icons or emoji */
-const ICON_MAP: Record<string, string> = {
-  document: '\u{1F4C4}', file: '\u{1F4C4}', article: '\u{1F4F0}',
-  user: '\u{1F464}', users: '\u{1F465}', person: '\u{1F464}',
-  settings: '\u{2699}\u{FE0F}', config: '\u{2699}\u{FE0F}',
-  mail: '\u{2709}\u{FE0F}', email: '\u{2709}\u{FE0F}',
-  cart: '\u{1F6D2}', order: '\u{1F4E6}', product: '\u{1F4E6}',
-  tag: '\u{1F3F7}\u{FE0F}', category: '\u{1F4C1}',
-  image: '\u{1F5BC}\u{FE0F}', photo: '\u{1F4F7}',
-  comment: '\u{1F4AC}', message: '\u{1F4AC}',
-  star: '\u{2B50}', heart: '\u{2764}\u{FE0F}',
-  lock: '\u{1F512}', key: '\u{1F511}',
-  calendar: '\u{1F4C5}', clock: '\u{1F552}',
-  home: '\u{1F3E0}', globe: '\u{1F310}',
-}
-
-function resolveIcon(raw: string): string | null {
-  if (!raw) return null
-  // Already an emoji (has codepoint > 255)
-  if ([...raw].some((ch) => ch.codePointAt(0)! > 255)) return raw
-  const mapped = ICON_MAP[raw.toLowerCase().trim()]
-  return mapped ?? null
-}
-
-/** Get all databases a model lives on, with engine info */
-function modelDatabases(model: ModelSummary, runtime: RuntimeInfo | null) {
-  if (!model.databases?.length || !runtime?.databases) return []
-  return model.databases.map((alias) => {
-    const db = runtime.databases.find((d) => d.alias === alias)
-    return {
-      alias,
-      engine: db?.dialect || db?.engine || 'unknown',
-      isDefault: db?.is_default ?? false,
-      count: model.counts?.[alias] ?? -1,
-      countKnown: model.count_known && model.counts?.[alias] !== undefined,
-    }
-  })
-}
 
 export default function ModelSidebar({ models, runtime, selectedModel, selectedDbAlias, onSelectModel }: Props) {
   const [search, setSearch] = useState('')
@@ -115,16 +76,8 @@ export default function ModelSidebar({ models, runtime, selectedModel, selectedD
     }
   }
 
-  const renderModelIcon = (m: ModelSummary, isActive: boolean) => {
-    const emoji = resolveIcon(m.icon)
-    if (emoji) return <span className="text-base flex-shrink-0">{emoji}</span>
-    return <Table2 className={`h-3.5 w-3.5 flex-shrink-0 ${isActive ? 'opacity-80' : 'opacity-40'}`} />
-  }
-
   const renderModelItem = (m: ModelSummary, contextDbAlias?: string) => {
     const isActive = selectedModel === m.name && (contextDbAlias === undefined ? true : selectedDbAlias === contextDbAlias)
-    const dbs = modelDatabases(m, runtime)
-    const showDbBadges = multiDb && viewMode === 'all' && dbs.length > 0
 
     return (
       <button
@@ -136,43 +89,13 @@ export default function ModelSidebar({ models, runtime, selectedModel, selectedD
             : 'hover:bg-muted text-foreground'
         }`}
       >
-        <span className="flex items-center justify-between gap-2">
-          <span className="flex items-center gap-2 min-w-0">
-            {renderModelIcon(m, isActive)}
-            <span className="truncate font-medium">{m.plural || m.name}</span>
-          </span>
-          <span className="flex items-center gap-1.5 flex-shrink-0">
-            {contextDbAlias && m.counts?.[contextDbAlias] !== undefined ? (
-              <Badge variant={isActive ? 'secondary' : 'outline'} className="text-[10px] tabular-nums">
-                {m.counts[contextDbAlias].toLocaleString()}
-              </Badge>
-            ) : m.count_known ? (
-              <Badge variant={isActive ? 'secondary' : 'outline'} className="text-[10px] tabular-nums">
-                {m.count.toLocaleString()}
-              </Badge>
-            ) : null}
-          </span>
+        <span className="flex items-center gap-2 min-w-0">
+          <Table2 className={`h-3.5 w-3.5 flex-shrink-0 ${isActive ? 'opacity-80' : 'opacity-40'}`} />
+          <span className="truncate font-medium">{m.plural || m.name}</span>
         </span>
-        {showDbBadges && (
-          <span className="flex items-center gap-1 mt-1 ml-5">
-            {dbs.map((db) => (
-              <span
-                key={db.alias}
-                className={`inline-flex items-center gap-0.5 px-1.5 py-0 rounded text-[9px] leading-4 ${
-                  isActive ? 'bg-primary-foreground/20 text-primary-foreground' : 'bg-muted text-muted-foreground'
-                }`}
-              >
-                <Server className="h-2 w-2" />
-                {db.alias}
-              </span>
-            ))}
-          </span>
-        )}
-        {!showDbBadges && (
-          <span className={`block text-[10px] ml-5 mt-0.5 ${isActive ? 'text-primary-foreground/70' : 'text-muted-foreground'}`}>
-            {m.table}
-          </span>
-        )}
+        <span className={`block text-[10px] ml-5.5 mt-0.5 ${isActive ? 'text-primary-foreground/70' : 'text-muted-foreground'}`}>
+          {m.table}
+        </span>
       </button>
     )
   }
@@ -311,12 +234,6 @@ export default function ModelSidebar({ models, runtime, selectedModel, selectedD
             <span>Models</span>
             <span>{runtime.models_total}</span>
           </div>
-          {runtime.counts_available && runtime.records_total >= 0 && (
-            <div className="flex justify-between">
-              <span>Records</span>
-              <span>{runtime.records_total.toLocaleString()}</span>
-            </div>
-          )}
           {runtime.databases.length > 0 && (
             <div className="flex justify-between">
               <span>Databases</span>
