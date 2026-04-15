@@ -1,7 +1,7 @@
 # Admin UI Documentation
 
 Reference date: 2026-04-13.
-Status: Current (v0.7.x - React-based UI).
+Status: Current (pre-v1 - React-based UI).
 
 ## Overview
 

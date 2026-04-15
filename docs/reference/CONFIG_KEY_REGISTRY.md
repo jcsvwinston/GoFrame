@@ -169,7 +169,7 @@ See `docs/STORAGE_GUIDE.md` for full examples.
 | `storage.local.path` | `storage/` | `stable` | Local filesystem root (dev only). |
 | `storage.cleanup.enabled` | `false` | `stable` | Enable automatic temp file cleanup. |
 | `storage.cleanup.interval` | `1h` | `stable` | Cleanup run frequency. |
-| `storage.cleanup.prefix` | `tmp/` | `stable` | Prefix for temporary objects. |
+| `storage.cleanup.prefix` | `_tmp/` | `stable` | Prefix for temporary objects. |
 | `storage.cleanup.max_age` | `24h` | `stable` | Max age before temp files are purged. |
 
 ## Contract Rules

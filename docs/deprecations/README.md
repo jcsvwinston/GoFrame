@@ -12,4 +12,4 @@ Use template:
 
 Policy reference:
 
-- `docs/DEPRECATION_TEMPLATE.md`
+- `docs/governance/DEPRECATION_TEMPLATE.md`

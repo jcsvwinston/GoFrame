@@ -13,7 +13,7 @@ This file is the canonical entrypoint for GoFrame documentation.
 | [guides/DETAILED_TUTORIAL.md](guides/DETAILED_TUTORIAL.md) | Step-by-step walkthrough building a complete app |
 | [reference/DEVELOPER_MANUAL.md](reference/DEVELOPER_MANUAL.md) | Primary developer reference (core concepts + quick reference) |
 | [reference/PROJECT_LAYOUT.md](reference/PROJECT_LAYOUT.md) | Standard directory structure and folder responsibilities |
-| [../SPEC.md](../SPEC.md) | Technical implementation baseline (v0.7.x) |
+| [../SPEC.md](../SPEC.md) | Technical implementation baseline (pre-v1) |
 | [../README.md](../README.md) | Project landing page with feature overview |
 
 ## Feature Guides
@@ -35,7 +35,7 @@ This file is the canonical entrypoint for GoFrame documentation.
 
 | Document | Purpose |
 |----------|---------|
-| [ADMIN_UI.md](ADMIN_UI.md) | Complete Admin UI documentation (React-based, v0.7.x) |
+| [ADMIN_UI.md](ADMIN_UI.md) | Complete Admin UI documentation (React-based, pre-v1) |
 | [ADMIN_CLUSTER_LAB.md](ADMIN_CLUSTER_LAB.md) | Local multi-node cluster lab (2 nodes + Redis + LB) |
 
 ### Operations

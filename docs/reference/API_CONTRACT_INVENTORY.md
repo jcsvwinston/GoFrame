@@ -13,9 +13,8 @@ This file defines lifecycle tags for GoFrame public API surfaces and documents e
 
 Policy references:
 
-- `docs/ENTERPRISE_LONG_TERM_ROADMAP.md`
-- `docs/VERSIONING.md`
-- `docs/COMPATIBILITY_SLO.md`
+- `docs/governance/ENTERPRISE_LONG_TERM_ROADMAP.md`
+- `docs/governance/COMPATIBILITY_SLO.md`
 
 ## Public Package Inventory
 
@@ -52,7 +51,7 @@ These surfaces are intentionally outside compatibility guarantees:
 - `internal/*` packages and all non-exported implementation details.
 - Frontend implementation details under `pkg/admin/ui/*` (except mounted admin route behavior).
 - Test helper APIs and environment variables used only by tests/CI harnesses.
-- Generated scaffold internals beyond documented structure expectations (`docs/PROJECT_LAYOUT.md`).
+- Generated scaffold internals beyond documented structure expectations (`docs/reference/PROJECT_LAYOUT.md`).
 
 ## Contract Review Rule
 

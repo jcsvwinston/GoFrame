@@ -147,7 +147,7 @@ myapp/
   goframe.yaml
 ```
 
-Reference: [docs/PROJECT_LAYOUT.md](docs/PROJECT_LAYOUT.md)
+Reference: [docs/reference/PROJECT_LAYOUT.md](docs/reference/PROJECT_LAYOUT.md)
 
 ## Strategic Direction
 
@@ -155,9 +155,8 @@ GoFrame is actively developed and stable for pre-1.0 usage (`v0.x`).
 
 Canonical strategy and governance docs:
 
-- [docs/ENTERPRISE_LONG_TERM_ROADMAP.md](docs/ENTERPRISE_LONG_TERM_ROADMAP.md)
-- [docs/COMPATIBILITY_SLO.md](docs/COMPATIBILITY_SLO.md)
-- [docs/VERSIONING.md](docs/VERSIONING.md)
+- [docs/governance/ENTERPRISE_LONG_TERM_ROADMAP.md](docs/governance/ENTERPRISE_LONG_TERM_ROADMAP.md)
+- [docs/governance/COMPATIBILITY_SLO.md](docs/governance/COMPATIBILITY_SLO.md)
 
 ## Documentation
 
@@ -165,22 +164,22 @@ Start here:
 
 - [docs/INDEX.md](docs/INDEX.md)
 - [docs/QUICKSTART.md](docs/QUICKSTART.md)
-- [docs/DEVELOPER_MANUAL.md](docs/DEVELOPER_MANUAL.md)
-- [docs/PROJECT_LAYOUT.md](docs/PROJECT_LAYOUT.md)
+- [docs/reference/DEVELOPER_MANUAL.md](docs/reference/DEVELOPER_MANUAL.md)
+- [docs/reference/PROJECT_LAYOUT.md](docs/reference/PROJECT_LAYOUT.md)
 - [SPEC.md](SPEC.md)
-- [docs/MODELING_MULTI_DATABASE.md](docs/MODELING_MULTI_DATABASE.md)
-- [docs/API_CONTRACT_INVENTORY.md](docs/API_CONTRACT_INVENTORY.md)
-- [docs/CLI_CONTRACT_MATRIX.md](docs/CLI_CONTRACT_MATRIX.md)
-- [docs/CONFIG_KEY_REGISTRY.md](docs/CONFIG_KEY_REGISTRY.md)
-- [docs/PLUGIN_SDK.md](docs/PLUGIN_SDK.md)
+- [docs/guides/MODELING_MULTI_DATABASE.md](docs/guides/MODELING_MULTI_DATABASE.md)
+- [docs/reference/API_CONTRACT_INVENTORY.md](docs/reference/API_CONTRACT_INVENTORY.md)
+- [docs/reference/CLI_CONTRACT_MATRIX.md](docs/reference/CLI_CONTRACT_MATRIX.md)
+- [docs/reference/CONFIG_KEY_REGISTRY.md](docs/reference/CONFIG_KEY_REGISTRY.md)
+- [docs/reference/PLUGIN_SDK.md](docs/reference/PLUGIN_SDK.md)
 
 Operations and release docs:
 
-- [docs/CI_MATRIX.md](docs/CI_MATRIX.md)
-- [docs/RELEASE_CHECKLIST.md](docs/RELEASE_CHECKLIST.md)
-- [docs/DEPRECATION_TEMPLATE.md](docs/DEPRECATION_TEMPLATE.md)
-- [docs/MIGRATION_ASSISTANT_CONVENTIONS.md](docs/MIGRATION_ASSISTANT_CONVENTIONS.md)
-- [docs/GO_VERSION_POLICY.md](docs/GO_VERSION_POLICY.md)
+- [docs/governance/CI_MATRIX.md](docs/governance/CI_MATRIX.md)
+- [docs/governance/RELEASE_CHECKLIST.md](docs/governance/RELEASE_CHECKLIST.md)
+- [docs/governance/DEPRECATION_TEMPLATE.md](docs/governance/DEPRECATION_TEMPLATE.md)
+- [docs/governance/MIGRATION_ASSISTANT_CONVENTIONS.md](docs/governance/MIGRATION_ASSISTANT_CONVENTIONS.md)
+- [docs/governance/ENTERPRISE_LONG_TERM_ROADMAP.md](docs/governance/ENTERPRISE_LONG_TERM_ROADMAP.md)
 - [CHANGELOG.md](CHANGELOG.md)
 
 ## Compatibility

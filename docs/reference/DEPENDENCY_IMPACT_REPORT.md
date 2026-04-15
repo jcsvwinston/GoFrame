@@ -1,7 +1,7 @@
 # Dependency Impact Report
 
 Reference date: 2026-04-13.
-Status: Initial baseline (v0.7.x).
+Status: Initial pre-v1 baseline.
 
 This document tracks the critical third-party dependencies that form the stable
 surface of GoFrame and records swap drills to prove adapter boundaries work.

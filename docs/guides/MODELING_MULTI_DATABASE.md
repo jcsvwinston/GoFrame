@@ -227,7 +227,7 @@ When onboarding a new market database (licensed or open-source), use this checkl
    - `internal/cli/sql_matrix_integration_test.go`
 7. Docs update:
    - `README.md`
-   - `docs/CI_MATRIX.md`
+   - `docs/governance/CI_MATRIX.md`
    - this guide
 
 This keeps support explicit, testable, and maintainable across v1.x releases.

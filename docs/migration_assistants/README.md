@@ -12,4 +12,4 @@ Use template:
 
 Conventions reference:
 
-- `docs/MIGRATION_ASSISTANT_CONVENTIONS.md`
+- `docs/governance/MIGRATION_ASSISTANT_CONVENTIONS.md`

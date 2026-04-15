@@ -1,8 +1,8 @@
 # Plugin SDK v1
 
 Reference date: 2026-04-05.
-Status: Current (v0.6.x baseline).
-Target baseline: GoFrame `v0.6.x`.
+Status: Current (pre-v1 baseline).
+Target baseline: GoFrame pre-v1.
 
 ## Goal
 
@@ -21,7 +21,7 @@ Examples of target domains:
 - explicit request/response contracts
 - deterministic error and retry semantics
 - secure defaults (timeouts, allowlists, redaction)
-- backward compatibility across `v0.6.x`
+- backward compatibility across the current pre-v1 line
 
 ## Capability Model
 
@@ -56,7 +56,7 @@ Compatibility naming (legacy mail path):
 
 - `goframe-mail-<driver>`
 
-In `v0.6.x`, GoFrame supports both forms and maps legacy mail plugins to capability `mail.send`.
+In the current pre-v1 line, GoFrame supports both forms and maps legacy mail plugins to capability `mail.send`.
 
 ## Request Envelope (External)
 
@@ -239,9 +239,9 @@ Reference guide:
 
 - `docs/PLUGIN_EXAMPLES.md`
 
-## Compatibility Commitments (`v0.6.x`)
+## Compatibility Commitments (pre-v1)
 
-- `version: v1` envelope fields remain backward compatible in all `v0.6.x` releases
+- `version: v1` envelope fields remain backward compatible throughout the current pre-v1 line
 - legacy mail executable pattern (`goframe-mail-<driver>`) remains supported
 - breaking contract changes require a new envelope version (`v2`)
 

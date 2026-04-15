@@ -127,4 +127,4 @@ New CLI commands must:
 1. Follow the flat command-spec dispatch pattern in `internal/cli/root.go`.
 2. Support global output flags (`--output`, `--color`, `--symbols`, `--json`).
 3. Include production guardrails for destructive operations.
-4. Be documented in `docs/CLI_CONTRACT_MATRIX.md` with lifecycle tags.
+4. Be documented in `docs/reference/CLI_CONTRACT_MATRIX.md` with lifecycle tags.

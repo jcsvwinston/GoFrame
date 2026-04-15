@@ -32,21 +32,21 @@ Related documents:
 
 - `docs/QUICKSTART.md`
 - `docs/DETAILED_TUTORIAL.md`
-- `docs/PROJECT_LAYOUT.md`
-- `docs/MODELING_MULTI_DATABASE.md`
-- `docs/RELEASE_CHECKLIST.md`
+- `docs/reference/PROJECT_LAYOUT.md`
+- `docs/guides/MODELING_MULTI_DATABASE.md`
+- `docs/governance/RELEASE_CHECKLIST.md`
 
 ## 3. Requirements
 
 ## 3.1 Runtime and toolchain
 
-- Minimum supported Go version: `1.24`
+- Minimum supported Go version: `1.25`
 - Recommended Go for development/release: `1.26.x`
 - Node.js: required for admin UI syntax checks in CI/rehearsal
 
-Full policy:
+Current policy reference:
 
-- `docs/GO_VERSION_POLICY.md`
+- `docs/governance/ENTERPRISE_LONG_TERM_ROADMAP.md`
 
 ## 3.2 Database
 
@@ -65,7 +65,7 @@ Current exploratory note:
 
 CI matrix profiles and local reproduction:
 
-- `docs/CI_MATRIX.md`
+- `docs/governance/CI_MATRIX.md`
 - repeated exploratory stability drill helper: `scripts/ci/run_exploratory_stability.sh`
 
 ## 4. CLI Installation
@@ -192,7 +192,7 @@ Key methods:
 
 Configuration is managed via `goframe.yaml` with environment variable overrides (`GOFRAME_`).
 
-For the complete key reference, see `docs/CONFIG_KEY_REGISTRY.md`.
+For the complete key reference, see `docs/reference/CONFIG_KEY_REGISTRY.md`.
 
 ## 8. Models
 
@@ -655,14 +655,14 @@ go run ./cmd/worker
 - documentation map: `docs/INDEX.md`
 - quick onboarding: `docs/QUICKSTART.md`
 - step-by-step tutorial: `docs/DETAILED_TUTORIAL.md`
-- recommended layout: `docs/PROJECT_LAYOUT.md`
-- CLI best practices: `docs/CLI_BEST_PRACTICES.md`
-- API contract inventory: `docs/API_CONTRACT_INVENTORY.md`
-- CLI contract matrix: `docs/CLI_CONTRACT_MATRIX.md`
-- config key registry: `docs/CONFIG_KEY_REGISTRY.md`
-- email providers and plugins: `docs/MAIL_PROVIDERS.md`
-- enterprise and long-term roadmap: `docs/ENTERPRISE_LONG_TERM_ROADMAP.md`
-- compatibility SLO policy: `docs/COMPATIBILITY_SLO.md`
-- release checklist: `docs/RELEASE_CHECKLIST.md`
-- deprecation template and policy: `docs/DEPRECATION_TEMPLATE.md`
-- migration assistant conventions: `docs/MIGRATION_ASSISTANT_CONVENTIONS.md`
+- recommended layout: `docs/reference/PROJECT_LAYOUT.md`
+- CLI best practices: `docs/reference/CLI_BEST_PRACTICES.md`
+- API contract inventory: `docs/reference/API_CONTRACT_INVENTORY.md`
+- CLI contract matrix: `docs/reference/CLI_CONTRACT_MATRIX.md`
+- config key registry: `docs/reference/CONFIG_KEY_REGISTRY.md`
+- email providers and plugins: `docs/reference/PLUGIN_SDK.md`
+- enterprise and long-term roadmap: `docs/governance/ENTERPRISE_LONG_TERM_ROADMAP.md`
+- compatibility SLO policy: `docs/governance/COMPATIBILITY_SLO.md`
+- release checklist: `docs/governance/RELEASE_CHECKLIST.md`
+- deprecation template and policy: `docs/governance/DEPRECATION_TEMPLATE.md`
+- migration assistant conventions: `docs/governance/MIGRATION_ASSISTANT_CONVENTIONS.md`

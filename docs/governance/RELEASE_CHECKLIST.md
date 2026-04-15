@@ -52,7 +52,7 @@ Before tagging, attach and review:
 
 Policy reference:
 
-- `docs/COMPATIBILITY_SLO.md`
+- `docs/governance/COMPATIBILITY_SLO.md`
 
 Local generation commands:
 
@@ -66,11 +66,11 @@ bash scripts/release/generate_dependency_impact_report.sh --output dist/reports/
 
 Contract inventory references:
 
-- `docs/API_CONTRACT_INVENTORY.md`
-- `docs/CLI_CONTRACT_MATRIX.md`
-- `docs/CONFIG_KEY_REGISTRY.md`
-- `docs/DEPRECATION_TEMPLATE.md`
-- `docs/MIGRATION_ASSISTANT_CONVENTIONS.md`
+- `docs/reference/API_CONTRACT_INVENTORY.md`
+- `docs/reference/CLI_CONTRACT_MATRIX.md`
+- `docs/reference/CONFIG_KEY_REGISTRY.md`
+- `docs/governance/DEPRECATION_TEMPLATE.md`
+- `docs/governance/MIGRATION_ASSISTANT_CONVENTIONS.md`
 
 ## 6. Artifact Review
 

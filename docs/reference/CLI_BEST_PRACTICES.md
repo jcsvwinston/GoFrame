@@ -101,6 +101,6 @@ From `v1.0` onward:
 
 See also:
 
-- `docs/ENTERPRISE_LONG_TERM_ROADMAP.md`
-- `docs/COMPATIBILITY_SLO.md`
-- `docs/RELEASE_CHECKLIST.md`
+- `docs/governance/ENTERPRISE_LONG_TERM_ROADMAP.md`
+- `docs/governance/COMPATIBILITY_SLO.md`
+- `docs/governance/RELEASE_CHECKLIST.md`

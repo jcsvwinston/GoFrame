@@ -169,8 +169,8 @@ Exit criteria:
 
 Compatibility policy is enforced through:
 
-- `docs/COMPATIBILITY_SLO.md`
-- `docs/RELEASE_CHECKLIST.md`
+- `docs/governance/COMPATIBILITY_SLO.md`
+- `docs/governance/RELEASE_CHECKLIST.md`
 - CI required gates + reproducible stability drills
 
 Baseline SLO interpretation:
@@ -217,28 +217,28 @@ Baseline SLO interpretation:
   - reflection-driven auto-admin expansion,
   - secure-by-default masking/redaction model,
   - non-blocking event pipeline and WebSocket streaming.
-  - specification source: `docs/ADMIN_LIVE_RUNTIME_INSPECTOR_SPEC.md`
+  - specification source: this roadmap item; a dedicated spec document has not been published yet.
 
 ## Progress Snapshot
 
 - 2026-04-07: Track A contract inventory deliverables published:
-  - `docs/API_CONTRACT_INVENTORY.md`
-  - `docs/CLI_CONTRACT_MATRIX.md`
-  - `docs/CONFIG_KEY_REGISTRY.md`
+  - `docs/reference/API_CONTRACT_INVENTORY.md`
+  - `docs/reference/CLI_CONTRACT_MATRIX.md`
+  - `docs/reference/CONFIG_KEY_REGISTRY.md`
 - 2026-04-07: Immediate backlog item 5 delivered:
-  - `docs/DEPRECATION_TEMPLATE.md`
-  - `docs/MIGRATION_ASSISTANT_CONVENTIONS.md`
+  - `docs/governance/DEPRECATION_TEMPLATE.md`
+  - `docs/governance/MIGRATION_ASSISTANT_CONVENTIONS.md`
   - reusable templates under `docs/templates/`
 - 2026-04-07: Immediate backlog item 4 advanced:
   - expanded exploratory CLI critical-command coverage for `mssql`/`oracle`
   - added assertions for `sqlflush`, `flush --dry-run`, `sqlsequencereset`, and DDL idempotency (`createcachetable`)
   - Oracle `sqlsequencereset` now emits concrete reset SQL for common sequence naming conventions
 - 2026-04-08: Immediate backlog item 7 added:
-  - Admin Live Runtime Inspector vNext specification drafted in `docs/ADMIN_LIVE_RUNTIME_INSPECTOR_SPEC.md`
+  - Admin Live Runtime Inspector vNext backlog/design item recorded in this roadmap
   - scoped for additive rollout and compatibility-safe execution
 - 2026-04-11: P0/P1/P2 admin features delivered (tenant-aware CRUD, RBAC/Casbin, audit logging,
   migrations UI, health dashboard, jobs, sites, deployment detection, cache, storage browser, email stats).
-  Admin panel updated in `SPEC.md`. Full documentation in `docs/ADMIN_PANEL.md`.
+  Admin panel updated in `SPEC.md`. Current documentation lives in `docs/ADMIN_UI.md`.
 - 2026-04-11: P3 (Data Import/Export Wizard) design documented below. **Implementation blocked**
   until storage abstraction is resolved (see storage dependency analysis).
 
@@ -363,7 +363,7 @@ Every user-facing change should be reflected in `CHANGELOG.md` under `Unreleased
 - Avoid accidental breakages caused by implicit toolchain upgrades
 
 **Supported Versions:**
-- Minimum supported Go: `1.24`
+- Minimum supported Go: `1.25`
 - Recommended for development/release: latest `1.26.x`
 
 **Rules:**

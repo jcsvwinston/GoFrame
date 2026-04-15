@@ -1,7 +1,7 @@
 # GoFrame Technical Specification
 
 Reference date: 2026-04-07.
-Status: Current baseline (v0.6.x line).
+Status: Current pre-v1 baseline.
 
 This document defines the current, implemented technical baseline for GoFrame.
 It replaces older design notes that referenced superseded architecture choices.
@@ -14,10 +14,10 @@ When documents conflict, precedence is:
 
 1. `README.md`
 2. Contract/governance docs in `docs/`:
-- `docs/API_CONTRACT_INVENTORY.md`
-- `docs/CLI_CONTRACT_MATRIX.md`
-- `docs/CONFIG_KEY_REGISTRY.md`
-- `docs/COMPATIBILITY_SLO.md`
+- `docs/reference/API_CONTRACT_INVENTORY.md`
+- `docs/reference/CLI_CONTRACT_MATRIX.md`
+- `docs/reference/CONFIG_KEY_REGISTRY.md`
+- `docs/governance/COMPATIBILITY_SLO.md`
 3. This file (`SPEC.md`)
 4. Detailed tutorials/manual examples
 
@@ -286,7 +286,7 @@ Key contract families:
 - i18n/static/storage: `default_locale`, `locales_path`, `static_*`, `storage_*`
 - observability: `log_*`, `otlp_endpoint`, `metrics_path`
 
-Reference registry: `docs/CONFIG_KEY_REGISTRY.md`.
+Reference registry: `docs/reference/CONFIG_KEY_REGISTRY.md`.
 
 ## 6. MultiSite/MultiTenant Contract
 
@@ -324,16 +324,16 @@ Global output contract:
 
 Critical maintenance commands follow homogeneous output modes including structured JSON status payloads.
 
-Reference lifecycle matrix: `docs/CLI_CONTRACT_MATRIX.md`.
+Reference lifecycle matrix: `docs/reference/CLI_CONTRACT_MATRIX.md`.
 
 ## 8. Compatibility Governance
 
 Stable compatibility is governed by:
 
-- API inventory lifecycle tags (`docs/API_CONTRACT_INVENTORY.md`)
-- CLI lifecycle matrix (`docs/CLI_CONTRACT_MATRIX.md`)
-- config key registry lifecycle tags (`docs/CONFIG_KEY_REGISTRY.md`)
-- compatibility SLO (`docs/COMPATIBILITY_SLO.md`)
+- API inventory lifecycle tags (`docs/reference/API_CONTRACT_INVENTORY.md`)
+- CLI lifecycle matrix (`docs/reference/CLI_CONTRACT_MATRIX.md`)
+- config key registry lifecycle tags (`docs/reference/CONFIG_KEY_REGISTRY.md`)
+- compatibility SLO (`docs/governance/COMPATIBILITY_SLO.md`)
 
 Automated controls:
 
@@ -359,7 +359,7 @@ Full rehearsal path:
 bash scripts/release/rehearse_rc.sh
 ```
 
-Checklist reference: `docs/RELEASE_CHECKLIST.md`.
+Checklist reference: `docs/governance/RELEASE_CHECKLIST.md`.
 
 ## 10. Current Explicit Non-Goals
 
