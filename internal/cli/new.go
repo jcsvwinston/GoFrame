@@ -93,6 +93,19 @@ func runNew(args []string, _ io.Reader, stdout, stderr io.Writer) error {
 		{relPath: filepath.Join("seeds", "001_articles.sql"), body: newSeedTemplate},
 	}
 
+	// Keep the generated project aligned with the documented default layout even
+	// when some layers do not contain files yet.
+	extraDirs := []string{
+		filepath.Join(projectDir, "internal", "services"),
+		filepath.Join(projectDir, "internal", "repositories"),
+		filepath.Join(projectDir, "internal", "web", "static"),
+	}
+	for _, dirPath := range extraDirs {
+		if err := ensureDir(dirPath); err != nil {
+			return err
+		}
+	}
+
 	for _, f := range files {
 		target := filepath.Join(projectDir, f.relPath)
 		if err := writeFileIfNotExists(target, strings.TrimSpace(f.body)+"\n", *force); err != nil {

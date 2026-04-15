@@ -890,6 +890,21 @@ func TestRun_NewProjectScaffold(t *testing.T) {
 		}
 	}
 
+	expectedDirs := []string{
+		filepath.Join(projectDir, "internal", "services"),
+		filepath.Join(projectDir, "internal", "repositories"),
+		filepath.Join(projectDir, "internal", "web", "static"),
+	}
+	for _, p := range expectedDirs {
+		info, err := os.Stat(p)
+		if err != nil {
+			t.Fatalf("expected generated directory %s: %v", p, err)
+		}
+		if !info.IsDir() {
+			t.Fatalf("expected %s to be a directory", p)
+		}
+	}
+
 	goModRaw, err := os.ReadFile(filepath.Join(projectDir, "go.mod"))
 	if err != nil {
 		t.Fatalf("read go.mod failed: %v", err)
@@ -1034,6 +1049,21 @@ func TestRun_StartAppScaffold(t *testing.T) {
 	for _, p := range expectedFiles {
 		if _, err := os.Stat(p); err != nil {
 			t.Fatalf("expected generated file %s: %v", p, err)
+		}
+	}
+
+	expectedDirs := []string{
+		filepath.Join(dir, "internal", "services"),
+		filepath.Join(dir, "internal", "repositories"),
+		filepath.Join(dir, "internal", "web", "static", "billing"),
+	}
+	for _, p := range expectedDirs {
+		info, err := os.Stat(p)
+		if err != nil {
+			t.Fatalf("expected generated directory %s: %v", p, err)
+		}
+		if !info.IsDir() {
+			t.Fatalf("expected %s to be a directory", p)
 		}
 	}
 

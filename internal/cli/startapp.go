@@ -63,6 +63,19 @@ func runStartApp(args []string, _ io.Reader, stdout, stderr io.Writer) error {
 		return err
 	}
 
+	// Ensure common architectural directories exist so startapp can be used to
+	// grow both freshly generated projects and older trees safely.
+	extraDirs := []string{
+		filepath.Join(*outDir, "internal", "services"),
+		filepath.Join(*outDir, "internal", "repositories"),
+		filepath.Join(*outDir, "internal", "web", "static", snake),
+	}
+	for _, dirPath := range extraDirs {
+		if err := ensureDir(dirPath); err != nil {
+			return err
+		}
+	}
+
 	files := []startAppGeneratedFile{
 		{
 			path: filepath.Join(*outDir, "internal", "models", snake+".go"),
