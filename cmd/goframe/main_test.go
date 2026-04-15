@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"runtime"
@@ -849,6 +850,42 @@ func TestRun_GenerateResource(t *testing.T) {
 	if !strings.Contains(upText, `CREATE INDEX IF NOT EXISTS "idx_categories_name" ON "categories" ("name");`) {
 		t.Fatalf("expected deterministic name index in generated migration: %s", upText)
 	}
+
+	handlerRaw, err := os.ReadFile(handlerPath)
+	if err != nil {
+		t.Fatalf("read generated handler failed: %v", err)
+	}
+	handlerText := string(handlerRaw)
+	if strings.Contains(handlerText, "StatusNotImplemented") {
+		t.Fatalf("resource handler should not contain placeholder 501 responses: %s", handlerText)
+	}
+	if !strings.Contains(handlerText, `r.Resource("/categories", router.ResourceHandlers{`) {
+		t.Fatalf("expected resource helper wiring in generated handler: %s", handlerText)
+	}
+	if !strings.Contains(handlerText, `writeJSON(w, http.StatusCreated, map[string]any{"data": record})`) {
+		t.Fatalf("expected create handler scaffold in generated handler: %s", handlerText)
+	}
+
+	testRaw, err := os.ReadFile(testPath)
+	if err != nil {
+		t.Fatalf("read generated handler test failed: %v", err)
+	}
+	testText := string(testRaw)
+	if !strings.Contains(testText, "CRUDLifecycle") {
+		t.Fatalf("expected CRUD lifecycle test in generated test scaffold: %s", testText)
+	}
+
+	writeFile(t, filepath.Join(dir, "go.mod"), fmt.Sprintf(`module example.com/generated
+
+go 1.25.0
+
+require github.com/jcsvwinston/GoFrame v0.0.0
+
+replace github.com/jcsvwinston/GoFrame => %s
+`, filepath.ToSlash(repoRoot(t))))
+
+	runGoMod(t, dir, "mod", "tidy")
+	runGoTest(t, dir)
 }
 
 func TestRun_NewProjectScaffold(t *testing.T) {
@@ -2644,4 +2681,32 @@ func decodeCommandStatusJSON(t *testing.T, raw []byte) map[string]interface{} {
 		t.Fatalf("decode command status json failed: %v raw=%s", err, string(raw))
 	}
 	return payload
+}
+
+func repoRoot(t *testing.T) string {
+	t.Helper()
+
+	_, file, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("resolve repo root: runtime.Caller failed")
+	}
+
+	return filepath.Clean(filepath.Join(filepath.Dir(file), "..", ".."))
+}
+
+func runGoTest(t *testing.T, dir string) {
+	t.Helper()
+
+	runGoMod(t, dir, "test", "./...")
+}
+
+func runGoMod(t *testing.T, dir string, args ...string) {
+	t.Helper()
+
+	cmd := exec.Command("go", args...)
+	cmd.Dir = dir
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("go %s failed in %s: %v\n%s", strings.Join(args, " "), dir, err, string(output))
+	}
 }
