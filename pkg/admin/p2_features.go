@@ -97,20 +97,22 @@ func (p *Panel) handleCacheStats(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	redisURL := strings.TrimSpace(p.config.RedisURL)
-	if redisURL == "" {
+	snapshot := inspectRedisRuntime(r.Context(), p.config.RedisURL)
+	if !snapshot.Enabled {
 		writeJSON(w, http.StatusOK, map[string]interface{}{
 			"enabled": false,
-			"reason":  "Redis not configured",
+			"reason":  snapshot.Message,
 		})
 		return
 	}
 
-	// Return cache stats
 	writeJSON(w, http.StatusOK, map[string]interface{}{
-		"enabled":   true,
-		"redis_url": redisURL,
-		"note":      "Use redis-cli for detailed cache inspection",
+		"enabled":    true,
+		"redis_url":  snapshot.RedisURL,
+		"status":     snapshot.Status,
+		"message":    snapshot.Message,
+		"latency_ms": snapshot.LatencyMS,
+		"key_count":  snapshot.KeyCount,
 	})
 }
 
@@ -119,9 +121,20 @@ func (p *Panel) handleFlushCache(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	result, err := flushRedisRuntime(r.Context(), p.config.RedisURL)
+	if err != nil {
+		writeErr(w, gferrors.BadRequest(err.Error()))
+		return
+	}
+
 	writeJSON(w, http.StatusOK, map[string]interface{}{
-		"flushed": true,
-		"note":    "Use redis-cli FLUSHDB for complete cache flush",
+		"flushed":          true,
+		"redis_url":        result.RedisURL,
+		"status":           result.Status,
+		"message":          result.Message,
+		"latency_ms":       result.LatencyMS,
+		"key_count_before": result.KeyCountBefore,
+		"key_count_after":  result.KeyCountAfter,
 	})
 }
 
@@ -140,25 +153,37 @@ func (p *Panel) handleListStorage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	storagePath := strings.TrimSpace(r.URL.Query().Get("path"))
-	if storagePath == "" {
-		storagePath = "uploads"
-	}
-
-	// Resolve to absolute path
-	absPath, err := filepath.Abs(storagePath)
+	storagePath, err := normalizeStorageBrowsePath(r.URL.Query().Get("path"))
 	if err != nil {
-		writeErr(w, gferrors.BadRequest("invalid path"))
+		writeErr(w, gferrors.Forbidden(err.Error()))
 		return
 	}
 
-	// Security: ensure path is within storage root
-	storageRoot := "uploads"
-	absRoot, _ := filepath.Abs(storageRoot)
-	if !strings.HasPrefix(absPath, absRoot) {
-		writeErr(w, gferrors.Forbidden("access denied: path outside storage root"))
+	if p.store != nil {
+		files, err := listConfiguredStorage(r.Context(), p.store, storagePath)
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
+
+		writeJSON(w, http.StatusOK, map[string]interface{}{
+			"backend": "store",
+			"path":    storagePath,
+			"files":   files,
+			"total":   len(files),
+		})
 		return
 	}
+
+	relativePath := strings.TrimPrefix(storagePath, adminStorageBrowseRoot)
+	relativePath = strings.TrimPrefix(relativePath, "/")
+
+	absRoot, err := filepath.Abs(adminStorageBrowseRoot)
+	if err != nil {
+		writeErr(w, gferrors.InternalError("resolve storage root"))
+		return
+	}
+	absPath := filepath.Join(absRoot, filepath.FromSlash(relativePath))
 
 	entries, err := os.ReadDir(absPath)
 	if err != nil {
@@ -181,17 +206,13 @@ func (p *Panel) handleListStorage(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 
-	sort.Slice(files, func(i, j int) bool {
-		if files[i].IsDir != files[j].IsDir {
-			return files[i].IsDir
-		}
-		return files[i].Name < files[j].Name
-	})
+	sortStorageEntries(files)
 
 	writeJSON(w, http.StatusOK, map[string]interface{}{
-		"path":  storagePath,
-		"files": files,
-		"total": len(files),
+		"backend": "filesystem",
+		"path":    storagePath,
+		"files":   files,
+		"total":   len(files),
 	})
 }
 

@@ -1,6 +1,6 @@
 # Status and Next Steps
 
-Last updated: 2026-04-15
+Last updated: 2026-04-16
 
 ## Current baseline
 
@@ -49,17 +49,17 @@ Scope closed:
 
 ### Point 4: make admin operational features real
 
-This is the next active implementation target.
+In progress.
 
-Recommended first cut:
+Completed in the first cut:
 
-- make Redis health checks real instead of reporting only that a URL is configured
-- make cache endpoints return basic real runtime information when Redis is configured
-- make cache flush perform a real flush operation when authorized and configured
-- make storage browsing use the configured `storage.Store` when available
-- add focused tests for Redis/cache/storage behavior using local test doubles
+- Redis health checks now perform real connectivity checks
+- cache stats now return real Redis runtime information
+- cache flush now executes a real flush against the configured Redis database
+- storage browsing now uses the configured `storage.Store` when available
+- focused tests were added for Redis health, cache flush, and storage browsing
 
-Expected second pass within point 4:
+Still pending in the second pass:
 
 - decide whether admin migrations remain read-only or can safely execute `db.Migrator`
 - replace email stats placeholder behavior with a runtime-backed implementation
@@ -92,11 +92,9 @@ Longer-term work:
 
 ## Recommended start for tomorrow
 
-Start with point 4 in this order:
+Continue point 4 with this order:
 
-1. implement real Redis health checks
-2. implement real cache stats and cache flush
-3. implement storage browsing through `storage.Store`
-4. add focused tests
-5. run verification: `go test ./...` and `npm run build`
-6. commit and push the point 4 batch
+1. decide and implement the migrations behavior for the admin panel
+2. replace the email stats placeholder with a real runtime-backed view
+3. run verification: `go test ./...` and `npm run build`
+4. commit and push the remaining point 4 batch

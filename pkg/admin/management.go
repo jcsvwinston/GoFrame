@@ -1,6 +1,7 @@
 package admin
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -215,14 +216,22 @@ func (p *Panel) handleHealthCheck(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Redis health (if configured)
-	redisURL := strings.TrimSpace(p.config.RedisURL)
-	if redisURL != "" {
-		// Simple connectivity check would require redis client
+	redisCheck := inspectRedisRuntime(context.Background(), p.config.RedisURL)
+	if redisCheck.Enabled {
 		checks = append(checks, healthCheckResult{
-			Name:    "redis",
-			Status:  "healthy",
-			Message: "redis URL configured",
+			Name:      "redis",
+			Status:    redisCheck.Status,
+			Message:   redisCheck.Message,
+			LatencyMS: redisCheck.LatencyMS,
 		})
+		switch redisCheck.Status {
+		case "unhealthy":
+			overallStatus = "unhealthy"
+		case "degraded":
+			if overallStatus == "healthy" {
+				overallStatus = "degraded"
+			}
+		}
 	}
 
 	writeJSON(w, http.StatusOK, healthSummary{
