@@ -49,7 +49,7 @@ Scope closed:
 
 ### Point 4: make admin operational features real
 
-In progress.
+Completed and verified.
 
 Completed in the first cut:
 
@@ -59,10 +59,11 @@ Completed in the first cut:
 - storage browsing now uses the configured `storage.Store` when available
 - focused tests were added for Redis health, cache flush, and storage browsing
 
-Still pending in the second pass:
+Completed in the second pass:
 
-- decide whether admin migrations remain read-only or can safely execute `db.Migrator`
-- replace email stats placeholder behavior with a runtime-backed implementation
+- admin migrations now execute through `db.Migrator` when a runtime database is available
+- migration listing now reports applied state from the runtime migrator
+- email stats now reflect the effective mail runtime configuration instead of returning a placeholder note
 
 ### Point 5: explicit application layer
 
@@ -92,9 +93,10 @@ Longer-term work:
 
 ## Recommended start for tomorrow
 
-Continue point 4 with this order:
+Start point 5 with this order:
 
-1. decide and implement the migrations behavior for the admin panel
-2. replace the email stats placeholder with a real runtime-backed view
-3. run verification: `go test ./...` and `npm run build`
-4. commit and push the remaining point 4 batch
+1. formalize service and repository conventions
+2. align scaffolding and generators with that application architecture
+3. define the first contract boundary for service inputs and outputs
+4. run verification: `go test ./...` and `npm run build`
+5. commit and push the point 5 batch

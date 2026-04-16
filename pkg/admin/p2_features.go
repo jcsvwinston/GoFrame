@@ -223,8 +223,6 @@ func (p *Panel) handleEmailStats(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]interface{}{
-		"enabled": true,
-		"note":    "Email queue stats would require mail driver integration",
-	})
+	snapshot := inspectEmailRuntime(p.config)
+	writeJSON(w, http.StatusOK, snapshot)
 }

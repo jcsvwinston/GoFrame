@@ -67,6 +67,10 @@ type PanelConfig struct {
 	DatabaseHandles     map[string]*db.DB // optional alias->db handle mapping for runtime stats
 	EnvironmentSnapshot []string          // optional env snapshot (defaults to os.Environ at startup)
 	FeatureFlags        map[string]bool   // optional initial in-memory feature flags
+	MailDriver          string
+	MailFrom            string
+	SMTPHost            string
+	SendGridEndpoint    string
 	Auth                AdminAuth
 	Session             *auth.SessionManager // optional session manager for admin telemetry
 	SessionStore        string               // configured session store label (memory|sql|redis)

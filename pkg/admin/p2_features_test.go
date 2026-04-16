@@ -213,6 +213,56 @@ func TestPanelStorageListRejectsPathOutsideRoot(t *testing.T) {
 	}
 }
 
+func TestPanelEmailStatsReflectRuntimeConfiguration(t *testing.T) {
+	panel, cleanup := setupPanelForTest(t, db.EngineSQL)
+	defer cleanup()
+
+	panel.config.MailDriver = "smtp"
+	panel.config.MailFrom = "noreply@example.com"
+	panel.config.SMTPHost = "smtp.example.com"
+
+	srv := httptest.NewServer(panel.Handler())
+	defer srv.Close()
+
+	resp, status := doJSON(t, http.MethodGet, srv.URL+"/api/email", nil)
+	if status != http.StatusOK {
+		t.Fatalf("expected status 200 from email stats, got %d body=%s", status, mustJSON(resp))
+	}
+	if enabled, _ := resp["enabled"].(bool); !enabled {
+		t.Fatalf("expected email stats enabled=true, got %#v", resp["enabled"])
+	}
+	if got := resp["driver"]; got != "smtp" {
+		t.Fatalf("expected driver=smtp, got %#v", got)
+	}
+	if got := resp["provider_type"]; got != "builtin" {
+		t.Fatalf("expected provider_type=builtin, got %#v", got)
+	}
+	if got := resp["smtp_host"]; got != "smtp.example.com" {
+		t.Fatalf("expected smtp_host, got %#v", got)
+	}
+}
+
+func TestPanelEmailStatsReportsDisabledNoopDriver(t *testing.T) {
+	panel, cleanup := setupPanelForTest(t, db.EngineSQL)
+	defer cleanup()
+
+	panel.config.MailDriver = "noop"
+
+	srv := httptest.NewServer(panel.Handler())
+	defer srv.Close()
+
+	resp, status := doJSON(t, http.MethodGet, srv.URL+"/api/email", nil)
+	if status != http.StatusOK {
+		t.Fatalf("expected status 200 from email stats, got %d body=%s", status, mustJSON(resp))
+	}
+	if enabled, _ := resp["enabled"].(bool); enabled {
+		t.Fatalf("expected email stats enabled=false, got %#v", resp["enabled"])
+	}
+	if got := resp["status"]; got != "disabled" {
+		t.Fatalf("expected status=disabled, got %#v", got)
+	}
+}
+
 func findHealthCheck(checks []testHealthCheckRow, name string) *testHealthCheckRow {
 	for i := range checks {
 		if checks[i].Name == name {
