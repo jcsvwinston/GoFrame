@@ -804,6 +804,17 @@ func TestRun_GenerateModelAndHandler(t *testing.T) {
 	if _, err := os.Stat(servicePath); err != nil {
 		t.Fatalf("expected service scaffold file %s: %v", servicePath, err)
 	}
+	serviceRaw, err := os.ReadFile(servicePath)
+	if err != nil {
+		t.Fatalf("read generated service failed: %v", err)
+	}
+	serviceText := string(serviceRaw)
+	if !strings.Contains(serviceText, "type UserProfileResult struct") {
+		t.Fatalf("expected generated service result contract: %s", serviceText)
+	}
+	if !strings.Contains(serviceText, "type UserProfileHealthInput struct{}") {
+		t.Fatalf("expected generated service input contract: %s", serviceText)
+	}
 
 	out.Reset()
 	errOut.Reset()
@@ -978,6 +989,21 @@ func TestRun_NewProjectScaffold(t *testing.T) {
 	}
 	if !strings.Contains(goMod, "go 1.25") {
 		t.Fatalf("go.mod missing expected go version: %s", goMod)
+	}
+
+	articleServiceRaw, err := os.ReadFile(filepath.Join(projectDir, "internal", "services", "article_service.go"))
+	if err != nil {
+		t.Fatalf("read article service failed: %v", err)
+	}
+	articleServiceText := string(articleServiceRaw)
+	if strings.Contains(articleServiceText, "[]repositories.Article") {
+		t.Fatalf("service scaffold should not leak repository list types: %s", articleServiceText)
+	}
+	if strings.Contains(articleServiceText, "(repositories.Article, error)") {
+		t.Fatalf("service scaffold should not leak repository create result types: %s", articleServiceText)
+	}
+	if !strings.Contains(articleServiceText, "func articleFromRepository(") {
+		t.Fatalf("expected repository-to-service mapping helper in article service scaffold: %s", articleServiceText)
 	}
 
 	cfgRaw, err := os.ReadFile(filepath.Join(projectDir, "goframe.yaml"))
@@ -1191,6 +1217,15 @@ replace github.com/jcsvwinston/GoFrame => %s
 	serviceText := string(serviceRaw)
 	if !strings.Contains(serviceText, `"example.com/scaffold/internal/repositories"`) {
 		t.Fatalf("expected repository import in module-aware service scaffold: %s", serviceText)
+	}
+	if strings.Contains(serviceText, "repositories.NameOnlyRecord") {
+		t.Fatalf("service scaffold should not leak repository record types: %s", serviceText)
+	}
+	if !strings.Contains(serviceText, "type BillingRecord struct") {
+		t.Fatalf("expected explicit service output contract in module-aware scaffold: %s", serviceText)
+	}
+	if !strings.Contains(serviceText, "type CreateBillingInput struct") {
+		t.Fatalf("expected explicit service input contract in module-aware scaffold: %s", serviceText)
 	}
 
 	runGoMod(t, dir, "mod", "tidy")

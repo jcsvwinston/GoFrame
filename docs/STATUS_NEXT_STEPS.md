@@ -75,11 +75,12 @@ Completed in the first cut:
 - `generate` supports explicit `service` and `repository` targets
 - resource scaffolds now include model, handler, service, repository, and migration pieces together
 - `startapp` now uses the local module path when available so generated HTTP controllers can depend on `services` instead of falling back to direct SQL wiring
+- generated services now own their first explicit input/output contracts instead of leaking repository result types directly to controllers
 - CLI tests assert those architectural layers are generated
 
 Still pending in the next cut:
 
-- formalize service conventions
+- formalize service conventions further
 - formalize repository conventions
 - align controllers, services, repositories, and tasks
 - update scaffolds and generators to reflect that architecture
@@ -106,7 +107,7 @@ Longer-term work:
 Continue point 5 with this order:
 
 1. tighten the actual conventions between controllers, services, repositories, and tasks
-2. define the first explicit service input/output contract boundary
+2. continue tightening explicit service input/output contracts where scaffolds still leak lower layers
 3. review whether generated handlers should depend on services by default across all scaffolds
 4. run verification: `go test ./...` and `npm run build`
 5. commit and push the next point 5 batch

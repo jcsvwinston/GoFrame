@@ -466,16 +466,41 @@ func NewArticleService(repository *repositories.ArticleRepository) *ArticleServi
 	return &ArticleService{repository: repository}
 }
 
-func (s *ArticleService) List(ctx context.Context) ([]repositories.Article, error) {
-	return s.repository.List(ctx)
+func (s *ArticleService) List(ctx context.Context) ([]Article, error) {
+	records, err := s.repository.List(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	items := make([]Article, 0, len(records))
+	for _, record := range records {
+		items = append(items, articleFromRepository(record))
+	}
+	return items, nil
 }
 
-func (s *ArticleService) Create(ctx context.Context, in CreateArticleInput) (repositories.Article, error) {
-	return s.repository.Create(ctx, repositories.CreateArticleParams{
+func (s *ArticleService) Create(ctx context.Context, in CreateArticleInput) (Article, error) {
+	record, err := s.repository.Create(ctx, repositories.CreateArticleParams{
 		Title:     in.Title,
 		Content:   in.Content,
 		Published: in.Published,
 	})
+	if err != nil {
+		return Article{}, err
+	}
+
+	return articleFromRepository(record), nil
+}
+
+func articleFromRepository(record repositories.Article) Article {
+	return Article{
+		ID:        record.ID,
+		Title:     record.Title,
+		Content:   record.Content,
+		Published: record.Published,
+		CreatedAt: record.CreatedAt,
+		UpdatedAt: record.UpdatedAt,
+	}
 }
 `
 

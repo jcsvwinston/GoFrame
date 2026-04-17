@@ -119,7 +119,7 @@ func runStartApp(args []string, _ io.Reader, stdout, stderr io.Writer) error {
 			},
 			startAppGeneratedFile{
 				path: filepath.Join(*outDir, "internal", "services", snake+"_service.go"),
-				body: fmt.Sprintf(startAppServiceWithRepositoryTemplate, modulePath, pascal, pascal, pascal, pascal, pascal, pascal, pascal, pascal, pascal, pascal, pascal),
+				body: fmt.Sprintf(startAppServiceWithRepositoryTemplate, modulePath, pascal, pascal, pascal, pascal, pascal, pascal, pascal, pascal, pascal, pascal, pascal, pascal, pascal, pascal, pascal, pascal, pascal),
 			},
 			startAppGeneratedFile{
 				path: filepath.Join(*outDir, "internal", "repositories", snake+"_repository.go"),
@@ -134,7 +134,7 @@ func runStartApp(args []string, _ io.Reader, stdout, stderr io.Writer) error {
 			},
 			startAppGeneratedFile{
 				path: filepath.Join(*outDir, "internal", "services", snake+"_service.go"),
-				body: fmt.Sprintf(startAppServiceTemplate, pascal, pascal, pascal, pascal, pascal, pascal),
+				body: fmt.Sprintf(startAppServiceTemplate, pascal, pascal, pascal, pascal, pascal, pascal, pascal),
 			},
 			startAppGeneratedFile{
 				path: filepath.Join(*outDir, "internal", "repositories", snake+"_repository.go"),
@@ -292,6 +292,8 @@ func Create%s(service *services.%sService) http.HandlerFunc {
 
 const startAppServiceTemplate = `package services
 
+import "context"
+
 type NameOnlyRecord struct {
 	Name string ` + "`json:\"name\"`" + `
 }
@@ -302,12 +304,12 @@ func New%sService() *%sService {
 	return &%sService{}
 }
 
-func (s *%sService) List() ([]NameOnlyRecord, error) {
+func (s *%sService) List(_ context.Context) ([]NameOnlyRecord, error) {
 	return []NameOnlyRecord{}, nil
 }
 
-func (s *%sService) Create(name string) (NameOnlyRecord, error) {
-	return NameOnlyRecord{Name: name}, nil
+func (s *%sService) Create(_ context.Context, input Create%sInput) (NameOnlyRecord, error) {
+	return NameOnlyRecord{Name: input.Name}, nil
 }
 `
 
@@ -335,12 +337,26 @@ func New%sService(repository *repositories.%sRepository) *%sService {
 	return &%sService{repository: repository}
 }
 
-func (s *%sService) List(ctx context.Context) ([]repositories.NameOnlyRecord, error) {
-	return s.repository.List(ctx)
+func (s *%sService) List(ctx context.Context) ([]%sRecord, error) {
+	records, err := s.repository.List(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	items := make([]%sRecord, 0, len(records))
+	for _, record := range records {
+		items = append(items, %sRecord{Name: record.Name})
+	}
+	return items, nil
 }
 
-func (s *%sService) Create(ctx context.Context, input Create%sInput) (repositories.NameOnlyRecord, error) {
-	return s.repository.Create(ctx, input.Name)
+func (s *%sService) Create(ctx context.Context, input Create%sInput) (%sRecord, error) {
+	record, err := s.repository.Create(ctx, input.Name)
+	if err != nil {
+		return %sRecord{}, err
+	}
+
+	return %sRecord{Name: record.Name}, nil
 }
 `
 
