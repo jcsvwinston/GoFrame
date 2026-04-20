@@ -830,6 +830,14 @@ func TestRun_GenerateModelAndHandler(t *testing.T) {
 
 func TestRun_GenerateResource(t *testing.T) {
 	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, "go.mod"), fmt.Sprintf(`module example.com/generated
+
+go 1.25.0
+
+require github.com/jcsvwinston/GoFrame v0.0.0
+
+replace github.com/jcsvwinston/GoFrame => %s
+`, filepath.ToSlash(repoRoot(t))))
 
 	var out bytes.Buffer
 	var errOut bytes.Buffer
@@ -894,11 +902,41 @@ func TestRun_GenerateResource(t *testing.T) {
 	if strings.Contains(handlerText, "StatusNotImplemented") {
 		t.Fatalf("resource handler should not contain placeholder 501 responses: %s", handlerText)
 	}
+	if !strings.Contains(handlerText, `"example.com/generated/internal/services"`) {
+		t.Fatalf("expected generated resource handler to depend on services: %s", handlerText)
+	}
+	if strings.Contains(handlerText, "sync.RWMutex") {
+		t.Fatalf("module-aware resource handler should not keep in-memory state directly: %s", handlerText)
+	}
 	if !strings.Contains(handlerText, `r.Resource("/categories", router.ResourceHandlers{`) {
 		t.Fatalf("expected resource helper wiring in generated handler: %s", handlerText)
 	}
-	if !strings.Contains(handlerText, `writeJSON(w, http.StatusCreated, map[string]any{"data": record})`) {
-		t.Fatalf("expected create handler scaffold in generated handler: %s", handlerText)
+	if !strings.Contains(handlerText, `h.service.Create(`) {
+		t.Fatalf("expected generated handler to delegate create to service: %s", handlerText)
+	}
+
+	serviceRaw, err := os.ReadFile(servicePath)
+	if err != nil {
+		t.Fatalf("read generated service failed: %v", err)
+	}
+	serviceText := string(serviceRaw)
+	if strings.Contains(serviceText, "sync.RWMutex") {
+		t.Fatalf("resource service should not hold repository state directly: %s", serviceText)
+	}
+	if !strings.Contains(serviceText, "type CreateCategoryInput struct") || !strings.Contains(serviceText, "type UpdateCategoryInput struct") {
+		t.Fatalf("expected explicit service contracts for resource scaffold: %s", serviceText)
+	}
+	if strings.Contains(serviceText, "repositories.CategoryRecord") && !strings.Contains(serviceText, "mapCategoryRecord(") {
+		t.Fatalf("resource service should map repository records into service records: %s", serviceText)
+	}
+
+	repositoryRaw, err := os.ReadFile(repositoryPath)
+	if err != nil {
+		t.Fatalf("read generated repository failed: %v", err)
+	}
+	repositoryText := string(repositoryRaw)
+	if !strings.Contains(repositoryText, "type CategoryRepository struct") || !strings.Contains(repositoryText, "func (r *CategoryRepository) Create") {
+		t.Fatalf("expected repository-backed resource scaffold: %s", repositoryText)
 	}
 
 	testRaw, err := os.ReadFile(testPath)
@@ -909,15 +947,9 @@ func TestRun_GenerateResource(t *testing.T) {
 	if !strings.Contains(testText, "CRUDLifecycle") {
 		t.Fatalf("expected CRUD lifecycle test in generated test scaffold: %s", testText)
 	}
-
-	writeFile(t, filepath.Join(dir, "go.mod"), fmt.Sprintf(`module example.com/generated
-
-go 1.25.0
-
-require github.com/jcsvwinston/GoFrame v0.0.0
-
-replace github.com/jcsvwinston/GoFrame => %s
-`, filepath.ToSlash(repoRoot(t))))
+	if !strings.Contains(testText, "services.NewCategoryService") {
+		t.Fatalf("expected resource test scaffold to wire repository and service: %s", testText)
+	}
 
 	runGoMod(t, dir, "mod", "tidy")
 	runGoTest(t, dir)

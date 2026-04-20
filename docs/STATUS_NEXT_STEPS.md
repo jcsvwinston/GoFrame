@@ -76,6 +76,7 @@ Completed in the first cut:
 - resource scaffolds now include model, handler, service, repository, and migration pieces together
 - `startapp` now uses the local module path when available so generated HTTP controllers can depend on `services` instead of falling back to direct SQL wiring
 - generated services now own their first explicit input/output contracts instead of leaking repository result types directly to controllers
+- module-aware `generate resource` now emits repository-backed services and handlers that delegate into those services instead of keeping state inside the HTTP layer
 - CLI tests assert those architectural layers are generated
 
 Still pending in the next cut:
@@ -108,6 +109,6 @@ Continue point 5 with this order:
 
 1. tighten the actual conventions between controllers, services, repositories, and tasks
 2. continue tightening explicit service input/output contracts where scaffolds still leak lower layers
-3. review whether generated handlers should depend on services by default across all scaffolds
+3. push the same module-aware service-first convention into remaining generated handlers where possible
 4. run verification: `go test ./...` and `npm run build`
 5. commit and push the next point 5 batch

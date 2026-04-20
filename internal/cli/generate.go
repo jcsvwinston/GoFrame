@@ -181,25 +181,51 @@ func generateResourceScaffold(outDir, migrationsDir, snake, pascal string, force
 		return nil, err
 	}
 
-	repositoryPath, err := generateRepositoryScaffold(outDir, snake, pascal, force)
-	if err != nil {
-		return nil, err
-	}
-
-	servicePath, err := generateServiceScaffold(outDir, snake, pascal, force)
-	if err != nil {
-		return nil, err
-	}
-
 	resourcePath := pluralizeResource(snake)
+	modulePath, hasModule, err := detectModulePath(outDir)
+	if err != nil {
+		return nil, err
+	}
+
+	var repositoryPath string
+	var servicePath string
+	var handlerBody string
+	var testBody string
+
+	if hasModule {
+		repositoryPath, err = generateResourceRepositoryScaffold(outDir, snake, pascal, force)
+		if err != nil {
+			return nil, err
+		}
+
+		servicePath, err = generateResourceServiceScaffold(outDir, snake, pascal, modulePath, force)
+		if err != nil {
+			return nil, err
+		}
+
+		handlerBody = fmt.Sprintf(resourceHandlerWithServiceTemplate, modulePath, pascal, resourcePath)
+		testBody = fmt.Sprintf(resourceHandlerWithServiceTestTemplate, modulePath, pascal, resourcePath)
+	} else {
+		repositoryPath, err = generateRepositoryScaffold(outDir, snake, pascal, force)
+		if err != nil {
+			return nil, err
+		}
+
+		servicePath, err = generateServiceScaffold(outDir, snake, pascal, force)
+		if err != nil {
+			return nil, err
+		}
+
+		handlerBody = fmt.Sprintf(resourceHandlerTemplate, pascal, resourcePath)
+		testBody = fmt.Sprintf(resourceHandlerTestTemplate, pascal, resourcePath)
+	}
+
 	handlerPath := filepath.Join(outDir, "internal", "controllers", snake+"_handler.go")
-	handlerBody := fmt.Sprintf(resourceHandlerTemplate, pascal, resourcePath)
 	if err := writeFileIfNotExists(handlerPath, handlerBody, force); err != nil {
 		return nil, err
 	}
 
 	testPath := filepath.Join(outDir, "internal", "controllers", snake+"_handler_test.go")
-	testBody := fmt.Sprintf(resourceHandlerTestTemplate, pascal, resourcePath)
 	if err := writeFileIfNotExists(testPath, testBody, force); err != nil {
 		return nil, err
 	}
@@ -228,6 +254,24 @@ func generateResourceScaffold(outDir, migrationsDir, snake, pascal string, force
 		MigrationUpPath:   upPath,
 		MigrationDownPath: downPath,
 	}, nil
+}
+
+func generateResourceRepositoryScaffold(outDir, snake, pascal string, force bool) (string, error) {
+	path := filepath.Join(outDir, "internal", "repositories", snake+"_repository.go")
+	body := fmt.Sprintf(resourceRepositoryTemplate, pascal, pluralizeResource(snake))
+	if err := writeFileIfNotExists(path, body, force); err != nil {
+		return "", err
+	}
+	return path, nil
+}
+
+func generateResourceServiceScaffold(outDir, snake, pascal, modulePath string, force bool) (string, error) {
+	path := filepath.Join(outDir, "internal", "services", snake+"_service.go")
+	body := fmt.Sprintf(resourceServiceTemplate, modulePath, pascal)
+	if err := writeFileIfNotExists(path, body, force); err != nil {
+		return "", err
+	}
+	return path, nil
 }
 
 func createMigrationPair(dir, name, upBody, downBody string) (string, string, error) {
@@ -357,6 +401,487 @@ func New%sRepository() *%sRepository {
 
 func (r *%sRepository) Ping(_ context.Context) error {
 	return nil
+}
+`
+
+const resourceRepositoryTemplate = `package repositories
+
+import (
+	"context"
+	"errors"
+	"sort"
+	"sync"
+	"time"
+)
+
+var Err%[1]sNotFound = errors.New("%[2]s record not found")
+
+type %[1]sRecord struct {
+	ID        uint      ` + "`json:\"id\"`" + `
+	Name      string    ` + "`json:\"name\"`" + `
+	CreatedAt time.Time ` + "`json:\"created_at\"`" + `
+	UpdatedAt time.Time ` + "`json:\"updated_at\"`" + `
+}
+
+type Create%[1]sParams struct {
+	Name string
+}
+
+type Update%[1]sParams struct {
+	Name string
+}
+
+type %[1]sRepository struct {
+	mu     sync.RWMutex
+	nextID uint
+	items  map[uint]%[1]sRecord
+}
+
+func New%[1]sRepository() *%[1]sRepository {
+	return &%[1]sRepository{
+		nextID: 1,
+		items:  make(map[uint]%[1]sRecord),
+	}
+}
+
+func (r *%[1]sRepository) List(_ context.Context) ([]%[1]sRecord, error) {
+	r.mu.RLock()
+	records := make([]%[1]sRecord, 0, len(r.items))
+	for _, record := range r.items {
+		records = append(records, record)
+	}
+	r.mu.RUnlock()
+
+	sort.Slice(records, func(i, j int) bool {
+		return records[i].ID < records[j].ID
+	})
+	return records, nil
+}
+
+func (r *%[1]sRepository) Get(_ context.Context, id uint) (%[1]sRecord, error) {
+	r.mu.RLock()
+	record, ok := r.items[id]
+	r.mu.RUnlock()
+	if !ok {
+		return %[1]sRecord{}, Err%[1]sNotFound
+	}
+	return record, nil
+}
+
+func (r *%[1]sRepository) Create(_ context.Context, params Create%[1]sParams) (%[1]sRecord, error) {
+	now := time.Now().UTC()
+
+	r.mu.Lock()
+	id := r.nextID
+	r.nextID++
+	record := %[1]sRecord{
+		ID:        id,
+		Name:      params.Name,
+		CreatedAt: now,
+		UpdatedAt: now,
+	}
+	r.items[id] = record
+	r.mu.Unlock()
+
+	return record, nil
+}
+
+func (r *%[1]sRepository) Update(_ context.Context, id uint, params Update%[1]sParams) (%[1]sRecord, error) {
+	r.mu.Lock()
+	record, ok := r.items[id]
+	if !ok {
+		r.mu.Unlock()
+		return %[1]sRecord{}, Err%[1]sNotFound
+	}
+
+	record.Name = params.Name
+	record.UpdatedAt = time.Now().UTC()
+	r.items[id] = record
+	r.mu.Unlock()
+
+	return record, nil
+}
+
+func (r *%[1]sRepository) Delete(_ context.Context, id uint) error {
+	r.mu.Lock()
+	if _, ok := r.items[id]; !ok {
+		r.mu.Unlock()
+		return Err%[1]sNotFound
+	}
+	delete(r.items, id)
+	r.mu.Unlock()
+	return nil
+}
+`
+
+const resourceServiceTemplate = `package services
+
+import (
+	"context"
+	"strings"
+
+	"%[1]s/internal/repositories"
+)
+
+type %[2]sRecord struct {
+	ID   uint   ` + "`json:\"id\"`" + `
+	Name string ` + "`json:\"name\"`" + `
+}
+
+type Create%[2]sInput struct {
+	Name string ` + "`json:\"name\" validate:\"required\"`" + `
+}
+
+type Update%[2]sInput struct {
+	Name string ` + "`json:\"name\" validate:\"required\"`" + `
+}
+
+type %[2]sService struct {
+	repository *repositories.%[2]sRepository
+}
+
+func New%[2]sService(repository *repositories.%[2]sRepository) *%[2]sService {
+	return &%[2]sService{repository: repository}
+}
+
+func (s *%[2]sService) List(ctx context.Context) ([]%[2]sRecord, error) {
+	records, err := s.repository.List(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	items := make([]%[2]sRecord, 0, len(records))
+	for _, record := range records {
+		items = append(items, map%[2]sRecord(record))
+	}
+	return items, nil
+}
+
+func (s *%[2]sService) Get(ctx context.Context, id uint) (%[2]sRecord, error) {
+	record, err := s.repository.Get(ctx, id)
+	if err != nil {
+		return %[2]sRecord{}, err
+	}
+	return map%[2]sRecord(record), nil
+}
+
+func (s *%[2]sService) Create(ctx context.Context, input Create%[2]sInput) (%[2]sRecord, error) {
+	record, err := s.repository.Create(ctx, repositories.Create%[2]sParams{
+		Name: strings.TrimSpace(input.Name),
+	})
+	if err != nil {
+		return %[2]sRecord{}, err
+	}
+	return map%[2]sRecord(record), nil
+}
+
+func (s *%[2]sService) Update(ctx context.Context, id uint, input Update%[2]sInput) (%[2]sRecord, error) {
+	record, err := s.repository.Update(ctx, id, repositories.Update%[2]sParams{
+		Name: strings.TrimSpace(input.Name),
+	})
+	if err != nil {
+		return %[2]sRecord{}, err
+	}
+	return map%[2]sRecord(record), nil
+}
+
+func (s *%[2]sService) Delete(ctx context.Context, id uint) error {
+	return s.repository.Delete(ctx, id)
+}
+
+func map%[2]sRecord(record repositories.%[2]sRecord) %[2]sRecord {
+	return %[2]sRecord{
+		ID:   record.ID,
+		Name: record.Name,
+	}
+}
+`
+
+const resourceHandlerWithServiceTemplate = `package controllers
+
+import (
+	"encoding/json"
+	"errors"
+	"net/http"
+	"strconv"
+	"strings"
+
+	"%[1]s/internal/services"
+	"github.com/jcsvwinston/GoFrame/pkg/router"
+)
+
+type %[2]sPayload struct {
+	Name string ` + "`json:\"name\"`" + `
+}
+
+type %[2]sHandler struct {
+	service *services.%[2]sService
+}
+
+func New%[2]sHandler(service *services.%[2]sService) *%[2]sHandler {
+	return &%[2]sHandler{service: service}
+}
+
+func (h *%[2]sHandler) Mount(r *router.Mux) {
+	r.Resource("/%[3]s", router.ResourceHandlers{
+		List:     h.List,
+		Create:   h.Create,
+		Retrieve: h.Get,
+		Update:   h.Update,
+		Delete:   h.Delete,
+	})
+}
+
+func (h *%[2]sHandler) List(w http.ResponseWriter, r *http.Request) {
+	records, err := h.service.List(r.Context())
+	if err != nil {
+		writeErrorJSON(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"data":  records,
+		"count": len(records),
+	})
+}
+
+func (h *%[2]sHandler) Get(w http.ResponseWriter, r *http.Request) {
+	id, err := parseResourceID(r)
+	if err != nil {
+		writeErrorJSON(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	record, err := h.service.Get(r.Context(), id)
+	if err != nil {
+		writeErrorJSON(w, http.StatusNotFound, err.Error())
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{"data": record})
+}
+
+func (h *%[2]sHandler) Create(w http.ResponseWriter, r *http.Request) {
+	payload, err := decode%[2]sPayload(r)
+	if err != nil {
+		writeErrorJSON(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	record, err := h.service.Create(r.Context(), services.Create%[2]sInput{Name: payload.Name})
+	if err != nil {
+		writeErrorJSON(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	writeJSON(w, http.StatusCreated, map[string]any{"data": record})
+}
+
+func (h *%[2]sHandler) Update(w http.ResponseWriter, r *http.Request) {
+	id, err := parseResourceID(r)
+	if err != nil {
+		writeErrorJSON(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	payload, err := decode%[2]sPayload(r)
+	if err != nil {
+		writeErrorJSON(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	record, err := h.service.Update(r.Context(), id, services.Update%[2]sInput{Name: payload.Name})
+	if err != nil {
+		writeErrorJSON(w, http.StatusNotFound, err.Error())
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{"data": record})
+}
+
+func (h *%[2]sHandler) Delete(w http.ResponseWriter, r *http.Request) {
+	id, err := parseResourceID(r)
+	if err != nil {
+		writeErrorJSON(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	if err := h.service.Delete(r.Context(), id); err != nil {
+		writeErrorJSON(w, http.StatusNotFound, err.Error())
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func decode%[2]sPayload(r *http.Request) (%[2]sPayload, error) {
+	defer r.Body.Close()
+
+	var payload %[2]sPayload
+	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+		return payload, errors.New("request body must be valid JSON")
+	}
+
+	payload.Name = strings.TrimSpace(payload.Name)
+	if payload.Name == "" {
+		return payload, errors.New("name is required")
+	}
+
+	return payload, nil
+}
+
+func parseResourceID(r *http.Request) (uint, error) {
+	raw := strings.TrimSpace(r.PathValue("id"))
+	if raw == "" {
+		return 0, errors.New("resource id is required")
+	}
+
+	id, err := strconv.ParseUint(raw, 10, 64)
+	if err != nil || id == 0 {
+		return 0, errors.New("resource id must be a positive integer")
+	}
+
+	return uint(id), nil
+}
+
+func writeErrorJSON(w http.ResponseWriter, status int, message string) {
+	writeJSON(w, status, map[string]any{"error": message})
+}
+
+func writeJSON(w http.ResponseWriter, status int, payload any) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(payload)
+}
+`
+
+const resourceHandlerWithServiceTestTemplate = `package controllers
+
+import (
+	"bytes"
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
+	"testing"
+
+	"%[1]s/internal/repositories"
+	"%[1]s/internal/services"
+	"github.com/jcsvwinston/GoFrame/pkg/router"
+)
+
+func Test%[2]sHandler_CRUDLifecycle(t *testing.T) {
+	repository := repositories.New%[2]sRepository()
+	service := services.New%[2]sService(repository)
+	h := New%[2]sHandler(service)
+	r := router.NewMux()
+	h.Mount(r)
+
+	createRec := perform%[2]sRequest(t, r, http.MethodPost, "/%[3]s/", map[string]any{"name": "Books"})
+	if createRec.Code != http.StatusCreated {
+		t.Fatalf("expected status %%d, got %%d", http.StatusCreated, createRec.Code)
+	}
+
+	createBody := decode%[2]sJSON(t, createRec.Body.Bytes())
+	createData, ok := createBody["data"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected create response data object, got %%T", createBody["data"])
+	}
+
+	resourceID, ok := createData["id"].(float64)
+	if !ok || resourceID <= 0 {
+		t.Fatalf("expected created record id, got %%v", createData["id"])
+	}
+	if got := createData["name"]; got != "Books" {
+		t.Fatalf("expected created name %%q, got %%v", "Books", got)
+	}
+
+	listRec := perform%[2]sRequest(t, r, http.MethodGet, "/%[3]s/", nil)
+	if listRec.Code != http.StatusOK {
+		t.Fatalf("expected status %%d, got %%d", http.StatusOK, listRec.Code)
+	}
+	listBody := decode%[2]sJSON(t, listRec.Body.Bytes())
+	if got := int(listBody["count"].(float64)); got != 1 {
+		t.Fatalf("expected list count 1, got %%d", got)
+	}
+
+	resourcePath := fmt.Sprintf("/%[3]s/%%d", int(resourceID))
+	getRec := perform%[2]sRequest(t, r, http.MethodGet, resourcePath, nil)
+	if getRec.Code != http.StatusOK {
+		t.Fatalf("expected status %%d, got %%d", http.StatusOK, getRec.Code)
+	}
+
+	updateRec := perform%[2]sRequest(t, r, http.MethodPut, resourcePath, map[string]any{"name": "Novels"})
+	if updateRec.Code != http.StatusOK {
+		t.Fatalf("expected status %%d, got %%d", http.StatusOK, updateRec.Code)
+	}
+	updateBody := decode%[2]sJSON(t, updateRec.Body.Bytes())
+	updateData, ok := updateBody["data"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected update response data object, got %%T", updateBody["data"])
+	}
+	if got := updateData["name"]; got != "Novels" {
+		t.Fatalf("expected updated name %%q, got %%v", "Novels", got)
+	}
+
+	deleteRec := perform%[2]sRequest(t, r, http.MethodDelete, resourcePath, nil)
+	if deleteRec.Code != http.StatusNoContent {
+		t.Fatalf("expected status %%d, got %%d", http.StatusNoContent, deleteRec.Code)
+	}
+
+	finalListRec := perform%[2]sRequest(t, r, http.MethodGet, "/%[3]s/", nil)
+	finalListBody := decode%[2]sJSON(t, finalListRec.Body.Bytes())
+	if got := int(finalListBody["count"].(float64)); got != 0 {
+		t.Fatalf("expected list count 0 after delete, got %%d", got)
+	}
+}
+
+func Test%[2]sHandler_RejectsInvalidPayload(t *testing.T) {
+	repository := repositories.New%[2]sRepository()
+	service := services.New%[2]sService(repository)
+	h := New%[2]sHandler(service)
+	r := router.NewMux()
+	h.Mount(r)
+
+	rec := perform%[2]sRequest(t, r, http.MethodPost, "/%[3]s/", map[string]any{"name": "  "})
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("expected status %%d, got %%d", http.StatusBadRequest, rec.Code)
+	}
+
+	body := decode%[2]sJSON(t, rec.Body.Bytes())
+	if got := body["error"]; got != "name is required" {
+		t.Fatalf("expected validation error, got %%v", got)
+	}
+}
+
+func perform%[2]sRequest(t *testing.T, handler http.Handler, method, path string, payload map[string]any) *httptest.ResponseRecorder {
+	t.Helper()
+
+	var body bytes.Buffer
+	if payload != nil {
+		if err := json.NewEncoder(&body).Encode(payload); err != nil {
+			t.Fatalf("encode request body failed: %%v", err)
+		}
+	}
+
+	req := httptest.NewRequest(method, path, &body)
+	if payload != nil {
+		req.Header.Set("Content-Type", "application/json")
+	}
+
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	return rec
+}
+
+func decode%[2]sJSON(t *testing.T, raw []byte) map[string]any {
+	t.Helper()
+
+	var payload map[string]any
+	if err := json.Unmarshal(raw, &payload); err != nil {
+		t.Fatalf("decode response failed: %%v raw=%%s", err, string(raw))
+	}
+	return payload
 }
 `
 
