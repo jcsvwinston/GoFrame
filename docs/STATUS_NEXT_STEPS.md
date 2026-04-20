@@ -77,6 +77,7 @@ Completed in the first cut:
 - `startapp` now uses the local module path when available so generated HTTP controllers can depend on `services` instead of falling back to direct SQL wiring
 - generated services now own their first explicit input/output contracts instead of leaking repository result types directly to controllers
 - module-aware `generate resource` now emits repository-backed services and handlers that delegate into those services instead of keeping state inside the HTTP layer
+- module-aware `generate handler` now generates service-backed handlers and creates the companion service scaffold when it is still missing
 - CLI tests assert those architectural layers are generated
 
 Still pending in the next cut:

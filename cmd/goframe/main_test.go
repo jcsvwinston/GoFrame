@@ -793,6 +793,52 @@ func TestRun_GenerateModelAndHandler(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(dir, "handlers", "user_profile_handler.go")); err == nil {
 		t.Fatalf("unexpected legacy handler path generated")
 	}
+	handlerRaw, err := os.ReadFile(handlerPath)
+	if err != nil {
+		t.Fatalf("read generated handler failed: %v", err)
+	}
+	handlerText := string(handlerRaw)
+	if strings.Contains(handlerText, "internal/services") {
+		t.Fatalf("standalone handler scaffold should remain module-agnostic without go.mod: %s", handlerText)
+	}
+
+	moduleDir := t.TempDir()
+	writeFile(t, filepath.Join(moduleDir, "go.mod"), fmt.Sprintf(`module example.com/generated
+
+go 1.25.0
+
+require github.com/jcsvwinston/GoFrame v0.0.0
+
+replace github.com/jcsvwinston/GoFrame => %s
+`, filepath.ToSlash(repoRoot(t))))
+
+	out.Reset()
+	errOut.Reset()
+	code = run([]string{"generate", "--out", moduleDir, "handler", "UserProfile"}, &out, &errOut)
+	if code != 0 {
+		t.Fatalf("generate module-aware handler failed: code=%d stderr=%s", code, errOut.String())
+	}
+	moduleHandlerPath := filepath.Join(moduleDir, "internal", "controllers", "user_profile_handler.go")
+	moduleServicePath := filepath.Join(moduleDir, "internal", "services", "user_profile_service.go")
+	if _, err := os.Stat(moduleHandlerPath); err != nil {
+		t.Fatalf("expected module-aware handler scaffold file %s: %v", moduleHandlerPath, err)
+	}
+	if _, err := os.Stat(moduleServicePath); err != nil {
+		t.Fatalf("expected companion service scaffold file %s: %v", moduleServicePath, err)
+	}
+	moduleHandlerRaw, err := os.ReadFile(moduleHandlerPath)
+	if err != nil {
+		t.Fatalf("read module-aware handler failed: %v", err)
+	}
+	moduleHandlerText := string(moduleHandlerRaw)
+	if !strings.Contains(moduleHandlerText, `"example.com/generated/internal/services"`) {
+		t.Fatalf("expected module-aware handler to import services: %s", moduleHandlerText)
+	}
+	if !strings.Contains(moduleHandlerText, "services.UserProfileHealthInput{}") {
+		t.Fatalf("expected module-aware handler to call the generated service contract: %s", moduleHandlerText)
+	}
+	runGoMod(t, moduleDir, "mod", "tidy")
+	runGoTest(t, moduleDir)
 
 	out.Reset()
 	errOut.Reset()
