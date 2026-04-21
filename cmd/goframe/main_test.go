@@ -997,6 +997,9 @@ replace github.com/jcsvwinston/GoFrame => %s
 	if !strings.Contains(contractText, `"github.com/jcsvwinston/GoFrame/pkg/openapi"`) {
 		t.Fatalf("expected openapi import in generated contract scaffold: %s", contractText)
 	}
+	if !strings.Contains(contractText, "RegisterContract(RegisterCategoryContract)") {
+		t.Fatalf("expected generated resource contract scaffold to auto-register into contracts aggregator: %s", contractText)
+	}
 	if !strings.Contains(contractText, `func RegisterCategoryContract`) || !strings.Contains(contractText, `doc.Paths["/categories"]`) {
 		t.Fatalf("expected generated openapi contract scaffold for resource: %s", contractText)
 	}
@@ -1044,6 +1047,7 @@ func TestRun_NewProjectScaffold(t *testing.T) {
 		filepath.Join(projectDir, "internal", "models", "article.go"),
 		filepath.Join(projectDir, "internal", "controllers", "article_api.go"),
 		filepath.Join(projectDir, "internal", "controllers", "home_page.go"),
+		filepath.Join(projectDir, "internal", "contracts", "contracts.go"),
 		filepath.Join(projectDir, "internal", "contracts", "article_contract.go"),
 		filepath.Join(projectDir, "internal", "services", "article_service.go"),
 		filepath.Join(projectDir, "internal", "repositories", "article_repository.go"),
@@ -1140,8 +1144,23 @@ func TestRun_NewProjectScaffold(t *testing.T) {
 	if !strings.Contains(contractText, `"github.com/jcsvwinston/GoFrame/pkg/openapi"`) {
 		t.Fatalf("expected article contract to import openapi: %s", contractText)
 	}
+	if !strings.Contains(contractText, "RegisterContract(RegisterArticleContract)") {
+		t.Fatalf("expected article contract scaffold to auto-register into contracts aggregator: %s", contractText)
+	}
 	if !strings.Contains(contractText, `func RegisterArticleContract`) || !strings.Contains(contractText, `doc.Paths["/api/articles"]`) {
 		t.Fatalf("expected article openapi contract scaffold: %s", contractText)
+	}
+
+	contractsRaw, err := os.ReadFile(filepath.Join(projectDir, "internal", "contracts", "contracts.go"))
+	if err != nil {
+		t.Fatalf("read contracts aggregator failed: %v", err)
+	}
+	contractsText := string(contractsRaw)
+	if !strings.Contains(contractsText, "func Register(doc *openapi.Document)") {
+		t.Fatalf("expected project contracts aggregator register entrypoint: %s", contractsText)
+	}
+	if !strings.Contains(contractsText, `openapi.NewDocument("BlogApp API", "0.1.0")`) {
+		t.Fatalf("expected project contracts aggregator to seed default document metadata: %s", contractsText)
 	}
 
 	cfgRaw, err := os.ReadFile(filepath.Join(projectDir, "goframe.yaml"))
@@ -1400,12 +1419,131 @@ replace github.com/jcsvwinston/GoFrame => %s
 	if !strings.Contains(contractText, `"github.com/jcsvwinston/GoFrame/pkg/openapi"`) {
 		t.Fatalf("expected startapp contract to import openapi: %s", contractText)
 	}
+	if !strings.Contains(contractText, "RegisterContract(RegisterBillingContract)") {
+		t.Fatalf("expected startapp contract scaffold to auto-register into contracts aggregator: %s", contractText)
+	}
 	if !strings.Contains(contractText, `func RegisterBillingContract`) || !strings.Contains(contractText, `doc.Paths["/billings"]`) {
 		t.Fatalf("expected startapp openapi contract scaffold: %s", contractText)
 	}
 
 	runGoMod(t, dir, "mod", "tidy")
 	runGoTest(t, dir)
+}
+
+func TestRun_OpenAPIExport(t *testing.T) {
+	dir := t.TempDir()
+
+	var out bytes.Buffer
+	var errOut bytes.Buffer
+	code := run([]string{
+		"new",
+		"ContractApp",
+		"--out", dir,
+		"--module", "example.com/contractapp",
+	}, &out, &errOut)
+	if code != 0 {
+		t.Fatalf("new project failed: code=%d stderr=%s", code, errOut.String())
+	}
+
+	projectDir := filepath.Join(dir, "ContractApp")
+	wireGeneratedModuleToRepo(t, projectDir)
+
+	out.Reset()
+	errOut.Reset()
+	code = run([]string{
+		"startapp",
+		"Billing",
+		"--out", projectDir,
+	}, &out, &errOut)
+	if code != 0 {
+		t.Fatalf("startapp failed: code=%d stderr=%s", code, errOut.String())
+	}
+
+	out.Reset()
+	errOut.Reset()
+	code = run([]string{
+		"generate",
+		"--out", projectDir,
+		"resource",
+		"Category",
+	}, &out, &errOut)
+	if code != 0 {
+		t.Fatalf("generate resource failed: code=%d stderr=%s", code, errOut.String())
+	}
+
+	runGoMod(t, projectDir, "mod", "tidy")
+	runGoTest(t, projectDir)
+
+	openAPIPath := filepath.Join(projectDir, "openapi.json")
+	out.Reset()
+	errOut.Reset()
+	code = run([]string{
+		"openapi",
+		"--project", projectDir,
+		"--out", openAPIPath,
+	}, &out, &errOut)
+	if code != 0 {
+		t.Fatalf("openapi export failed: code=%d stderr=%s", code, errOut.String())
+	}
+	if !strings.Contains(out.String(), "OpenAPI document exported:") {
+		t.Fatalf("unexpected openapi export output: %s", out.String())
+	}
+
+	raw, err := os.ReadFile(openAPIPath)
+	if err != nil {
+		t.Fatalf("read exported openapi file failed: %v", err)
+	}
+	if !json.Valid(raw) {
+		t.Fatalf("expected valid exported openapi JSON: %s", string(raw))
+	}
+
+	var doc map[string]any
+	if err := json.Unmarshal(raw, &doc); err != nil {
+		t.Fatalf("decode exported openapi document failed: %v", err)
+	}
+	if got := doc["openapi"]; got != "3.1.0" {
+		t.Fatalf("unexpected openapi version: %v", got)
+	}
+
+	info, ok := doc["info"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected info object in exported document: %#v", doc["info"])
+	}
+	if got := info["title"]; got != "ContractApp API" {
+		t.Fatalf("unexpected openapi title: %v", got)
+	}
+
+	paths, ok := doc["paths"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected paths object in exported document: %#v", doc["paths"])
+	}
+	for _, path := range []string{"/api/articles", "/billings", "/categories", "/categories/{id}"} {
+		if _, ok := paths[path]; !ok {
+			t.Fatalf("expected exported path %s in document: %#v", path, paths)
+		}
+	}
+
+	components, ok := doc["components"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected components object in exported document: %#v", doc["components"])
+	}
+	schemas, ok := components["schemas"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected schemas object in exported document: %#v", components["schemas"])
+	}
+	for _, schema := range []string{
+		"ArticleRecord",
+		"CreateArticleInput",
+		"BillingRecord",
+		"CreateBillingInput",
+		"CategoryRecord",
+		"CreateCategoryInput",
+		"UpdateCategoryInput",
+	} {
+		if _, ok := schemas[schema]; !ok {
+			t.Fatalf("expected exported schema %s in document: %#v", schema, schemas)
+		}
+	}
 }
 
 func TestRun_StartAppFailsWithoutForceWhenExists(t *testing.T) {
@@ -2980,4 +3118,27 @@ func runGoMod(t *testing.T, dir string, args ...string) {
 	if err != nil {
 		t.Fatalf("go %s failed in %s: %v\n%s", strings.Join(args, " "), dir, err, string(output))
 	}
+}
+
+func wireGeneratedModuleToRepo(t *testing.T, dir string) {
+	t.Helper()
+
+	goModPath := filepath.Join(dir, "go.mod")
+	raw, err := os.ReadFile(goModPath)
+	if err != nil {
+		t.Fatalf("read go.mod failed: %v", err)
+	}
+
+	body := string(raw)
+	if strings.Contains(body, "replace github.com/jcsvwinston/GoFrame =>") {
+		return
+	}
+
+	body = strings.TrimSpace(body) + fmt.Sprintf(`
+
+require github.com/jcsvwinston/GoFrame v0.0.0
+
+replace github.com/jcsvwinston/GoFrame => %s
+`, filepath.ToSlash(repoRoot(t)))
+	writeFile(t, goModPath, body+"\n")
 }

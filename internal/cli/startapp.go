@@ -67,6 +67,9 @@ func runStartApp(args []string, _ io.Reader, stdout, stderr io.Writer) error {
 	if err != nil {
 		return err
 	}
+	if err := ensureContractsAggregator(*outDir, defaultOpenAPITitle("", modulePath, *outDir)); err != nil {
+		return err
+	}
 
 	// Ensure common architectural directories exist so startapp can be used to
 	// grow both freshly generated projects and older trees safely.
@@ -113,7 +116,7 @@ func runStartApp(args []string, _ io.Reader, stdout, stderr io.Writer) error {
 			},
 			startAppGeneratedFile{
 				path: filepath.Join(*outDir, "internal", "contracts", snake+"_contract.go"),
-				body: fmt.Sprintf(startAppContractTemplate, pascal, pascal, pascal, pluralSnake, pluralPascal, pluralPascal, snake, pascal, pascal, pascal, snake, pascal, pascal),
+				body: fmt.Sprintf(startAppContractTemplate, pascal, pluralSnake, pluralPascal, snake),
 			},
 			startAppGeneratedFile{
 				path: filepath.Join(*outDir, "internal", "tasks", snake+"_tasks.go"),
@@ -150,7 +153,7 @@ func runStartApp(args []string, _ io.Reader, stdout, stderr io.Writer) error {
 			},
 			startAppGeneratedFile{
 				path: filepath.Join(*outDir, "internal", "contracts", snake+"_contract.go"),
-				body: fmt.Sprintf(startAppContractTemplate, pascal, pascal, pascal, pluralSnake, pluralPascal, pluralPascal, snake, pascal, pascal, pascal, snake, pascal, pascal),
+				body: fmt.Sprintf(startAppContractTemplate, pascal, pluralSnake, pluralPascal, snake),
 			},
 			startAppGeneratedFile{
 				path: filepath.Join(*outDir, "internal", "tasks", snake+"_tasks.go"),
@@ -530,8 +533,12 @@ const startAppContractTemplate = `package contracts
 
 import "github.com/jcsvwinston/GoFrame/pkg/openapi"
 
-func Register%sContract(doc *openapi.Document) {
-	doc.AddSchema("%sRecord", openapi.Schema{
+func init() {
+	RegisterContract(Register%[1]sContract)
+}
+
+func Register%[1]sContract(doc *openapi.Document) {
+	doc.AddSchema("%[1]sRecord", openapi.Schema{
 		Type: "object",
 		Properties: map[string]openapi.Schema{
 			"name": {Type: "string"},
@@ -539,7 +546,7 @@ func Register%sContract(doc *openapi.Document) {
 		Required: []string{"name"},
 	})
 
-	doc.AddSchema("Create%sInput", openapi.Schema{
+	doc.AddSchema("Create%[1]sInput", openapi.Schema{
 		Type: "object",
 		Properties: map[string]openapi.Schema{
 			"name": {Type: "string"},
@@ -548,11 +555,11 @@ func Register%sContract(doc *openapi.Document) {
 	})
 
 	doc.EnsurePaths()
-	doc.Paths["/%s"] = openapi.PathItem{
+	doc.Paths["/%[2]s"] = openapi.PathItem{
 		Get: &openapi.Operation{
-			OperationID: "list%s",
-			Summary:     "List %s",
-			Tags:        []string{"%s"},
+			OperationID: "list%[3]s",
+			Summary:     "List %[3]s",
+			Tags:        []string{"%[4]s"},
 			Responses: map[string]openapi.Response{
 				"200": {
 					Description: "Resource collection",
@@ -560,7 +567,7 @@ func Register%sContract(doc *openapi.Document) {
 						Type: "object",
 						Properties: map[string]openapi.Schema{
 							"resource": {Type: "string"},
-							"items":    {Type: "array", Items: &openapi.Schema{Ref: "#/components/schemas/%sRecord"}},
+							"items":    {Type: "array", Items: &openapi.Schema{Ref: "#/components/schemas/%[1]sRecord"}},
 						},
 						Required: []string{"resource", "items"},
 					}),
@@ -568,12 +575,12 @@ func Register%sContract(doc *openapi.Document) {
 			},
 		},
 		Post: &openapi.Operation{
-			OperationID: "create%s",
-			Summary:     "Create %s",
-			Tags:        []string{"%s"},
+			OperationID: "create%[1]s",
+			Summary:     "Create %[1]s",
+			Tags:        []string{"%[4]s"},
 			RequestBody: &openapi.RequestBody{
 				Required: true,
-				Content:  openapi.JSONContent(openapi.RefSchema("Create%sInput")),
+				Content:  openapi.JSONContent(openapi.RefSchema("Create%[1]sInput")),
 			},
 			Responses: map[string]openapi.Response{
 				"201": {
@@ -582,7 +589,7 @@ func Register%sContract(doc *openapi.Document) {
 						Type: "object",
 						Properties: map[string]openapi.Schema{
 							"resource": {Type: "string"},
-							"item":     openapi.RefSchema("%sRecord"),
+							"item":     openapi.RefSchema("%[1]sRecord"),
 						},
 						Required: []string{"resource", "item"},
 					}),

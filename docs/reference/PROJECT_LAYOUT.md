@@ -28,10 +28,20 @@ myapp/
   go.mod
 ```
 
+Generated API-contract scaffolds also seed:
+
+```text
+internal/contracts/
+  contracts.go
+  *_contract.go
+```
+
 ## Folder Responsibilities
 
 - `controllers`: HTTP handlers and route-facing logic
 - `contracts`: generated API contract registration and OpenAPI-oriented definitions
+  - `contracts.go`: package-level aggregator with `Register(doc *openapi.Document)` and `NewDocument()`
+  - `*_contract.go`: per-resource or per-app contract files exposing `RegisterXContract(doc *openapi.Document)` and auto-registering with the package aggregator
 - `models`: domain entities registered in the model/admin system
 - `services`: business workflows and orchestration
 - `repositories`: persistence boundaries
@@ -52,3 +62,12 @@ If background jobs are needed, also include:
 
 - `cmd/worker/main.go`
 - `internal/tasks/`
+
+## Contract Convention
+
+The current experimental OpenAPI lane uses `internal/contracts` as the project convention:
+
+1. each generated contract file exposes an explicit `RegisterXContract(doc *openapi.Document)` function,
+2. each generated contract file auto-registers that function in the package aggregator,
+3. `internal/contracts/contracts.go` builds the project document via `NewDocument()`,
+4. `goframe openapi --out openapi.json` exports that aggregated document as stable JSON output for the current experimental scope.

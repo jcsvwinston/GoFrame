@@ -26,6 +26,7 @@ Command source of truth:
 | `new` | `stable` | Project scaffold entrypoint contract. |
 | `startapp` | `stable` | In-project app scaffold contract. |
 | `generate` | `stable` | Scaffold/generator command contract. |
+| `openapi` | `experimental` | Exports the project OpenAPI JSON document from `internal/contracts`; first framework-owned contract lane. |
 | `migrate` | `stable` | Migration lifecycle command contract. |
 | `sqlmigrate` | `stable` | SQL preview for migration files. |
 | `sqlflush` | `stable` | SQL preview for flush behavior. |

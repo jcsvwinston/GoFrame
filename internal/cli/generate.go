@@ -43,6 +43,13 @@ func runGenerate(args []string, _ io.Reader, stdout, stderr io.Writer) error {
 	if err := ensureDir(*outDir); err != nil {
 		return err
 	}
+	modulePath, _, err := detectModulePath(*outDir)
+	if err != nil {
+		return err
+	}
+	if err := ensureContractsAggregator(*outDir, defaultOpenAPITitle("", modulePath, *outDir)); err != nil {
+		return err
+	}
 
 	snake := toSnakeCase(name)
 	pascal := toPascalCase(name)
@@ -682,6 +689,10 @@ func map%[2]sRecord(record repositories.%[2]sRecord) %[2]sRecord {
 const resourceContractTemplate = `package contracts
 
 import "github.com/jcsvwinston/GoFrame/pkg/openapi"
+
+func init() {
+	RegisterContract(Register%[1]sContract)
+}
 
 func Register%[1]sContract(doc *openapi.Document) {
 	doc.AddSchema("%[2]sRecord", openapi.Schema{

@@ -86,6 +86,7 @@ func runNew(args []string, _ io.Reader, stdout, stderr io.Writer) error {
 		{relPath: filepath.Join("internal", "models", "article.go"), body: newArticleModelTemplate},
 		{relPath: filepath.Join("internal", "controllers", "home_page.go"), body: newHomePageTemplate},
 		{relPath: filepath.Join("internal", "controllers", "article_api.go"), body: fmt.Sprintf(newArticleAPITemplate, module)},
+		{relPath: filepath.Join("internal", "contracts", "contracts.go"), body: fmt.Sprintf(contractsAggregatorTemplate, defaultOpenAPITitle(projectName, module, projectDir))},
 		{relPath: filepath.Join("internal", "contracts", "article_contract.go"), body: newArticleContractTemplate},
 		{relPath: filepath.Join("internal", "services", "article_service.go"), body: fmt.Sprintf(newArticleServiceTemplate, module)},
 		{relPath: filepath.Join("internal", "repositories", "article_repository.go"), body: newArticleRepositoryTemplate},
@@ -539,6 +540,10 @@ func articleFromRepository(record repositories.Article) Article {
 const newArticleContractTemplate = `package contracts
 
 import "github.com/jcsvwinston/GoFrame/pkg/openapi"
+
+func init() {
+	RegisterContract(RegisterArticleContract)
+}
 
 func RegisterArticleContract(doc *openapi.Document) {
 	doc.AddSchema("ArticleRecord", openapi.Schema{

@@ -92,11 +92,20 @@ Still pending in the next cut:
 
 ### Point 6: API contracts
 
-After the application layer is clearer:
+In progress.
 
-- generate OpenAPI from framework conventions
-- expose automatic API documentation
-- prepare generated clients and contract checks
+Completed in the first cut:
+
+- `pkg/openapi` is now the official experimental base layer for project-level API contracts
+- generated projects now seed `internal/contracts/contracts.go` as the package-level contract aggregator
+- scaffolded contract files auto-register through that aggregator while still exposing explicit `RegisterXContract(doc *openapi.Document)` functions
+- `goframe openapi --out openapi.json` now exports a project OpenAPI document from the registered contracts
+- CLI tests now verify generated contract compilation, exported document shape, and scaffold/export consistency
+
+Still pending in the next cut:
+
+- expose automatic API documentation beyond JSON export
+- prepare generated clients and stronger contract checks
 
 ### Point 7 and beyond: distributed primitives
 
@@ -109,10 +118,10 @@ Longer-term work:
 
 ## Recommended start for tomorrow
 
-Continue point 5 with this order:
+Continue point 6 with this order:
 
-1. tighten the actual conventions between controllers, services, repositories, and tasks
-2. continue tightening explicit service input/output contracts where scaffolds still leak lower layers
-3. deepen repository conventions and expand contract generation from the first OpenAPI lane
+1. deepen the OpenAPI lane beyond the current scaffold-first subset
+2. decide how automatic documentation will be exposed at runtime
+3. keep tightening conventions between controllers, services, repositories, tasks, and contracts
 4. run verification: `go test ./...` and `npm run build`
-5. commit and push the next point 5 batch
+5. commit and push the next point 6 batch

@@ -43,6 +43,7 @@ var commandSpecs = []commandSpec{
 	{name: "sqlflush", summary: "Print SQL statements used by flush", run: runSQLFlush},
 	{name: "sqlsequencereset", summary: "Print SQL statements to reset table sequences", run: runSQLSequenceReset},
 	{name: "new", summary: "Create a new MVC + API + Admin project scaffold", run: runNew},
+	{name: "openapi", summary: "Export the experimental OpenAPI project contract", run: runOpenAPI},
 	{name: "squashmigrations", summary: "Squash a migration range into a single migration", run: runSquashMigrations},
 	{name: "startapp", summary: "Create an app scaffold in an existing project", run: runStartApp},
 	{name: "seed", summary: "Execute SQL seed files", run: runSeed},
@@ -202,6 +203,7 @@ func printRootUsage(w io.Writer) {
 	fmt.Fprintln(w, "  goframe sqlsequencereset --config goframe.yaml")
 	fmt.Fprintln(w, "  goframe inspectdb --config goframe.yaml --output internal/models/inspected.go")
 	fmt.Fprintln(w, "  goframe ogrinspect --config goframe.yaml --output internal/models/geospatial.go")
+	fmt.Fprintln(w, "  goframe openapi --out openapi.json")
 	fmt.Fprintln(w, "  goframe dumpdata --config goframe.yaml --output fixtures.json")
 	fmt.Fprintln(w, "  goframe loaddata --config goframe.yaml fixtures.json")
 	fmt.Fprintln(w, "  goframe testserver --config goframe.yaml --dry-run fixtures.json")

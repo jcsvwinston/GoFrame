@@ -308,6 +308,7 @@ GoFrame ships stable operational CLI coverage for:
 
 - runtime and diagnostics (`serve`, `routes`, `health`)
 - scaffolding (`new`, `startapp`, `generate`)
+- experimental API contract export (`openapi`)
 - migrations and SQL maintenance
 - data import/export/introspection
 - auth/admin maintenance commands
@@ -325,6 +326,12 @@ Global output contract:
 Critical maintenance commands follow homogeneous output modes including structured JSON status payloads.
 
 Reference lifecycle matrix: `docs/reference/CLI_CONTRACT_MATRIX.md`.
+
+Current experimental API contract lane:
+
+- projects aggregate generated API contracts in `internal/contracts`
+- `internal/contracts/contracts.go` exposes the package-level document builder
+- `goframe openapi --out openapi.json` exports the current project contract as OpenAPI JSON
 
 ## 8. Compatibility Governance
 
