@@ -81,7 +81,7 @@ func runNew(args []string, _ io.Reader, stdout, stderr io.Writer) error {
 		{relPath: "goframe.yaml", body: fmt.Sprintf(newConfigTemplate, *port)},
 		{relPath: ".gitignore", body: newGitignoreTemplate},
 		{relPath: "README.md", body: fmt.Sprintf(newReadmeTemplate, projectName)},
-		{relPath: filepath.Join("cmd", "server", "main.go"), body: fmt.Sprintf(newMainTemplate, module, module, module, module, projectName)},
+		{relPath: filepath.Join("cmd", "server", "main.go"), body: fmt.Sprintf(newMainTemplate, module, module, module, module, module, projectName)},
 		{relPath: filepath.Join("cmd", "worker", "main.go"), body: fmt.Sprintf(newWorkerTemplate, module, module, module)},
 		{relPath: filepath.Join("internal", "models", "article.go"), body: newArticleModelTemplate},
 		{relPath: filepath.Join("internal", "controllers", "home_page.go"), body: newHomePageTemplate},
@@ -201,6 +201,7 @@ Accesos:
 
 - App: http://localhost:8080/
 - API: http://localhost:8080/api/articles
+- OpenAPI JSON: http://localhost:8080/openapi.json
 - Admin: http://localhost:8080/admin
 `
 
@@ -215,6 +216,7 @@ import (
 	"time"
 
 	"%s/internal/controllers"
+	"%s/internal/contracts"
 	"%s/internal/models"
 	"%s/internal/repositories"
 	"%s/internal/services"
@@ -266,6 +268,9 @@ func main() {
 	a.Router.Get("/api/health", controllers.Health)
 	a.Router.Get("/api/articles", controllers.ListArticles(articleService))
 	a.Router.Post("/api/articles", controllers.CreateArticle(articleService))
+	if err := a.MountOpenAPI("/openapi.json", contracts.NewDocument); err != nil {
+		log.Fatal(err)
+	}
 	a.Router.Get("/health", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte("ok"))
@@ -274,6 +279,7 @@ func main() {
 	log.Println("%s running:")
 	log.Printf("  web:   http://localhost:%%d/\n", cfg.Port)
 	log.Printf("  api:   http://localhost:%%d/api/articles\n", cfg.Port)
+	log.Printf("  openapi: http://localhost:%%d/openapi.json\n", cfg.Port)
 	log.Printf("  admin: http://localhost:%%d/admin\n", cfg.Port)
 	log.Fatal(a.Run(context.Background()))
 }

@@ -330,8 +330,9 @@ Reference lifecycle matrix: `docs/reference/CLI_CONTRACT_MATRIX.md`.
 Current experimental API contract lane:
 
 - projects aggregate generated API contracts in `internal/contracts`
-- `internal/contracts/contracts.go` exposes the package-level document builder
+- `internal/contracts/contracts.go` exposes the package-level document builder (`DefaultConfig`, `NewDocument`, `NewDocumentWithConfig`)
 - `goframe openapi --out openapi.json` exports the current project contract as OpenAPI JSON
+- generated server scaffolds can serve that same contract explicitly at `/openapi.json` via `app.MountOpenAPI`
 
 ## 8. Compatibility Governance
 

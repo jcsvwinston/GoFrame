@@ -40,7 +40,7 @@ internal/contracts/
 
 - `controllers`: HTTP handlers and route-facing logic
 - `contracts`: generated API contract registration and OpenAPI-oriented definitions
-  - `contracts.go`: package-level aggregator with `Register(doc *openapi.Document)` and `NewDocument()`
+  - `contracts.go`: package-level aggregator with `Register(doc *openapi.Document)`, `DefaultConfig()`, `NewDocument()`, and `NewDocumentWithConfig(cfg Config)`
   - `*_contract.go`: per-resource or per-app contract files exposing `RegisterXContract(doc *openapi.Document)` and auto-registering with the package aggregator
 - `models`: domain entities registered in the model/admin system
 - `services`: business workflows and orchestration
@@ -69,5 +69,6 @@ The current experimental OpenAPI lane uses `internal/contracts` as the project c
 
 1. each generated contract file exposes an explicit `RegisterXContract(doc *openapi.Document)` function,
 2. each generated contract file auto-registers that function in the package aggregator,
-3. `internal/contracts/contracts.go` builds the project document via `NewDocument()`,
-4. `goframe openapi --out openapi.json` exports that aggregated document as stable JSON output for the current experimental scope.
+3. `internal/contracts/contracts.go` centralizes the document bootstrap via `DefaultConfig()`, `NewDocument()`, and `NewDocumentWithConfig(cfg Config)`,
+4. `goframe openapi --out openapi.json` and runtime serving should both use that same document builder,
+5. scaffolded server apps mount the experimental document explicitly at `/openapi.json` via `app.MountOpenAPI("/openapi.json", contracts.NewDocument)`.

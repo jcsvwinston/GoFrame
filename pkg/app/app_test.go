@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -10,6 +11,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/jcsvwinston/GoFrame/pkg/openapi"
 )
 
 func testAppConfig() *Config {
@@ -158,6 +161,9 @@ func TestAppMethods_NilReceiver(t *testing.T) {
 	if err := a.RegisterModel(&struct{ ID uint }{}); !errors.Is(err, ErrNilApp) {
 		t.Fatalf("RegisterModel: expected ErrNilApp, got %v", err)
 	}
+	if err := a.MountOpenAPI("/openapi.json", func() *openapi.Document { return openapi.NewDocument("Test", "0.1.0") }); !errors.Is(err, ErrNilApp) {
+		t.Fatalf("MountOpenAPI: expected ErrNilApp, got %v", err)
+	}
 }
 
 func TestAppRun_NotInitialized(t *testing.T) {
@@ -165,6 +171,61 @@ func TestAppRun_NotInitialized(t *testing.T) {
 	err := a.Run(context.Background())
 	if !errors.Is(err, ErrNotInitialized) {
 		t.Fatalf("expected ErrNotInitialized, got %v", err)
+	}
+}
+
+func TestAppMountOpenAPI(t *testing.T) {
+	a, err := New(testAppConfig())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	defer a.Shutdown(context.Background())
+
+	docProvider := func() *openapi.Document {
+		doc := openapi.NewDocument("Runtime Test API", "0.2.0")
+		doc.Info.Description = "Experimental runtime contract"
+		doc.Servers = []openapi.Server{{URL: "/"}}
+		doc.EnsurePaths()
+		doc.Paths["/health"] = openapi.PathItem{
+			Get: &openapi.Operation{
+				OperationID: "healthCheck",
+				Summary:     "Health check",
+				Responses: map[string]openapi.Response{
+					"200": {Description: "Healthy"},
+				},
+			},
+		}
+		return doc
+	}
+
+	if err := a.MountOpenAPI("/openapi.json", docProvider); err != nil {
+		t.Fatalf("MountOpenAPI failed: %v", err)
+	}
+	if err := a.MountOpenAPI("/openapi.json", docProvider); err != nil {
+		t.Fatalf("MountOpenAPI should be idempotent: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/openapi.json", nil)
+	rec := httptest.NewRecorder()
+	a.Router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d body=%s", rec.Code, rec.Body.String())
+	}
+	if got := rec.Header().Get("Content-Type"); !strings.Contains(got, "application/json") {
+		t.Fatalf("expected json content type, got %q", got)
+	}
+
+	var doc map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &doc); err != nil {
+		t.Fatalf("decode runtime openapi document failed: %v", err)
+	}
+	info, ok := doc["info"].(map[string]any)
+	if !ok || info["title"] != "Runtime Test API" {
+		t.Fatalf("unexpected runtime info payload: %#v", doc["info"])
+	}
+	if _, ok := doc["servers"].([]any); !ok {
+		t.Fatalf("expected servers array in runtime document: %#v", doc["servers"])
 	}
 }
 

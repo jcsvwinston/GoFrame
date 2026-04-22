@@ -21,6 +21,7 @@ import (
 	"github.com/jcsvwinston/GoFrame/pkg/mail"
 	"github.com/jcsvwinston/GoFrame/pkg/model"
 	"github.com/jcsvwinston/GoFrame/pkg/observe"
+	"github.com/jcsvwinston/GoFrame/pkg/openapi"
 	"github.com/jcsvwinston/GoFrame/pkg/router"
 	"github.com/jcsvwinston/GoFrame/pkg/storage"
 )
@@ -46,6 +47,7 @@ type App struct {
 	server         *http.Server
 	shutdownFns    []func(context.Context) error
 	adminMounted   bool
+	openAPIRoutes  map[string]struct{}
 	storageCleaner *storage.Cleaner
 }
 
@@ -371,6 +373,41 @@ func (a *App) MountAdmin() error {
 
 	a.Router.Mount(prefix, a.Admin.Handler())
 	a.adminMounted = true
+	return nil
+}
+
+// MountOpenAPI mounts a JSON OpenAPI document endpoint exactly once per path.
+func (a *App) MountOpenAPI(pattern string, provider openapi.DocumentProvider) error {
+	if a == nil {
+		return wrapOp("MountOpenAPI", ErrNilApp)
+	}
+	if a.Router == nil {
+		return wrapOp("MountOpenAPI", ErrNotInitialized)
+	}
+	if provider == nil {
+		return wrapOp("MountOpenAPI", errors.New("openapi provider is nil"))
+	}
+
+	path := strings.TrimSpace(pattern)
+	if path == "" {
+		path = "/openapi.json"
+	}
+	if !strings.HasPrefix(path, "/") {
+		path = "/" + path
+	}
+
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
+	if a.openAPIRoutes == nil {
+		a.openAPIRoutes = map[string]struct{}{}
+	}
+	if _, ok := a.openAPIRoutes[path]; ok {
+		return nil
+	}
+
+	a.Router.Get(path, openapi.HandlerFunc(provider))
+	a.openAPIRoutes[path] = struct{}{}
 	return nil
 }
 

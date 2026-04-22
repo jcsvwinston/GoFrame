@@ -11,13 +11,20 @@ import (
 type Document struct {
 	OpenAPI    string              `json:"openapi"`
 	Info       Info                `json:"info"`
+	Servers    []Server            `json:"servers,omitempty"`
 	Paths      map[string]PathItem `json:"paths,omitempty"`
 	Components Components          `json:"components,omitempty"`
 }
 
 type Info struct {
-	Title   string `json:"title"`
-	Version string `json:"version"`
+	Title       string `json:"title"`
+	Version     string `json:"version"`
+	Description string `json:"description,omitempty"`
+}
+
+type Server struct {
+	URL         string `json:"url"`
+	Description string `json:"description,omitempty"`
 }
 
 type Components struct {

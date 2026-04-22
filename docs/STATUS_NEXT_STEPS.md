@@ -104,7 +104,7 @@ Completed in the first cut:
 
 Still pending in the next cut:
 
-- expose automatic API documentation beyond JSON export
+- expose runtime contract serving beyond JSON export
 - prepare generated clients and stronger contract checks
 
 ### Point 7 and beyond: distributed primitives
