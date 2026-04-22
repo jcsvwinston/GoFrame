@@ -552,25 +552,28 @@ func Register%[1]sContract(doc *openapi.Document) {
 			OperationID: "list%[3]s",
 			Summary:     "List %[3]s",
 			Description: "Returns the scaffolded %[4]s collection.",
-			Tags:        []string{"%[4]s"},
+			Tags:        []string{"%[2]s"},
 			Responses: map[string]openapi.Response{
 				"200": openapi.JSONResponse("Resource collection", openapi.ObjectSchema(map[string]openapi.Schema{
 					"resource": {Type: "string"},
 					"items":    openapi.ArraySchema(openapi.RefSchema("%[1]sRecord")),
 				}, "resource", "items")),
+				"500": openapi.ErrorResponse("Unexpected error"),
 			},
 		},
 		Post: &openapi.Operation{
 			OperationID: "create%[1]s",
 			Summary:     "Create %[1]s",
 			Description: "Creates a scaffolded %[4]s resource.",
-			Tags:        []string{"%[4]s"},
+			Tags:        []string{"%[2]s"},
 			RequestBody: openapi.JSONRequestBody(openapi.RefSchema("Create%[1]sInput"), true),
 			Responses: map[string]openapi.Response{
 				"201": openapi.JSONResponse("Created resource", openapi.ObjectSchema(map[string]openapi.Schema{
 					"resource": {Type: "string"},
 					"item":     openapi.RefSchema("%[1]sRecord"),
 				}, "resource", "item")),
+				"400": openapi.ErrorResponse("Invalid request"),
+				"500": openapi.ErrorResponse("Unexpected error"),
 			},
 		},
 	}

@@ -1011,6 +1011,9 @@ replace github.com/jcsvwinston/GoFrame => %s
 	if !strings.Contains(contractText, "openapi.JSONRequestBody(") || !strings.Contains(contractText, "openapi.JSONResponse(") {
 		t.Fatalf("expected generated resource contract scaffold to use shared openapi helpers: %s", contractText)
 	}
+	if !strings.Contains(contractText, "openapi.ErrorResponse(") || !strings.Contains(contractText, "openapi.EmptyResponse(") {
+		t.Fatalf("expected generated resource contract scaffold to use shared openapi error/empty helpers: %s", contractText)
+	}
 
 	testRaw, err := os.ReadFile(testPath)
 	if err != nil {
@@ -1022,6 +1025,9 @@ replace github.com/jcsvwinston/GoFrame => %s
 	}
 	if !strings.Contains(testText, "services.NewCategoryService") {
 		t.Fatalf("expected resource test scaffold to wire repository and service: %s", testText)
+	}
+	if !strings.Contains(testText, "assertStructuredErrorResponse") {
+		t.Fatalf("expected resource test scaffold to validate structured error responses: %s", testText)
 	}
 
 	runGoMod(t, dir, "mod", "tidy")
@@ -1160,6 +1166,9 @@ func TestRun_NewProjectScaffold(t *testing.T) {
 	}
 	if !strings.Contains(contractText, "openapi.ObjectSchema(") || !strings.Contains(contractText, "openapi.JSONResponse(") {
 		t.Fatalf("expected article contract scaffold to use shared openapi schema/response helpers: %s", contractText)
+	}
+	if !strings.Contains(contractText, "openapi.ErrorResponse(") {
+		t.Fatalf("expected article contract scaffold to use shared openapi error response helper: %s", contractText)
 	}
 
 	contractsRaw, err := os.ReadFile(filepath.Join(projectDir, "internal", "contracts", "contracts.go"))
@@ -1442,6 +1451,9 @@ replace github.com/jcsvwinston/GoFrame => %s
 	if !strings.Contains(contractText, "openapi.ObjectSchema(") || !strings.Contains(contractText, "openapi.JSONRequestBody(") {
 		t.Fatalf("expected startapp contract scaffold to use shared openapi helpers: %s", contractText)
 	}
+	if !strings.Contains(contractText, "openapi.ErrorResponse(") {
+		t.Fatalf("expected startapp contract scaffold to use shared openapi error response helper: %s", contractText)
+	}
 
 	runGoMod(t, dir, "mod", "tidy")
 	runGoTest(t, dir)
@@ -1572,16 +1584,34 @@ func TestRun_OpenAPIExport(t *testing.T) {
 	if err := json.Unmarshal(raw, &typedDoc); err != nil {
 		t.Fatalf("decode exported openapi document into typed struct failed: %v", err)
 	}
+	assertOperationMetadata(t, typedDoc.Paths["/api/articles"].Get, "listArticles", "articles")
 	assertOperationJSONResponse(t, typedDoc.Paths["/api/articles"].Get, "200")
+	assertOperationErrorResponse(t, typedDoc.Paths["/api/articles"].Get, "500")
+	assertOperationMetadata(t, typedDoc.Paths["/api/articles"].Post, "createArticle", "articles")
 	assertOperationJSONRequestBody(t, typedDoc.Paths["/api/articles"].Post)
+	assertOperationErrorResponse(t, typedDoc.Paths["/api/articles"].Post, "400")
+	assertOperationMetadata(t, typedDoc.Paths["/billings"].Get, "listBillings", "billings")
+	assertOperationJSONResponse(t, typedDoc.Paths["/billings"].Get, "200")
+	assertOperationErrorResponse(t, typedDoc.Paths["/billings"].Get, "500")
+	assertOperationMetadata(t, typedDoc.Paths["/billings"].Post, "createBilling", "billings")
+	assertOperationJSONRequestBody(t, typedDoc.Paths["/billings"].Post)
+	assertOperationErrorResponse(t, typedDoc.Paths["/billings"].Post, "400")
+	assertOperationMetadata(t, typedDoc.Paths["/categories"].Get, "listCategories", "categories")
 	assertOperationJSONResponse(t, typedDoc.Paths["/categories"].Get, "200")
+	assertOperationErrorResponse(t, typedDoc.Paths["/categories"].Get, "500")
+	assertOperationMetadata(t, typedDoc.Paths["/categories"].Post, "createCategory", "categories")
 	assertOperationJSONRequestBody(t, typedDoc.Paths["/categories"].Post)
+	assertOperationErrorResponse(t, typedDoc.Paths["/categories"].Post, "400")
 	assertPathIDOperation(t, typedDoc.Paths["/categories/{id}"].Get, "getCategory")
+	assertOperationErrorResponse(t, typedDoc.Paths["/categories/{id}"].Get, "400")
+	assertOperationErrorResponse(t, typedDoc.Paths["/categories/{id}"].Get, "404")
 	assertPathIDOperation(t, typedDoc.Paths["/categories/{id}"].Put, "updateCategory")
+	assertOperationErrorResponse(t, typedDoc.Paths["/categories/{id}"].Put, "400")
+	assertOperationErrorResponse(t, typedDoc.Paths["/categories/{id}"].Put, "404")
 	assertPathIDOperation(t, typedDoc.Paths["/categories/{id}"].Delete, "deleteCategory")
-	if typedDoc.Paths["/categories/{id}"].Delete.Responses["204"].Description != "Resource deleted" {
-		t.Fatalf("expected delete operation to expose 204 response description, got %#v", typedDoc.Paths["/categories/{id}"].Delete.Responses)
-	}
+	assertOperationErrorResponse(t, typedDoc.Paths["/categories/{id}"].Delete, "400")
+	assertOperationErrorResponse(t, typedDoc.Paths["/categories/{id}"].Delete, "404")
+	assertEmptyResponse(t, typedDoc.Paths["/categories/{id}"].Delete, "204", "Resource deleted")
 
 	runtimeTestPath := filepath.Join(projectDir, "cmd", "server", "openapi_runtime_test.go")
 	writeFile(t, runtimeTestPath, `package main
@@ -1719,6 +1749,47 @@ func assertOperationJSONResponse(t *testing.T, op *openapi.Operation, status str
 	}
 }
 
+func assertOperationMetadata(t *testing.T, op *openapi.Operation, operationID string, tag string) {
+	t.Helper()
+	if op == nil {
+		t.Fatal("expected operation, got nil")
+	}
+	if op.OperationID != operationID {
+		t.Fatalf("expected operationId %q, got %q", operationID, op.OperationID)
+	}
+	if strings.TrimSpace(op.Summary) == "" || strings.TrimSpace(op.Description) == "" {
+		t.Fatalf("expected non-empty operation summary/description, got %#v", op)
+	}
+	if len(op.Tags) != 1 || op.Tags[0] != tag {
+		t.Fatalf("expected single tag %q, got %#v", tag, op.Tags)
+	}
+}
+
+func assertOperationErrorResponse(t *testing.T, op *openapi.Operation, status string) {
+	t.Helper()
+	if op == nil {
+		t.Fatal("expected operation, got nil")
+	}
+	response, ok := op.Responses[status]
+	if !ok {
+		t.Fatalf("expected %s error response, got %#v", status, op.Responses)
+	}
+	content, ok := response.Content["application/json"]
+	if !ok {
+		t.Fatalf("expected application/json error response content, got %#v", response.Content)
+	}
+	errorField, ok := content.Schema.Properties["error"]
+	if !ok {
+		t.Fatalf("expected structured error schema, got %#v", content.Schema.Properties)
+	}
+	if _, ok := errorField.Properties["code"]; !ok {
+		t.Fatalf("expected error code field, got %#v", errorField.Properties)
+	}
+	if _, ok := errorField.Properties["message"]; !ok {
+		t.Fatalf("expected error message field, got %#v", errorField.Properties)
+	}
+}
+
 func assertPathIDOperation(t *testing.T, op *openapi.Operation, operationID string) {
 	t.Helper()
 	if op == nil {
@@ -1736,6 +1807,23 @@ func assertPathIDOperation(t *testing.T, op *openapi.Operation, operationID stri
 	}
 	if param.Schema.Type != "integer" || param.Schema.Format != "int64" {
 		t.Fatalf("expected int64 id parameter schema, got %#v", param.Schema)
+	}
+}
+
+func assertEmptyResponse(t *testing.T, op *openapi.Operation, status string, description string) {
+	t.Helper()
+	if op == nil {
+		t.Fatal("expected operation, got nil")
+	}
+	response, ok := op.Responses[status]
+	if !ok {
+		t.Fatalf("expected %s response, got %#v", status, op.Responses)
+	}
+	if response.Description != description {
+		t.Fatalf("expected %s response description %q, got %#v", status, description, response)
+	}
+	if response.Content != nil {
+		t.Fatalf("expected empty response content for %s, got %#v", status, response.Content)
 	}
 }
 

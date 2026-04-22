@@ -75,4 +75,30 @@ func TestHelpers(t *testing.T) {
 	if param.In != "path" || !param.Required || param.Schema.Format != "int64" {
 		t.Fatalf("unexpected path parameter helper output: %#v", param)
 	}
+
+	query := QueryParameter("q", Schema{Type: "string"}, "Search term", false)
+	if query.In != "query" || query.Required {
+		t.Fatalf("unexpected query parameter helper output: %#v", query)
+	}
+
+	empty := EmptyResponse("Deleted")
+	if empty.Description != "Deleted" || empty.Content != nil {
+		t.Fatalf("unexpected empty response helper output: %#v", empty)
+	}
+
+	errorResponse := ErrorResponse("Validation failed")
+	errorSchema := errorResponse.Content["application/json"].Schema
+	if errorSchema.Type != "object" {
+		t.Fatalf("expected error response object schema, got %#v", errorSchema)
+	}
+	errorField, ok := errorSchema.Properties["error"]
+	if !ok {
+		t.Fatalf("expected nested error field in error schema, got %#v", errorSchema.Properties)
+	}
+	if _, ok := errorField.Properties["code"]; !ok {
+		t.Fatalf("expected error code field, got %#v", errorField.Properties)
+	}
+	if _, ok := errorField.Properties["message"]; !ok {
+		t.Fatalf("expected error message field, got %#v", errorField.Properties)
+	}
 }

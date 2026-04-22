@@ -577,6 +577,7 @@ func RegisterArticleContract(doc *openapi.Document) {
 					"items": openapi.ArraySchema(openapi.RefSchema("ArticleRecord")),
 					"total": {Type: "integer"},
 				}, "items", "total")),
+				"500": openapi.ErrorResponse("Unexpected error"),
 			},
 		},
 		Post: &openapi.Operation{
@@ -587,6 +588,8 @@ func RegisterArticleContract(doc *openapi.Document) {
 			RequestBody: openapi.JSONRequestBody(openapi.RefSchema("CreateArticleInput"), true),
 			Responses: map[string]openapi.Response{
 				"201": openapi.JSONResponse("Created article", openapi.RefSchema("ArticleRecord")),
+				"400": openapi.ErrorResponse("Invalid request"),
+				"500": openapi.ErrorResponse("Unexpected error"),
 			},
 		},
 	}

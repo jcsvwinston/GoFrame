@@ -1,6 +1,6 @@
 # Status and Next Steps
 
-Last updated: 2026-04-16
+Last updated: 2026-04-22
 
 ## Current baseline
 
@@ -102,11 +102,18 @@ Completed in the first cut:
 - `goframe openapi --out openapi.json` now exports a project OpenAPI document from the registered contracts
 - CLI tests now verify generated contract compilation, exported document shape, and scaffold/export consistency
 
+Completed in the second cut:
+
+- the experimental subset now includes small reusable helpers for common JSON error responses, empty `204` responses, and explicit query parameters
+- scaffolded contracts now expose more homogeneous `tags`, `summary`, `description`, and collection `operationId` conventions
+- generated resource handlers now align with the framework's structured JSON error envelope instead of returning ad hoc error strings
+- structural contract checks now validate shared metadata, error schemas, and empty responses beyond basic string matching
+- docs now describe the supported subset and extension conventions more explicitly
+
 Still pending in the next cut:
 
-- improve the experimental subset with reusable schema/response helpers
-- add path-parameter support and stronger structural contract checks
-- document the supported subset and extension conventions more explicitly
+- decide whether scaffolded response envelopes should converge further (`data` vs `items`/`resource`) without overfitting a DSL
+- deepen explicit query-parameter usage only where generated handlers can honor it cleanly
 - prepare generated clients beyond the current document-export/serve lane
 
 ### Point 7 and beyond: distributed primitives

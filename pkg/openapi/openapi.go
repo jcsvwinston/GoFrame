@@ -168,12 +168,44 @@ func JSONResponse(description string, schema Schema) Response {
 	}
 }
 
+func EmptyResponse(description string) Response {
+	return Response{Description: description}
+}
+
+func ErrorSchema() Schema {
+	anyDetails := Schema{}
+	return ObjectSchema(map[string]Schema{
+		"error": ObjectSchema(map[string]Schema{
+			"code":    {Type: "string"},
+			"message": {Type: "string"},
+			"details": {
+				Type:                 "object",
+				AdditionalProperties: &anyDetails,
+			},
+		}, "code", "message"),
+	}, "error")
+}
+
+func ErrorResponse(description string) Response {
+	return JSONResponse(description, ErrorSchema())
+}
+
 func PathParameter(name string, schema Schema, description string) Parameter {
 	return Parameter{
 		Name:        name,
 		In:          "path",
 		Description: description,
 		Required:    true,
+		Schema:      schema,
+	}
+}
+
+func QueryParameter(name string, schema Schema, description string, required bool) Parameter {
+	return Parameter{
+		Name:        name,
+		In:          "query",
+		Description: description,
+		Required:    required,
 		Schema:      schema,
 	}
 }

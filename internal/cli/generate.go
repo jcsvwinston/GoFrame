@@ -312,7 +312,7 @@ func generateResourceServiceScaffold(outDir, snake, pascal, modulePath string, f
 
 func generateResourceContractScaffold(outDir, snake, pascal, resourcePath string, force bool) (string, error) {
 	path := filepath.Join(outDir, "internal", "contracts", snake+"_contract.go")
-	body := fmt.Sprintf(resourceContractTemplate, pascal, pascal, pascal, resourcePath, pascal, resourcePath, pascal, pascal, resourcePath, pascal)
+	body := fmt.Sprintf(resourceContractTemplate, pascal, pascal, pascal, resourcePath, toPascalCase(resourcePath), resourcePath, pascal, pascal, resourcePath, pascal)
 	if err := writeFileIfNotExists(path, body, force); err != nil {
 		return "", err
 	}
@@ -712,7 +712,7 @@ func Register%[1]sContract(doc *openapi.Document) {
 	doc.Paths["/%[4]s"] = openapi.PathItem{
 		Get: &openapi.Operation{
 			OperationID: "list%[5]s",
-			Summary:     "List %[6]s",
+			Summary:     "List %[5]s",
 			Description: "Returns the scaffolded %[4]s collection.",
 			Tags:        []string{"%[4]s"},
 			Responses: map[string]openapi.Response{
@@ -720,6 +720,7 @@ func Register%[1]sContract(doc *openapi.Document) {
 					"data":  openapi.ArraySchema(openapi.RefSchema("%[2]sRecord")),
 					"count": {Type: "integer"},
 				}, "data", "count")),
+				"500": openapi.ErrorResponse("Unexpected error"),
 			},
 		},
 		Post: &openapi.Operation{
@@ -732,6 +733,7 @@ func Register%[1]sContract(doc *openapi.Document) {
 				"201": openapi.JSONResponse("Created resource", openapi.ObjectSchema(map[string]openapi.Schema{
 					"data": openapi.RefSchema("%[2]sRecord"),
 				}, "data")),
+				"400": openapi.ErrorResponse("Invalid request"),
 			},
 		},
 	}
@@ -749,6 +751,8 @@ func Register%[1]sContract(doc *openapi.Document) {
 				"200": openapi.JSONResponse("Single resource", openapi.ObjectSchema(map[string]openapi.Schema{
 					"data": openapi.RefSchema("%[2]sRecord"),
 				}, "data")),
+				"400": openapi.ErrorResponse("Invalid request"),
+				"404": openapi.ErrorResponse("Resource not found"),
 			},
 		},
 		Put: &openapi.Operation{
@@ -764,6 +768,8 @@ func Register%[1]sContract(doc *openapi.Document) {
 				"200": openapi.JSONResponse("Updated resource", openapi.ObjectSchema(map[string]openapi.Schema{
 					"data": openapi.RefSchema("%[2]sRecord"),
 				}, "data")),
+				"400": openapi.ErrorResponse("Invalid request"),
+				"404": openapi.ErrorResponse("Resource not found"),
 			},
 		},
 		Delete: &openapi.Operation{
@@ -775,7 +781,9 @@ func Register%[1]sContract(doc *openapi.Document) {
 				openapi.PathParameter("id", openapi.IDSchema(), "%[8]s identifier"),
 			},
 			Responses: map[string]openapi.Response{
-				"204": {Description: "Resource deleted"},
+				"204": openapi.EmptyResponse("Resource deleted"),
+				"400": openapi.ErrorResponse("Invalid request"),
+				"404": openapi.ErrorResponse("Resource not found"),
 			},
 		},
 	}
@@ -792,6 +800,7 @@ import (
 	"strings"
 
 	"%[1]s/internal/services"
+	gferrors "github.com/jcsvwinston/GoFrame/pkg/errors"
 	"github.com/jcsvwinston/GoFrame/pkg/router"
 )
 
@@ -820,7 +829,7 @@ func (h *%[2]sHandler) Mount(r *router.Mux) {
 func (h *%[2]sHandler) List(w http.ResponseWriter, r *http.Request) {
 	records, err := h.service.List(r.Context())
 	if err != nil {
-		writeErrorJSON(w, http.StatusInternalServerError, err.Error())
+		writeError(w, gferrors.InternalError("unable to list %[3]s"))
 		return
 	}
 
@@ -833,13 +842,13 @@ func (h *%[2]sHandler) List(w http.ResponseWriter, r *http.Request) {
 func (h *%[2]sHandler) Get(w http.ResponseWriter, r *http.Request) {
 	id, err := parseResourceID(r)
 	if err != nil {
-		writeErrorJSON(w, http.StatusBadRequest, err.Error())
+		writeError(w, gferrors.BadRequest(err.Error()))
 		return
 	}
 
 	record, err := h.service.Get(r.Context(), id)
 	if err != nil {
-		writeErrorJSON(w, http.StatusNotFound, err.Error())
+		writeError(w, gferrors.NotFound("%[2]s", strconv.FormatUint(uint64(id), 10)))
 		return
 	}
 
@@ -849,13 +858,13 @@ func (h *%[2]sHandler) Get(w http.ResponseWriter, r *http.Request) {
 func (h *%[2]sHandler) Create(w http.ResponseWriter, r *http.Request) {
 	payload, err := decode%[2]sPayload(r)
 	if err != nil {
-		writeErrorJSON(w, http.StatusBadRequest, err.Error())
+		writeError(w, gferrors.BadRequest(err.Error()))
 		return
 	}
 
 	record, err := h.service.Create(r.Context(), services.Create%[2]sInput{Name: payload.Name})
 	if err != nil {
-		writeErrorJSON(w, http.StatusBadRequest, err.Error())
+		writeError(w, gferrors.BadRequest(err.Error()))
 		return
 	}
 
@@ -865,19 +874,19 @@ func (h *%[2]sHandler) Create(w http.ResponseWriter, r *http.Request) {
 func (h *%[2]sHandler) Update(w http.ResponseWriter, r *http.Request) {
 	id, err := parseResourceID(r)
 	if err != nil {
-		writeErrorJSON(w, http.StatusBadRequest, err.Error())
+		writeError(w, gferrors.BadRequest(err.Error()))
 		return
 	}
 
 	payload, err := decode%[2]sPayload(r)
 	if err != nil {
-		writeErrorJSON(w, http.StatusBadRequest, err.Error())
+		writeError(w, gferrors.BadRequest(err.Error()))
 		return
 	}
 
 	record, err := h.service.Update(r.Context(), id, services.Update%[2]sInput{Name: payload.Name})
 	if err != nil {
-		writeErrorJSON(w, http.StatusNotFound, err.Error())
+		writeError(w, gferrors.NotFound("%[2]s", strconv.FormatUint(uint64(id), 10)))
 		return
 	}
 
@@ -887,12 +896,12 @@ func (h *%[2]sHandler) Update(w http.ResponseWriter, r *http.Request) {
 func (h *%[2]sHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	id, err := parseResourceID(r)
 	if err != nil {
-		writeErrorJSON(w, http.StatusBadRequest, err.Error())
+		writeError(w, gferrors.BadRequest(err.Error()))
 		return
 	}
 
 	if err := h.service.Delete(r.Context(), id); err != nil {
-		writeErrorJSON(w, http.StatusNotFound, err.Error())
+		writeError(w, gferrors.NotFound("%[2]s", strconv.FormatUint(uint64(id), 10)))
 		return
 	}
 
@@ -929,8 +938,8 @@ func parseResourceID(r *http.Request) (uint, error) {
 	return uint(id), nil
 }
 
-func writeErrorJSON(w http.ResponseWriter, status int, message string) {
-	writeJSON(w, status, map[string]any{"error": message})
+func writeError(w http.ResponseWriter, err error) {
+	router.Error(w, err)
 }
 
 func writeJSON(w http.ResponseWriter, status int, payload any) {
@@ -1019,6 +1028,12 @@ func Test%[2]sHandler_CRUDLifecycle(t *testing.T) {
 	if got := int(finalListBody["count"].(float64)); got != 0 {
 		t.Fatalf("expected list count 0 after delete, got %%d", got)
 	}
+
+	badIDRec := perform%[2]sRequest(t, r, http.MethodGet, "/%[3]s/not-a-number", nil)
+	assertStructuredErrorResponse(t, badIDRec, http.StatusBadRequest, "BAD_REQUEST")
+
+	missingRec := perform%[2]sRequest(t, r, http.MethodGet, resourcePath, nil)
+	assertStructuredErrorResponse(t, missingRec, http.StatusNotFound, "NOT_FOUND")
 }
 
 func Test%[2]sHandler_RejectsInvalidPayload(t *testing.T) {
@@ -1029,14 +1044,7 @@ func Test%[2]sHandler_RejectsInvalidPayload(t *testing.T) {
 	h.Mount(r)
 
 	rec := perform%[2]sRequest(t, r, http.MethodPost, "/%[3]s/", map[string]any{"name": "  "})
-	if rec.Code != http.StatusBadRequest {
-		t.Fatalf("expected status %%d, got %%d", http.StatusBadRequest, rec.Code)
-	}
-
-	body := decode%[2]sJSON(t, rec.Body.Bytes())
-	if got := body["error"]; got != "name is required" {
-		t.Fatalf("expected validation error, got %%v", got)
-	}
+	assertStructuredErrorResponse(t, rec, http.StatusBadRequest, "BAD_REQUEST")
 }
 
 func perform%[2]sRequest(t *testing.T, handler http.Handler, method, path string, payload map[string]any) *httptest.ResponseRecorder {
@@ -1068,6 +1076,25 @@ func decode%[2]sJSON(t *testing.T, raw []byte) map[string]any {
 	}
 	return payload
 }
+
+func assertStructuredErrorResponse(t *testing.T, rec *httptest.ResponseRecorder, status int, code string) {
+	t.Helper()
+	if rec.Code != status {
+		t.Fatalf("expected status %%d, got %%d body=%%s", status, rec.Code, rec.Body.String())
+	}
+
+	body := decode%[2]sJSON(t, rec.Body.Bytes())
+	errorBody, ok := body["error"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected structured error body, got %%#v", body)
+	}
+	if got := errorBody["code"]; got != code {
+		t.Fatalf("expected error code %%q, got %%v", code, got)
+	}
+	if message, ok := errorBody["message"].(string); !ok || message == "" {
+		t.Fatalf("expected non-empty error message, got %%#v", errorBody)
+	}
+}
 `
 
 const resourceHandlerTemplate = `package controllers
@@ -1082,6 +1109,7 @@ import (
 	"sync"
 	"time"
 
+	gferrors "github.com/jcsvwinston/GoFrame/pkg/errors"
 	"github.com/jcsvwinston/GoFrame/pkg/router"
 )
 
@@ -1144,13 +1172,13 @@ func (h *%[1]sHandler) List(w http.ResponseWriter, _ *http.Request) {
 func (h *%[1]sHandler) Get(w http.ResponseWriter, r *http.Request) {
 	id, err := parseResourceID(r)
 	if err != nil {
-		writeErrorJSON(w, http.StatusBadRequest, err.Error())
+		writeError(w, gferrors.BadRequest(err.Error()))
 		return
 	}
 
 	record, ok := h.lookup(id)
 	if !ok {
-		writeErrorJSON(w, http.StatusNotFound, "%[2]s record not found")
+		writeError(w, gferrors.NotFound("%[1]s", strconv.FormatUint(uint64(id), 10)))
 		return
 	}
 
@@ -1160,7 +1188,7 @@ func (h *%[1]sHandler) Get(w http.ResponseWriter, r *http.Request) {
 func (h *%[1]sHandler) Create(w http.ResponseWriter, r *http.Request) {
 	payload, err := decode%[1]sPayload(r)
 	if err != nil {
-		writeErrorJSON(w, http.StatusBadRequest, err.Error())
+		writeError(w, gferrors.BadRequest(err.Error()))
 		return
 	}
 
@@ -1184,13 +1212,13 @@ func (h *%[1]sHandler) Create(w http.ResponseWriter, r *http.Request) {
 func (h *%[1]sHandler) Update(w http.ResponseWriter, r *http.Request) {
 	id, err := parseResourceID(r)
 	if err != nil {
-		writeErrorJSON(w, http.StatusBadRequest, err.Error())
+		writeError(w, gferrors.BadRequest(err.Error()))
 		return
 	}
 
 	payload, err := decode%[1]sPayload(r)
 	if err != nil {
-		writeErrorJSON(w, http.StatusBadRequest, err.Error())
+		writeError(w, gferrors.BadRequest(err.Error()))
 		return
 	}
 
@@ -1198,7 +1226,7 @@ func (h *%[1]sHandler) Update(w http.ResponseWriter, r *http.Request) {
 	record, ok := h.items[id]
 	if !ok {
 		h.mu.Unlock()
-		writeErrorJSON(w, http.StatusNotFound, "%[2]s record not found")
+		writeError(w, gferrors.NotFound("%[1]s", strconv.FormatUint(uint64(id), 10)))
 		return
 	}
 
@@ -1213,14 +1241,14 @@ func (h *%[1]sHandler) Update(w http.ResponseWriter, r *http.Request) {
 func (h *%[1]sHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	id, err := parseResourceID(r)
 	if err != nil {
-		writeErrorJSON(w, http.StatusBadRequest, err.Error())
+		writeError(w, gferrors.BadRequest(err.Error()))
 		return
 	}
 
 	h.mu.Lock()
 	if _, ok := h.items[id]; !ok {
 		h.mu.Unlock()
-		writeErrorJSON(w, http.StatusNotFound, "%[2]s record not found")
+		writeError(w, gferrors.NotFound("%[1]s", strconv.FormatUint(uint64(id), 10)))
 		return
 	}
 	delete(h.items, id)
@@ -1266,8 +1294,8 @@ func parseResourceID(r *http.Request) (uint, error) {
 	return uint(id), nil
 }
 
-func writeErrorJSON(w http.ResponseWriter, status int, message string) {
-	writeJSON(w, status, map[string]any{"error": message})
+func writeError(w http.ResponseWriter, err error) {
+	router.Error(w, err)
 }
 
 func writeJSON(w http.ResponseWriter, status int, payload any) {
@@ -1352,6 +1380,12 @@ func Test%[1]sHandler_CRUDLifecycle(t *testing.T) {
 	if got := int(finalListBody["count"].(float64)); got != 0 {
 		t.Fatalf("expected list count 0 after delete, got %%d", got)
 	}
+
+	badIDRec := perform%[1]sRequest(t, r, http.MethodGet, "/%[2]s/not-a-number", nil)
+	assertStructuredErrorResponse(t, badIDRec, http.StatusBadRequest, "BAD_REQUEST")
+
+	missingRec := perform%[1]sRequest(t, r, http.MethodGet, resourcePath, nil)
+	assertStructuredErrorResponse(t, missingRec, http.StatusNotFound, "NOT_FOUND")
 }
 
 func Test%[1]sHandler_RejectsInvalidPayload(t *testing.T) {
@@ -1360,14 +1394,7 @@ func Test%[1]sHandler_RejectsInvalidPayload(t *testing.T) {
 	h.Mount(r)
 
 	rec := perform%[1]sRequest(t, r, http.MethodPost, "/%[2]s/", map[string]any{"name": "  "})
-	if rec.Code != http.StatusBadRequest {
-		t.Fatalf("expected status %%d, got %%d", http.StatusBadRequest, rec.Code)
-	}
-
-	body := decode%[1]sJSON(t, rec.Body.Bytes())
-	if got := body["error"]; got != "name is required" {
-		t.Fatalf("expected validation error, got %%v", got)
-	}
+	assertStructuredErrorResponse(t, rec, http.StatusBadRequest, "BAD_REQUEST")
 }
 
 func perform%[1]sRequest(t *testing.T, handler http.Handler, method, path string, payload map[string]any) *httptest.ResponseRecorder {
@@ -1398,5 +1425,24 @@ func decode%[1]sJSON(t *testing.T, raw []byte) map[string]any {
 		t.Fatalf("decode response failed: %%v raw=%%s", err, string(raw))
 	}
 	return payload
+}
+
+func assertStructuredErrorResponse(t *testing.T, rec *httptest.ResponseRecorder, status int, code string) {
+	t.Helper()
+	if rec.Code != status {
+		t.Fatalf("expected status %%d, got %%d body=%%s", status, rec.Code, rec.Body.String())
+	}
+
+	body := decode%[1]sJSON(t, rec.Body.Bytes())
+	errorBody, ok := body["error"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected structured error body, got %%#v", body)
+	}
+	if got := errorBody["code"]; got != code {
+		t.Fatalf("expected error code %%q, got %%v", code, got)
+	}
+	if message, ok := errorBody["message"].(string); !ok || message == "" {
+		t.Fatalf("expected non-empty error message, got %%#v", errorBody)
+	}
 }
 `
