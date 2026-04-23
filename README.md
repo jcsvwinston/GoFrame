@@ -9,8 +9,14 @@ Enterprise-oriented web framework for Go, built for long-lived systems.
 
 GoFrame combines a native router stack, SQL-first data access over `database/sql`, auto-generated admin, background jobs with Asynq, and an operations-first CLI for real production workflows.
 
+Strategically, GoFrame aims to fuse two strengths into one Go framework:
+
+- Django's application and operations ergonomics
+- Encore's platform-oriented developer experience for production systems
+
 ## Why GoFrame
 
+- Strategic goal: bring Django + Encore together in one Go-native framework without giving up stdlib-first runtime design.
 - Long-term upgrade safety: explicit compatibility policy and release gates for stable contracts.
 - SQL-first by design: runtime and tooling aligned to `database/sql` with practical migration/fixture/introspection commands.
 - Built for operations: deploy checks, health diagnostics, observability baseline, and release rehearsal baked in.

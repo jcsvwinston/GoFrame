@@ -223,6 +223,10 @@ func QueryParameter(name string, schema Schema, description string, required boo
 	}
 }
 
+func SearchQueryParameter(description string) Parameter {
+	return QueryParameter("q", Schema{Type: "string"}, description, false)
+}
+
 func Marshal(doc *Document) ([]byte, error) {
 	if doc == nil {
 		return nil, fmt.Errorf("openapi: document is nil")

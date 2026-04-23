@@ -185,8 +185,8 @@ Current scope:
 - explicit JSON request/response metadata for scaffolded operations
 - one shared scaffolded response-envelope convention: collections use `{data, count}` and singular payloads use `{data}`
 - explicit path parameters for scaffolded `/{id}` routes
-- explicit query parameters where contracts choose to declare them
-- small reusable helpers in `pkg/openapi` for repeated schema/response/parameter patterns (`ObjectSchema`, `ArraySchema`, `DataEnvelopeSchema`, `CollectionEnvelopeSchema`, `IDSchema`, `JSONRequestBody`, `JSONResponse`, `ErrorResponse`, `EmptyResponse`, `PathParameter`, `QueryParameter`)
+- explicit query parameters where contracts choose to declare them; scaffolded list operations now use an optional `q` search parameter that generated handlers honor end-to-end
+- small reusable helpers in `pkg/openapi` for repeated schema/response/parameter patterns (`ObjectSchema`, `ArraySchema`, `DataEnvelopeSchema`, `CollectionEnvelopeSchema`, `IDSchema`, `JSONRequestBody`, `JSONResponse`, `ErrorResponse`, `EmptyResponse`, `PathParameter`, `QueryParameter`, `SearchQueryParameter`)
 - more homogeneous scaffold metadata for `operationId`, `tags`, `summary`, and `description`
 - a shared structured JSON error-envelope convention in scaffolded contracts and generated resource handlers
 
@@ -195,6 +195,7 @@ Current extension guidance:
 - keep contract files explicit and readable; helpers should reduce repetition, not hide the final document shape
 - prefer shared helpers for common `data`/`count` JSON envelopes, error envelopes, empty responses, and `id`/query parameters before adding new ad hoc schema literals
 - CLI export and runtime serving must continue to use the same `contracts.NewDocument()` source of truth
+- runtime serving stays explicit through `app.MountOpenAPI(...)` for now; GoFrame does not auto-mount OpenAPI documents behind the application's back
 
 Not in scope yet:
 

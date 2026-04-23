@@ -67,7 +67,7 @@ Completed in the second pass:
 
 ### Point 5: explicit application layer
 
-In progress.
+Completed and verified.
 
 Completed in the first cut:
 
@@ -83,16 +83,17 @@ Completed in the first cut:
 - generated services now depend on repository interfaces in the main scaffolds instead of concrete repository structs
 - CLI tests assert those architectural layers are generated
 
-Still pending in the next cut:
+Completed in the second cut:
 
-- formalize service conventions further
-- formalize repository conventions
-- align controllers, services, repositories, tasks, and contracts more uniformly
-- extend API contract generation beyond the first OpenAPI lane
+- `new`, `startapp`, and `generate resource` now share more uniform application-layer conventions for list/create flows instead of mixing ad hoc method signatures
+- scaffolded services now expose explicit list inputs (`ListXInput`) in the same spirit as their create/update inputs
+- scaffolded repositories now expose explicit list/create parameter structs where a repository layer exists, so controllers, services, repositories, and contracts describe the same flow more uniformly
+- scaffolded list handlers now pass normalized query input through the service layer instead of reaching directly into repository-specific filtering
+- module-aware `startapp` repositories are now small but usable in-memory scaffolds, which keeps the first application-layer slice coherent before a real persistence implementation is wired in
 
 ### Point 6: API contracts
 
-In progress.
+Completed and verified.
 
 Completed in the first cut:
 
@@ -116,11 +117,12 @@ Completed in the third cut:
 - `pkg/openapi` now exposes small envelope helpers so scaffolded contracts can declare that convention explicitly without repeating literal object schemas
 - structural OpenAPI export checks now assert the shared envelope shape and reject older scaffold variants such as `items`/`total`, `resource`, or `item`
 
-Still pending in the next cut:
+Completed in the fourth cut:
 
-- deepen explicit query-parameter usage only where generated handlers can honor it cleanly
-- decide whether runtime documentation exposure should remain explicit-only (`MountOpenAPI`) or gain one additional documented convention without adding hidden automation
-- prepare generated clients beyond the current document-export/serve lane
+- scaffolded list operations now declare a shared optional `q` query parameter and generated handlers honor it end-to-end through controllers, services, repositories, and exported contracts
+- `pkg/openapi` now exposes `SearchQueryParameter(...)` so the supported search-query convention stays explicit and lightweight
+- runtime OpenAPI serving remains an explicit application decision via `app.MountOpenAPI(...)`; the framework now documents that explicit-only convention instead of adding hidden auto-mount behavior
+- generated API clients remain intentionally out of scope for the current experimental lane; the current scope closes at explicit document export/serve plus scaffolded contract coherence
 
 ### Point 7 and beyond: distributed primitives
 
@@ -133,10 +135,11 @@ Longer-term work:
 
 ## Recommended start for tomorrow
 
-Continue point 6 with this order:
+Point 5 and Point 6 are now closed at the current experimental baseline.
 
-1. deepen the OpenAPI lane beyond the current scaffold-first subset
-2. decide whether runtime exposure should stay explicit-only or gain one additional documented convention
-3. keep tightening conventions between controllers, services, repositories, tasks, and contracts
-4. run verification: `go test ./...` and `npm run build`
-5. commit and push the next point 6 batch
+Recommended next focus:
+
+1. start Point 7 with a small but real distributed primitive
+2. keep the same discipline: narrow slice, one source of truth, strong structural tests
+3. run verification: `go test ./...` and `npm run build`
+4. commit and push the next batch

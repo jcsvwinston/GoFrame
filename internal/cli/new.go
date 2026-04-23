@@ -406,6 +406,7 @@ const newArticleAPITemplate = `package controllers
 
 import (
 	"net/http"
+	"strings"
 
 	"%s/internal/services"
 	gfrender "github.com/jcsvwinston/GoFrame/pkg/router"
@@ -423,7 +424,9 @@ func Health(w http.ResponseWriter, _ *http.Request) {
 
 func ListArticles(articleService *services.ArticleService) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		items, err := articleService.List(r.Context())
+		items, err := articleService.List(r.Context(), services.ListArticleInput{
+			Query: strings.TrimSpace(r.URL.Query().Get("q")),
+		})
 		if err != nil {
 			gfrender.Error(w, err)
 			return
@@ -464,6 +467,7 @@ const newArticleServiceTemplate = `package services
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	"%s/internal/repositories"
@@ -478,6 +482,10 @@ type Article struct {
 	UpdatedAt time.Time ` + "`json:\"updated_at\"`" + `
 }
 
+type ListArticleInput struct {
+	Query string
+}
+
 type CreateArticleInput struct {
 	Title     string
 	Content   string
@@ -490,7 +498,7 @@ type RecordArticleCreatedInput struct {
 }
 
 type ArticleRepository interface {
-	List(ctx context.Context) ([]repositories.Article, error)
+	List(ctx context.Context, params repositories.ListArticleParams) ([]repositories.Article, error)
 	Create(ctx context.Context, params repositories.CreateArticleParams) (repositories.Article, error)
 }
 
@@ -502,8 +510,10 @@ func NewArticleService(repository ArticleRepository) *ArticleService {
 	return &ArticleService{repository: repository}
 }
 
-func (s *ArticleService) List(ctx context.Context) ([]Article, error) {
-	records, err := s.repository.List(ctx)
+func (s *ArticleService) List(ctx context.Context, input ListArticleInput) ([]Article, error) {
+	records, err := s.repository.List(ctx, repositories.ListArticleParams{
+		Query: strings.TrimSpace(input.Query),
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -574,6 +584,9 @@ func RegisterArticleContract(doc *openapi.Document) {
 			Summary:     "List articles",
 			Description: "Returns the scaffolded article collection.",
 			Tags:        []string{"articles"},
+			Parameters: []openapi.Parameter{
+				openapi.SearchQueryParameter("Filter articles by title or content."),
+			},
 			Responses: map[string]openapi.Response{
 				"200": openapi.JSONResponse("Article collection", openapi.CollectionEnvelopeSchema(openapi.RefSchema("ArticleRecord"))),
 				"500": openapi.ErrorResponse("Unexpected error"),
@@ -600,6 +613,7 @@ const newArticleRepositoryTemplate = `package repositories
 import (
 	"context"
 	"database/sql"
+	"strings"
 	"time"
 )
 
@@ -610,6 +624,10 @@ type Article struct {
 	Published bool      ` + "`json:\"published\"`" + `
 	CreatedAt time.Time ` + "`json:\"created_at\"`" + `
 	UpdatedAt time.Time ` + "`json:\"updated_at\"`" + `
+}
+
+type ListArticleParams struct {
+	Query string
 }
 
 type CreateArticleParams struct {
@@ -626,11 +644,17 @@ func NewArticleRepository(db *sql.DB) *ArticleRepository {
 	return &ArticleRepository{db: db}
 }
 
-func (r *ArticleRepository) List(ctx context.Context) ([]Article, error) {
-	rows, err := r.db.QueryContext(
-		ctx,
-		` + "`SELECT id, title, content, published, created_at, updated_at FROM articles ORDER BY id DESC LIMIT 100`" + `,
-	)
+func (r *ArticleRepository) List(ctx context.Context, params ListArticleParams) ([]Article, error) {
+	query := ` + "`SELECT id, title, content, published, created_at, updated_at FROM articles`" + `
+	args := make([]any, 0, 2)
+	if search := strings.TrimSpace(params.Query); search != "" {
+		like := "%" + search + "%"
+		query += ` + "` WHERE title LIKE ? OR content LIKE ?`" + `
+		args = append(args, like, like)
+	}
+	query += ` + "` ORDER BY id DESC LIMIT 100`" + `
+
+	rows, err := r.db.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}

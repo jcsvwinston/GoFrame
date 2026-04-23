@@ -491,6 +491,7 @@ import (
 	"context"
 	"errors"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 )
@@ -502,6 +503,10 @@ type %[1]sRecord struct {
 	Name      string    ` + "`json:\"name\"`" + `
 	CreatedAt time.Time ` + "`json:\"created_at\"`" + `
 	UpdatedAt time.Time ` + "`json:\"updated_at\"`" + `
+}
+
+type List%[1]sParams struct {
+	Query string
 }
 
 type Create%[1]sParams struct {
@@ -525,10 +530,14 @@ func New%[1]sRepository() *%[1]sRepository {
 	}
 }
 
-func (r *%[1]sRepository) List(_ context.Context) ([]%[1]sRecord, error) {
+func (r *%[1]sRepository) List(_ context.Context, params List%[1]sParams) ([]%[1]sRecord, error) {
 	r.mu.RLock()
 	records := make([]%[1]sRecord, 0, len(r.items))
+	query := strings.ToLower(strings.TrimSpace(params.Query))
 	for _, record := range r.items {
+		if query != "" && !strings.Contains(strings.ToLower(record.Name), query) {
+			continue
+		}
 		records = append(records, record)
 	}
 	r.mu.RUnlock()
@@ -609,6 +618,10 @@ type %[2]sRecord struct {
 	Name string ` + "`json:\"name\"`" + `
 }
 
+type List%[2]sInput struct {
+	Query string
+}
+
 type Create%[2]sInput struct {
 	Name string ` + "`json:\"name\" validate:\"required\"`" + `
 }
@@ -618,7 +631,7 @@ type Update%[2]sInput struct {
 }
 
 type %[2]sRepository interface {
-	List(ctx context.Context) ([]repositories.%[2]sRecord, error)
+	List(ctx context.Context, params repositories.List%[2]sParams) ([]repositories.%[2]sRecord, error)
 	Get(ctx context.Context, id uint) (repositories.%[2]sRecord, error)
 	Create(ctx context.Context, params repositories.Create%[2]sParams) (repositories.%[2]sRecord, error)
 	Update(ctx context.Context, id uint, params repositories.Update%[2]sParams) (repositories.%[2]sRecord, error)
@@ -633,8 +646,10 @@ func New%[2]sService(repository %[2]sRepository) *%[2]sService {
 	return &%[2]sService{repository: repository}
 }
 
-func (s *%[2]sService) List(ctx context.Context) ([]%[2]sRecord, error) {
-	records, err := s.repository.List(ctx)
+func (s *%[2]sService) List(ctx context.Context, input List%[2]sInput) ([]%[2]sRecord, error) {
+	records, err := s.repository.List(ctx, repositories.List%[2]sParams{
+		Query: strings.TrimSpace(input.Query),
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -715,6 +730,9 @@ func Register%[1]sContract(doc *openapi.Document) {
 			Summary:     "List %[5]s",
 			Description: "Returns the scaffolded %[4]s collection.",
 			Tags:        []string{"%[4]s"},
+			Parameters: []openapi.Parameter{
+				openapi.SearchQueryParameter("Filter %[4]s by name."),
+			},
 			Responses: map[string]openapi.Response{
 				"200": openapi.JSONResponse("Resource collection", openapi.CollectionEnvelopeSchema(openapi.RefSchema("%[2]sRecord"))),
 				"500": openapi.ErrorResponse("Unexpected error"),
@@ -818,7 +836,9 @@ func (h *%[2]sHandler) Mount(r *router.Mux) {
 }
 
 func (h *%[2]sHandler) List(w http.ResponseWriter, r *http.Request) {
-	records, err := h.service.List(r.Context())
+	records, err := h.service.List(r.Context(), services.List%[2]sInput{
+		Query: strings.TrimSpace(r.URL.Query().Get("q")),
+	})
 	if err != nil {
 		writeError(w, gferrors.InternalError("unable to list %[3]s"))
 		return
@@ -981,13 +1001,27 @@ func Test%[2]sHandler_CRUDLifecycle(t *testing.T) {
 		t.Fatalf("expected created name %%q, got %%v", "Books", got)
 	}
 
+	secondCreateRec := perform%[2]sRequest(t, r, http.MethodPost, "/%[3]s/", map[string]any{"name": "Games"})
+	if secondCreateRec.Code != http.StatusCreated {
+		t.Fatalf("expected status %%d, got %%d", http.StatusCreated, secondCreateRec.Code)
+	}
+
 	listRec := perform%[2]sRequest(t, r, http.MethodGet, "/%[3]s/", nil)
 	if listRec.Code != http.StatusOK {
 		t.Fatalf("expected status %%d, got %%d", http.StatusOK, listRec.Code)
 	}
 	listBody := decode%[2]sJSON(t, listRec.Body.Bytes())
-	if got := int(listBody["count"].(float64)); got != 1 {
-		t.Fatalf("expected list count 1, got %%d", got)
+	if got := int(listBody["count"].(float64)); got != 2 {
+		t.Fatalf("expected list count 2, got %%d", got)
+	}
+
+	filteredRec := perform%[2]sRequest(t, r, http.MethodGet, "/%[3]s/?q=book", nil)
+	if filteredRec.Code != http.StatusOK {
+		t.Fatalf("expected status %%d, got %%d", http.StatusOK, filteredRec.Code)
+	}
+	filteredBody := decode%[2]sJSON(t, filteredRec.Body.Bytes())
+	if got := int(filteredBody["count"].(float64)); got != 1 {
+		t.Fatalf("expected filtered count 1, got %%d", got)
 	}
 
 	resourcePath := fmt.Sprintf("/%[3]s/%%d", int(resourceID))
@@ -1009,6 +1043,15 @@ func Test%[2]sHandler_CRUDLifecycle(t *testing.T) {
 		t.Fatalf("expected updated name %%q, got %%v", "Novels", got)
 	}
 
+	updatedFilteredRec := perform%[2]sRequest(t, r, http.MethodGet, "/%[3]s/?q=nov", nil)
+	if updatedFilteredRec.Code != http.StatusOK {
+		t.Fatalf("expected status %%d, got %%d", http.StatusOK, updatedFilteredRec.Code)
+	}
+	updatedFilteredBody := decode%[2]sJSON(t, updatedFilteredRec.Body.Bytes())
+	if got := int(updatedFilteredBody["count"].(float64)); got != 1 {
+		t.Fatalf("expected filtered count 1 after update, got %%d", got)
+	}
+
 	deleteRec := perform%[2]sRequest(t, r, http.MethodDelete, resourcePath, nil)
 	if deleteRec.Code != http.StatusNoContent {
 		t.Fatalf("expected status %%d, got %%d", http.StatusNoContent, deleteRec.Code)
@@ -1016,8 +1059,8 @@ func Test%[2]sHandler_CRUDLifecycle(t *testing.T) {
 
 	finalListRec := perform%[2]sRequest(t, r, http.MethodGet, "/%[3]s/", nil)
 	finalListBody := decode%[2]sJSON(t, finalListRec.Body.Bytes())
-	if got := int(finalListBody["count"].(float64)); got != 0 {
-		t.Fatalf("expected list count 0 after delete, got %%d", got)
+	if got := int(finalListBody["count"].(float64)); got != 1 {
+		t.Fatalf("expected list count 1 after delete, got %%d", got)
 	}
 
 	badIDRec := perform%[2]sRequest(t, r, http.MethodGet, "/%[3]s/not-a-number", nil)
@@ -1142,10 +1185,14 @@ func (h *%[1]sHandler) Mount(r *router.Mux) {
 	})
 }
 
-func (h *%[1]sHandler) List(w http.ResponseWriter, _ *http.Request) {
+func (h *%[1]sHandler) List(w http.ResponseWriter, r *http.Request) {
 	h.mu.RLock()
 	records := make([]%[1]sRecord, 0, len(h.items))
+	query := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("q")))
 	for _, record := range h.items {
+		if query != "" && !strings.Contains(strings.ToLower(record.Name), query) {
+			continue
+		}
 		records = append(records, record)
 	}
 	h.mu.RUnlock()
@@ -1333,13 +1380,27 @@ func Test%[1]sHandler_CRUDLifecycle(t *testing.T) {
 		t.Fatalf("expected created name %%q, got %%v", "Books", got)
 	}
 
+	secondCreateRec := perform%[1]sRequest(t, r, http.MethodPost, "/%[2]s/", map[string]any{"name": "Games"})
+	if secondCreateRec.Code != http.StatusCreated {
+		t.Fatalf("expected status %%d, got %%d", http.StatusCreated, secondCreateRec.Code)
+	}
+
 	listRec := perform%[1]sRequest(t, r, http.MethodGet, "/%[2]s/", nil)
 	if listRec.Code != http.StatusOK {
 		t.Fatalf("expected status %%d, got %%d", http.StatusOK, listRec.Code)
 	}
 	listBody := decode%[1]sJSON(t, listRec.Body.Bytes())
-	if got := int(listBody["count"].(float64)); got != 1 {
-		t.Fatalf("expected list count 1, got %%d", got)
+	if got := int(listBody["count"].(float64)); got != 2 {
+		t.Fatalf("expected list count 2, got %%d", got)
+	}
+
+	filteredRec := perform%[1]sRequest(t, r, http.MethodGet, "/%[2]s/?q=book", nil)
+	if filteredRec.Code != http.StatusOK {
+		t.Fatalf("expected status %%d, got %%d", http.StatusOK, filteredRec.Code)
+	}
+	filteredBody := decode%[1]sJSON(t, filteredRec.Body.Bytes())
+	if got := int(filteredBody["count"].(float64)); got != 1 {
+		t.Fatalf("expected filtered count 1, got %%d", got)
 	}
 
 	resourcePath := fmt.Sprintf("/%[2]s/%%d", int(resourceID))
@@ -1361,6 +1422,15 @@ func Test%[1]sHandler_CRUDLifecycle(t *testing.T) {
 		t.Fatalf("expected updated name %%q, got %%v", "Novels", got)
 	}
 
+	updatedFilteredRec := perform%[1]sRequest(t, r, http.MethodGet, "/%[2]s/?q=nov", nil)
+	if updatedFilteredRec.Code != http.StatusOK {
+		t.Fatalf("expected status %%d, got %%d", http.StatusOK, updatedFilteredRec.Code)
+	}
+	updatedFilteredBody := decode%[1]sJSON(t, updatedFilteredRec.Body.Bytes())
+	if got := int(updatedFilteredBody["count"].(float64)); got != 1 {
+		t.Fatalf("expected filtered count 1 after update, got %%d", got)
+	}
+
 	deleteRec := perform%[1]sRequest(t, r, http.MethodDelete, resourcePath, nil)
 	if deleteRec.Code != http.StatusNoContent {
 		t.Fatalf("expected status %%d, got %%d", http.StatusNoContent, deleteRec.Code)
@@ -1368,8 +1438,8 @@ func Test%[1]sHandler_CRUDLifecycle(t *testing.T) {
 
 	finalListRec := perform%[1]sRequest(t, r, http.MethodGet, "/%[2]s/", nil)
 	finalListBody := decode%[1]sJSON(t, finalListRec.Body.Bytes())
-	if got := int(finalListBody["count"].(float64)); got != 0 {
-		t.Fatalf("expected list count 0 after delete, got %%d", got)
+	if got := int(finalListBody["count"].(float64)); got != 1 {
+		t.Fatalf("expected list count 1 after delete, got %%d", got)
 	}
 
 	badIDRec := perform%[1]sRequest(t, r, http.MethodGet, "/%[2]s/not-a-number", nil)

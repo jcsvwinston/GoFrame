@@ -97,6 +97,11 @@ func TestHelpers(t *testing.T) {
 		t.Fatalf("unexpected query parameter helper output: %#v", query)
 	}
 
+	search := SearchQueryParameter("Filter widgets")
+	if search.Name != "q" || search.In != "query" || search.Schema.Type != "string" || search.Required {
+		t.Fatalf("unexpected search query helper output: %#v", search)
+	}
+
 	empty := EmptyResponse("Deleted")
 	if empty.Description != "Deleted" || empty.Content != nil {
 		t.Fatalf("unexpected empty response helper output: %#v", empty)

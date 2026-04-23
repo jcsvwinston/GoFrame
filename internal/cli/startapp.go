@@ -104,15 +104,15 @@ func runStartApp(args []string, _ io.Reader, stdout, stderr io.Writer) error {
 		files = append(files,
 			startAppGeneratedFile{
 				path: filepath.Join(*outDir, "internal", "controllers", snake+"_api.go"),
-				body: fmt.Sprintf(startAppAPIWithServiceTemplate, modulePath, pluralPascal, pascal, pascal, pascal, pascal),
+				body: fmt.Sprintf(startAppAPIWithServiceTemplate, modulePath, pluralPascal, pascal),
 			},
 			startAppGeneratedFile{
 				path: filepath.Join(*outDir, "internal", "services", snake+"_service.go"),
-				body: fmt.Sprintf(startAppServiceWithRepositoryTemplate, modulePath, pascal, pascal, pascal, pascal, pascal, pascal, pascal, pascal, pascal, pascal, pascal, pascal, pascal, pascal, pascal, pascal, pascal, pascal, pascal, pascal, pascal),
+				body: fmt.Sprintf(startAppServiceWithRepositoryTemplate, modulePath, pascal),
 			},
 			startAppGeneratedFile{
 				path: filepath.Join(*outDir, "internal", "repositories", snake+"_repository.go"),
-				body: fmt.Sprintf(startAppRepositoryTemplate, pascal, pascal, pascal, pascal, pascal, pascal),
+				body: fmt.Sprintf(startAppRepositoryTemplate, pascal),
 			},
 			startAppGeneratedFile{
 				path: filepath.Join(*outDir, "internal", "contracts", snake+"_contract.go"),
@@ -141,15 +141,15 @@ func runStartApp(args []string, _ io.Reader, stdout, stderr io.Writer) error {
 		files = append(files,
 			startAppGeneratedFile{
 				path: filepath.Join(*outDir, "internal", "controllers", snake+"_api.go"),
-				body: fmt.Sprintf(startAppAPITemplate, pascal, pluralPascal, pascal, pascal),
+				body: fmt.Sprintf(startAppAPITemplate, pascal, pluralPascal),
 			},
 			startAppGeneratedFile{
 				path: filepath.Join(*outDir, "internal", "services", snake+"_service.go"),
-				body: fmt.Sprintf(startAppServiceTemplate, pascal, pascal, pascal, pascal, pascal, pascal, pascal, pascal, pascal, pascal, pascal, pascal),
+				body: fmt.Sprintf(startAppServiceTemplate, pascal),
 			},
 			startAppGeneratedFile{
 				path: filepath.Join(*outDir, "internal", "repositories", snake+"_repository.go"),
-				body: fmt.Sprintf(startAppRepositoryTemplate, pascal, pascal, pascal, pascal, pascal, pascal),
+				body: fmt.Sprintf(startAppRepositoryTemplate, pascal),
 			},
 			startAppGeneratedFile{
 				path: filepath.Join(*outDir, "internal", "contracts", snake+"_contract.go"),
@@ -243,33 +243,62 @@ const startAppAPITemplate = `package controllers
 import (
 	"database/sql"
 	"net/http"
+	"strings"
+	"sync"
+
 	gfrender "github.com/jcsvwinston/GoFrame/pkg/router"
 )
 
-type create%sInput struct {
+type create%[1]sInput struct {
 	Name string ` + "`json:\"name\" validate:\"required,min=2\"`" + `
 }
 
-func List%s(_ *sql.DB) http.HandlerFunc {
-	return func(w http.ResponseWriter, _ *http.Request) {
+type %[1]sRecord struct {
+	Name string ` + "`json:\"name\"`" + `
+}
+
+var (
+	startApp%[1]sMu    sync.RWMutex
+	startApp%[1]sItems []%[1]sRecord
+)
+
+func List%[2]s(_ *sql.DB) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		query := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("q")))
+
+		startApp%[1]sMu.RLock()
+		items := make([]%[1]sRecord, 0, len(startApp%[1]sItems))
+		for _, item := range startApp%[1]sItems {
+			if query != "" && !strings.Contains(strings.ToLower(item.Name), query) {
+				continue
+			}
+			items = append(items, item)
+		}
+		startApp%[1]sMu.RUnlock()
+
 		gfrender.JSON(w, http.StatusOK, map[string]any{
-			"data":  []any{},
-			"count": 0,
+			"data":  items,
+			"count": len(items),
 		})
 	}
 }
 
-func Create%s(_ *sql.DB) http.HandlerFunc {
+func Create%[1]s(_ *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		var in create%sInput
+		var in create%[1]sInput
 		if err := gfrender.Bind(r, &in); err != nil {
 			gfrender.Error(w, err)
 			return
 		}
+
+		record := %[1]sRecord{Name: strings.TrimSpace(in.Name)}
+
+		startApp%[1]sMu.Lock()
+		startApp%[1]sItems = append(startApp%[1]sItems, record)
+		startApp%[1]sMu.Unlock()
+
 		gfrender.Created(w, map[string]any{
-			"data": map[string]any{
-				"name": in.Name,
-			},
+			"data": record,
 		})
 	}
 }
@@ -279,14 +308,17 @@ const startAppAPIWithServiceTemplate = `package controllers
 
 import (
 	"net/http"
+	"strings"
 
-	"%s/internal/services"
+	"%[1]s/internal/services"
 	gfrender "github.com/jcsvwinston/GoFrame/pkg/router"
 )
 
-func List%s(service *services.%sService) http.HandlerFunc {
+func List%[2]s(service *services.%[3]sService) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		items, err := service.List(r.Context())
+		items, err := service.List(r.Context(), services.List%[3]sInput{
+			Query: strings.TrimSpace(r.URL.Query().Get("q")),
+		})
 		if err != nil {
 			gfrender.Error(w, err)
 			return
@@ -299,9 +331,9 @@ func List%s(service *services.%sService) http.HandlerFunc {
 	}
 }
 
-func Create%s(service *services.%sService) http.HandlerFunc {
+func Create%[3]s(service *services.%[3]sService) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		var input services.Create%sInput
+		var input services.Create%[3]sInput
 		if err := gfrender.Bind(r, &input); err != nil {
 			gfrender.Error(w, err)
 			return
@@ -322,40 +354,48 @@ func Create%s(service *services.%sService) http.HandlerFunc {
 
 const startAppServiceTemplate = `package services
 
-import "context"
+import (
+	"context"
+	"strings"
+)
 
-type NameOnlyRecord struct {
+type %[1]sRecord struct {
 	Name string ` + "`json:\"name\"`" + `
 }
 
-type Create%sInput struct {
+type List%[1]sInput struct {
+	Query string
+}
+
+type Create%[1]sInput struct {
 	Name string ` + "`json:\"name\" validate:\"required,min=2\"`" + `
 }
 
-type Record%sCreatedInput struct {
+type Record%[1]sCreatedInput struct {
 	Name string
 }
 
-type %sRepository interface {
-	List(ctx context.Context) ([]NameOnlyRecord, error)
-	Create(ctx context.Context, name string) (NameOnlyRecord, error)
+type %[1]sRepository interface {
+	List(ctx context.Context, input List%[1]sInput) ([]%[1]sRecord, error)
+	Create(ctx context.Context, input Create%[1]sInput) (%[1]sRecord, error)
 }
 
-type %sService struct{}
+type %[1]sService struct{}
 
-func New%sService() *%sService {
-	return &%sService{}
+func New%[1]sService() *%[1]sService {
+	return &%[1]sService{}
 }
 
-func (s *%sService) List(_ context.Context) ([]NameOnlyRecord, error) {
-	return []NameOnlyRecord{}, nil
+func (s *%[1]sService) List(_ context.Context, input List%[1]sInput) ([]%[1]sRecord, error) {
+	_ = strings.TrimSpace(input.Query)
+	return []%[1]sRecord{}, nil
 }
 
-func (s *%sService) Create(_ context.Context, input Create%sInput) (NameOnlyRecord, error) {
-	return NameOnlyRecord{Name: input.Name}, nil
+func (s *%[1]sService) Create(_ context.Context, input Create%[1]sInput) (%[1]sRecord, error) {
+	return %[1]sRecord{Name: strings.TrimSpace(input.Name)}, nil
 }
 
-func (s *%sService) RecordCreated(_ context.Context, input Record%sCreatedInput) error {
+func (s *%[1]sService) RecordCreated(_ context.Context, input Record%[1]sCreatedInput) error {
 	_ = input
 	return nil
 }
@@ -365,83 +405,129 @@ const startAppServiceWithRepositoryTemplate = `package services
 
 import (
 	"context"
+	"strings"
 
-	"%s/internal/repositories"
+	"%[1]s/internal/repositories"
 )
 
-type %sRecord struct {
+type %[2]sRecord struct {
 	Name string ` + "`json:\"name\"`" + `
 }
 
-type Create%sInput struct {
+type List%[2]sInput struct {
+	Query string
+}
+
+type Create%[2]sInput struct {
 	Name string ` + "`json:\"name\" validate:\"required,min=2\"`" + `
 }
 
-type Record%sCreatedInput struct {
+type Record%[2]sCreatedInput struct {
 	Name string
 }
 
-type %sRepository interface {
-	List(ctx context.Context) ([]repositories.NameOnlyRecord, error)
-	Create(ctx context.Context, name string) (repositories.NameOnlyRecord, error)
+type %[2]sRepository interface {
+	List(ctx context.Context, params repositories.List%[2]sParams) ([]repositories.NameOnlyRecord, error)
+	Create(ctx context.Context, params repositories.Create%[2]sParams) (repositories.NameOnlyRecord, error)
 }
 
-type %sService struct {
-	repository %sRepository
+type %[2]sService struct {
+	repository %[2]sRepository
 }
 
-func New%sService(repository %sRepository) *%sService {
-	return &%sService{repository: repository}
+func New%[2]sService(repository %[2]sRepository) *%[2]sService {
+	return &%[2]sService{repository: repository}
 }
 
-func (s *%sService) List(ctx context.Context) ([]%sRecord, error) {
-	records, err := s.repository.List(ctx)
+func (s *%[2]sService) List(ctx context.Context, input List%[2]sInput) ([]%[2]sRecord, error) {
+	records, err := s.repository.List(ctx, repositories.List%[2]sParams{
+		Query: strings.TrimSpace(input.Query),
+	})
 	if err != nil {
 		return nil, err
 	}
 
-	items := make([]%sRecord, 0, len(records))
+	items := make([]%[2]sRecord, 0, len(records))
 	for _, record := range records {
-		items = append(items, %sRecord{Name: record.Name})
+		items = append(items, map%[2]sRecord(record))
 	}
 	return items, nil
 }
 
-func (s *%sService) Create(ctx context.Context, input Create%sInput) (%sRecord, error) {
-	record, err := s.repository.Create(ctx, input.Name)
+func (s *%[2]sService) Create(ctx context.Context, input Create%[2]sInput) (%[2]sRecord, error) {
+	record, err := s.repository.Create(ctx, repositories.Create%[2]sParams{
+		Name: strings.TrimSpace(input.Name),
+	})
 	if err != nil {
-		return %sRecord{}, err
+		return %[2]sRecord{}, err
 	}
 
-	return %sRecord{Name: record.Name}, nil
+	return map%[2]sRecord(record), nil
 }
 
-func (s *%sService) RecordCreated(_ context.Context, input Record%sCreatedInput) error {
+func (s *%[2]sService) RecordCreated(_ context.Context, input Record%[2]sCreatedInput) error {
 	_ = input
 	return nil
+}
+
+func map%[2]sRecord(record repositories.NameOnlyRecord) %[2]sRecord {
+	return %[2]sRecord{Name: record.Name}
 }
 `
 
 const startAppRepositoryTemplate = `package repositories
 
-import "context"
+import (
+	"context"
+	"strings"
+	"sync"
+)
 
 type NameOnlyRecord struct {
 	Name string ` + "`json:\"name\"`" + `
 }
 
-type %sRepository struct{}
-
-func New%sRepository() *%sRepository {
-	return &%sRepository{}
+type List%[1]sParams struct {
+	Query string
 }
 
-func (r *%sRepository) List(_ context.Context) ([]NameOnlyRecord, error) {
-	return []NameOnlyRecord{}, nil
+type Create%[1]sParams struct {
+	Name string
 }
 
-func (r *%sRepository) Create(_ context.Context, name string) (NameOnlyRecord, error) {
-	return NameOnlyRecord{Name: name}, nil
+type %[1]sRepository struct {
+	mu    sync.RWMutex
+	items []NameOnlyRecord
+}
+
+func New%[1]sRepository() *%[1]sRepository {
+	return &%[1]sRepository{}
+}
+
+func (r *%[1]sRepository) List(_ context.Context, params List%[1]sParams) ([]NameOnlyRecord, error) {
+	query := strings.ToLower(strings.TrimSpace(params.Query))
+
+	r.mu.RLock()
+	items := make([]NameOnlyRecord, 0, len(r.items))
+	for _, item := range r.items {
+		if query != "" && !strings.Contains(strings.ToLower(item.Name), query) {
+			continue
+		}
+		items = append(items, item)
+	}
+	r.mu.RUnlock()
+
+	return items, nil
+}
+
+func (r *%[1]sRepository) Create(_ context.Context, params Create%[1]sParams) (NameOnlyRecord, error) {
+	record := NameOnlyRecord{Name: strings.TrimSpace(params.Name)}
+
+	r.mu.Lock()
+	r.items = append(r.items, record)
+	r.mu.Unlock()
+
+	return record, nil
 }
 `
 
@@ -553,6 +639,9 @@ func Register%[1]sContract(doc *openapi.Document) {
 			Summary:     "List %[3]s",
 			Description: "Returns the scaffolded %[4]s collection.",
 			Tags:        []string{"%[2]s"},
+			Parameters: []openapi.Parameter{
+				openapi.SearchQueryParameter("Filter %[2]s by name."),
+			},
 			Responses: map[string]openapi.Response{
 				"200": openapi.JSONResponse("Resource collection", openapi.CollectionEnvelopeSchema(openapi.RefSchema("%[1]sRecord"))),
 				"500": openapi.ErrorResponse("Unexpected error"),

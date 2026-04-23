@@ -963,6 +963,9 @@ replace github.com/jcsvwinston/GoFrame => %s
 	if !strings.Contains(handlerText, `h.service.Create(`) {
 		t.Fatalf("expected generated handler to delegate create to service: %s", handlerText)
 	}
+	if !strings.Contains(handlerText, `services.ListCategoryInput{`) || !strings.Contains(handlerText, `r.URL.Query().Get("q")`) {
+		t.Fatalf("expected generated handler to pass list query input into service: %s", handlerText)
+	}
 
 	serviceRaw, err := os.ReadFile(servicePath)
 	if err != nil {
@@ -974,6 +977,9 @@ replace github.com/jcsvwinston/GoFrame => %s
 	}
 	if !strings.Contains(serviceText, "type CreateCategoryInput struct") || !strings.Contains(serviceText, "type UpdateCategoryInput struct") {
 		t.Fatalf("expected explicit service contracts for resource scaffold: %s", serviceText)
+	}
+	if !strings.Contains(serviceText, "type ListCategoryInput struct") || !strings.Contains(serviceText, "repositories.ListCategoryParams") {
+		t.Fatalf("expected generated resource service to formalize list input/params conventions: %s", serviceText)
 	}
 	if strings.Contains(serviceText, "repositories.CategoryRecord") && !strings.Contains(serviceText, "mapCategoryRecord(") {
 		t.Fatalf("resource service should map repository records into service records: %s", serviceText)
@@ -989,6 +995,9 @@ replace github.com/jcsvwinston/GoFrame => %s
 	repositoryText := string(repositoryRaw)
 	if !strings.Contains(repositoryText, "type CategoryRepository struct") || !strings.Contains(repositoryText, "func (r *CategoryRepository) Create") {
 		t.Fatalf("expected repository-backed resource scaffold: %s", repositoryText)
+	}
+	if !strings.Contains(repositoryText, "type ListCategoryParams struct") || !strings.Contains(repositoryText, `strings.TrimSpace(params.Query)`) {
+		t.Fatalf("expected generated resource repository to formalize list params and filtering: %s", repositoryText)
 	}
 
 	contractRaw, err := os.ReadFile(contractPath)
@@ -1013,6 +1022,9 @@ replace github.com/jcsvwinston/GoFrame => %s
 	}
 	if !strings.Contains(contractText, "openapi.CollectionEnvelopeSchema(") || !strings.Contains(contractText, "openapi.DataEnvelopeSchema(") {
 		t.Fatalf("expected generated resource contract scaffold to use shared envelope helpers: %s", contractText)
+	}
+	if !strings.Contains(contractText, "openapi.SearchQueryParameter(") {
+		t.Fatalf("expected generated resource contract scaffold to declare shared search query parameter: %s", contractText)
 	}
 	if !strings.Contains(contractText, "openapi.ErrorResponse(") || !strings.Contains(contractText, "openapi.EmptyResponse(") {
 		t.Fatalf("expected generated resource contract scaffold to use shared openapi error/empty helpers: %s", contractText)
@@ -1125,6 +1137,9 @@ func TestRun_NewProjectScaffold(t *testing.T) {
 	if !strings.Contains(articleServiceText, "repository ArticleRepository") {
 		t.Fatalf("expected article service scaffold to store repository interface: %s", articleServiceText)
 	}
+	if !strings.Contains(articleServiceText, "type ListArticleInput struct") || !strings.Contains(articleServiceText, "repositories.ListArticleParams") {
+		t.Fatalf("expected article service scaffold to formalize list input/params conventions: %s", articleServiceText)
+	}
 
 	articleControllerRaw, err := os.ReadFile(filepath.Join(projectDir, "internal", "controllers", "article_api.go"))
 	if err != nil {
@@ -1137,8 +1152,20 @@ func TestRun_NewProjectScaffold(t *testing.T) {
 	if !strings.Contains(articleControllerText, `"data": item`) {
 		t.Fatalf("expected article controller create scaffold to use shared data envelope: %s", articleControllerText)
 	}
+	if !strings.Contains(articleControllerText, `services.ListArticleInput{`) || !strings.Contains(articleControllerText, `r.URL.Query().Get("q")`) {
+		t.Fatalf("expected article controller list scaffold to pass query input into service: %s", articleControllerText)
+	}
 	if strings.Contains(articleControllerText, `"items": items`) || strings.Contains(articleControllerText, `"total": len(items)`) {
 		t.Fatalf("did not expect legacy article collection envelope fields: %s", articleControllerText)
+	}
+
+	articleRepositoryRaw, err := os.ReadFile(filepath.Join(projectDir, "internal", "repositories", "article_repository.go"))
+	if err != nil {
+		t.Fatalf("read article repository failed: %v", err)
+	}
+	articleRepositoryText := string(articleRepositoryRaw)
+	if !strings.Contains(articleRepositoryText, "type ListArticleParams struct") || !strings.Contains(articleRepositoryText, `strings.TrimSpace(params.Query)`) {
+		t.Fatalf("expected article repository scaffold to formalize list params and filtering: %s", articleRepositoryText)
 	}
 
 	workerRaw, err := os.ReadFile(filepath.Join(projectDir, "cmd", "worker", "main.go"))
@@ -1184,6 +1211,9 @@ func TestRun_NewProjectScaffold(t *testing.T) {
 	}
 	if !strings.Contains(contractText, "openapi.JSONResponse(") || !strings.Contains(contractText, "openapi.CollectionEnvelopeSchema(") || !strings.Contains(contractText, "openapi.DataEnvelopeSchema(") {
 		t.Fatalf("expected article contract scaffold to use shared openapi envelope helpers: %s", contractText)
+	}
+	if !strings.Contains(contractText, "openapi.SearchQueryParameter(") {
+		t.Fatalf("expected article contract scaffold to declare shared search query parameter: %s", contractText)
 	}
 	if !strings.Contains(contractText, "openapi.ErrorResponse(") {
 		t.Fatalf("expected article contract scaffold to use shared openapi error response helper: %s", contractText)
@@ -1415,6 +1445,9 @@ replace github.com/jcsvwinston/GoFrame => %s
 	if !strings.Contains(controllerText, `"data": item`) {
 		t.Fatalf("expected startapp controller create scaffold to use shared data envelope: %s", controllerText)
 	}
+	if !strings.Contains(controllerText, `services.ListBillingInput{`) || !strings.Contains(controllerText, `r.URL.Query().Get("q")`) {
+		t.Fatalf("expected startapp controller list scaffold to pass query input into service: %s", controllerText)
+	}
 	if strings.Contains(controllerText, `"resource":`) || strings.Contains(controllerText, `"items":    items`) || strings.Contains(controllerText, `"item":     item`) {
 		t.Fatalf("did not expect legacy startapp envelope fields: %s", controllerText)
 	}
@@ -1430,7 +1463,7 @@ replace github.com/jcsvwinston/GoFrame => %s
 	if !strings.Contains(serviceText, "type BillingRecord struct") {
 		t.Fatalf("expected explicit service output contract in module-aware scaffold: %s", serviceText)
 	}
-	if !strings.Contains(serviceText, "type CreateBillingInput struct") {
+	if !strings.Contains(serviceText, "type CreateBillingInput struct") || !strings.Contains(serviceText, "type ListBillingInput struct") {
 		t.Fatalf("expected explicit service input contract in module-aware scaffold: %s", serviceText)
 	}
 	if !strings.Contains(serviceText, "func (s *BillingService) RecordCreated") {
@@ -1444,6 +1477,21 @@ replace github.com/jcsvwinston/GoFrame => %s
 	}
 	if !strings.Contains(serviceText, "repository BillingRepository") {
 		t.Fatalf("expected module-aware service scaffold to store repository interface: %s", serviceText)
+	}
+	if !strings.Contains(serviceText, "repositories.ListBillingParams") || !strings.Contains(serviceText, "repositories.CreateBillingParams") {
+		t.Fatalf("expected module-aware service scaffold to use repository params conventions: %s", serviceText)
+	}
+
+	repositoryRaw, err := os.ReadFile(filepath.Join(dir, "internal", "repositories", "billing_repository.go"))
+	if err != nil {
+		t.Fatalf("read billing repository failed: %v", err)
+	}
+	repositoryText := string(repositoryRaw)
+	if !strings.Contains(repositoryText, "type ListBillingParams struct") || !strings.Contains(repositoryText, "type CreateBillingParams struct") {
+		t.Fatalf("expected module-aware repository scaffold to expose list/create params: %s", repositoryText)
+	}
+	if !strings.Contains(repositoryText, `strings.TrimSpace(params.Query)`) {
+		t.Fatalf("expected module-aware repository scaffold to honor query filtering: %s", repositoryText)
 	}
 
 	taskRaw, err := os.ReadFile(filepath.Join(dir, "internal", "tasks", "billing_tasks.go"))
@@ -1477,6 +1525,9 @@ replace github.com/jcsvwinston/GoFrame => %s
 	}
 	if !strings.Contains(contractText, "openapi.JSONRequestBody(") || !strings.Contains(contractText, "openapi.CollectionEnvelopeSchema(") || !strings.Contains(contractText, "openapi.DataEnvelopeSchema(") {
 		t.Fatalf("expected startapp contract scaffold to use shared openapi envelope helpers: %s", contractText)
+	}
+	if !strings.Contains(contractText, "openapi.SearchQueryParameter(") {
+		t.Fatalf("expected startapp contract scaffold to declare shared search query parameter: %s", contractText)
 	}
 	if !strings.Contains(contractText, "openapi.ErrorResponse(") {
 		t.Fatalf("expected startapp contract scaffold to use shared openapi error response helper: %s", contractText)
@@ -1613,6 +1664,7 @@ func TestRun_OpenAPIExport(t *testing.T) {
 	}
 	assertOperationMetadata(t, typedDoc.Paths["/api/articles"].Get, "listArticles", "articles")
 	assertCollectionEnvelopeResponse(t, typedDoc.Paths["/api/articles"].Get, "200")
+	assertSearchQueryParameter(t, typedDoc.Paths["/api/articles"].Get, "Filter articles by title or content.")
 	assertOperationErrorResponse(t, typedDoc.Paths["/api/articles"].Get, "500")
 	assertOperationMetadata(t, typedDoc.Paths["/api/articles"].Post, "createArticle", "articles")
 	assertOperationJSONRequestBody(t, typedDoc.Paths["/api/articles"].Post)
@@ -1620,6 +1672,7 @@ func TestRun_OpenAPIExport(t *testing.T) {
 	assertOperationErrorResponse(t, typedDoc.Paths["/api/articles"].Post, "400")
 	assertOperationMetadata(t, typedDoc.Paths["/billings"].Get, "listBillings", "billings")
 	assertCollectionEnvelopeResponse(t, typedDoc.Paths["/billings"].Get, "200")
+	assertSearchQueryParameter(t, typedDoc.Paths["/billings"].Get, "Filter billings by name.")
 	assertOperationErrorResponse(t, typedDoc.Paths["/billings"].Get, "500")
 	assertOperationMetadata(t, typedDoc.Paths["/billings"].Post, "createBilling", "billings")
 	assertOperationJSONRequestBody(t, typedDoc.Paths["/billings"].Post)
@@ -1627,6 +1680,7 @@ func TestRun_OpenAPIExport(t *testing.T) {
 	assertOperationErrorResponse(t, typedDoc.Paths["/billings"].Post, "400")
 	assertOperationMetadata(t, typedDoc.Paths["/categories"].Get, "listCategories", "categories")
 	assertCollectionEnvelopeResponse(t, typedDoc.Paths["/categories"].Get, "200")
+	assertSearchQueryParameter(t, typedDoc.Paths["/categories"].Get, "Filter categories by name.")
 	assertOperationErrorResponse(t, typedDoc.Paths["/categories"].Get, "500")
 	assertOperationMetadata(t, typedDoc.Paths["/categories"].Post, "createCategory", "categories")
 	assertOperationJSONRequestBody(t, typedDoc.Paths["/categories"].Post)
@@ -1854,6 +1908,26 @@ func assertOperationErrorResponse(t *testing.T, op *openapi.Operation, status st
 	}
 	if _, ok := errorField.Properties["message"]; !ok {
 		t.Fatalf("expected error message field, got %#v", errorField.Properties)
+	}
+}
+
+func assertSearchQueryParameter(t *testing.T, op *openapi.Operation, description string) {
+	t.Helper()
+	if op == nil {
+		t.Fatal("expected operation, got nil")
+	}
+	if len(op.Parameters) != 1 {
+		t.Fatalf("expected single query parameter, got %#v", op.Parameters)
+	}
+	param := op.Parameters[0]
+	if param.Name != "q" || param.In != "query" || param.Required {
+		t.Fatalf("expected optional query parameter q, got %#v", param)
+	}
+	if param.Schema.Type != "string" {
+		t.Fatalf("expected string query schema, got %#v", param.Schema)
+	}
+	if param.Description != description {
+		t.Fatalf("expected query parameter description %q, got %q", description, param.Description)
 	}
 }
 
