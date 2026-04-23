@@ -1,357 +1,140 @@
 # Signals & Event Bus Guide
 
-Reference date: 2026-04-10.
+Reference date: 2026-04-23.
 Status: Current.
 
-This guide covers GoFrame's in-process event bus (`pkg/signals`), used for model hooks, domain events, and cross-cutting communication within the application.
+This guide covers GoFrame's current signal model:
 
-## Table of Contents
-
-- [Overview](#overview)
-- [Publishing Events](#publishing-events)
-- [Subscribing to Events](#subscribing-to-events)
-- [Model Hook Integration](#model-hook-integration)
-- [Event Ordering](#event-ordering)
-- [Error Handling in Subscribers](#error-handling-in-subscribers)
-- [Use Cases](#use-cases)
-
----
+- `pkg/signals.Bus` for in-process publish/subscribe
+- `pkg/signals.RedisRelay` for small Redis-backed cross-process forwarding
 
 ## Overview
 
-GoFrame's signals package provides a lightweight, in-process pub/sub system for:
+GoFrame signals are intentionally small and explicit.
 
-- **Model lifecycle hooks**: `before_save`, `after_create`, `after_delete`
-- **Domain events**: `user_registered`, `order_completed`, `payment_received`
-- **System events**: `app_started`, `shutdown_requested`
+Use them for:
 
-The event bus is **synchronous by default** — subscribers are called in registration order within the same goroutine.
+- model lifecycle hooks
+- domain events inside one process
+- light cross-process forwarding when Redis is already available
 
----
+The in-process bus is synchronous by default. Remote forwarding is opt-in.
 
-## Publishing Events
-
-```go
-import "github.com/jcsvwinston/GoFrame/pkg/signals"
-
-// Define event signals
-var (
-    UserRegistered = signals.NewSignal()
-    OrderCompleted = signals.NewSignal()
-    ArticlePublished = signals.NewSignal()
-)
-
-// Publish an event with payload
-err := UserRegistered.Send(map[string]any{
-    "user_id": "user-123",
-    "email":   "alice@example.com",
-    "source":  "web",
-})
-```
-
-### Send with context
+## In-process bus
 
 ```go
-ctx := context.Background()
-ctx = observe.CtxWithRequestID(ctx, "req-abc")
+bus := signals.NewBus(logger)
 
-err := UserRegistered.SendCtx(ctx, map[string]any{
-    "user_id": "user-123",
-})
-```
-
----
-
-## Subscribing to Events
-
-### Basic subscription
-
-```go
-// Subscribe with a handler
-UserRegistered.Connect(func(payload any) error {
-    data, ok := payload.(map[string]any)
-    if !ok {
-        return fmt.Errorf("unexpected payload type")
-    }
-
-    userID := data["user_id"].(string)
-    log.Printf("User registered: %s", userID)
-
-    // Send welcome email
-    return sendWelcomeEmail(userID)
-})
-```
-
-### Multiple subscribers
-
-```go
-// Subscriber 1: Send welcome email
-UserRegistered.Connect(func(payload any) error {
-    return sendWelcomeEmail(payload)
-})
-
-// Subscriber 2: Create analytics record
-UserRegistered.Connect(func(payload any) error {
-    return analytics.Track("user_registered", payload)
-})
-
-// Subscriber 3: Notify admin channel
-UserRegistered.Connect(func(payload any) error {
-    return notifySlack("#signups", payload)
-})
-```
-
-Subscribers are called **in registration order**.
-
----
-
-## Model Hook Integration
-
-GoFrame models can integrate with signals for lifecycle events:
-
-```go
-type Article struct {
-    model.BaseModel
-    Title  string
-    Slug   string
-    Status string
-}
-
-func (a *Article) BeforeSave() error {
-    // Generate slug if not set
-    if a.Slug == "" {
-        a.Slug = slug.Make(a.Title)
-    }
-
-    // Emit signal for external listeners
-    if a.ID == 0 { // New record
-        return ArticlePublished.Send(map[string]any{
-            "article_id": a.ID,
-            "title":      a.Title,
-            "author_id":  a.AuthorID,
-        })
-    }
-
-    return nil
-}
-
-func (a *Article) AfterDelete() error {
-    return signals.NewSignal("article_deleted").Send(map[string]any{
-        "article_id": a.ID,
-    })
-}
-```
-
-### Common model signals
-
-| Signal | When Emitted | Typical Use |
-|--------|-------------|-------------|
-| `before_save` | Before INSERT or UPDATE | Slug generation, timestamp updates |
-| `after_create` | After INSERT | Send notifications, update counters |
-| `after_update` | After UPDATE | Invalidate cache, audit log |
-| `after_delete` | After DELETE | Clean up related resources |
-
----
-
-## Event Ordering
-
-### Guarantee: Registration order
-
-Subscribers are called in the order they were connected:
-
-```go
-// This subscriber runs first
-UserRegistered.Connect(func(payload any) error {
-    fmt.Println("1. Creating user record")
+bus.On(signals.PostCreate, func(event signals.Event) error {
+    payload, _ := event.Payload.(map[string]any)
+    log.Printf("post-create for %s => %#v", event.ModelName, payload)
     return nil
 })
 
-// This subscriber runs second
-UserRegistered.Connect(func(payload any) error {
-    fmt.Println("2. Sending welcome email")
-    return nil
-})
-
-// This subscriber runs third
-UserRegistered.Connect(func(payload any) error {
-    fmt.Println("3. Notifying analytics")
-    return nil
+err := bus.Emit(signals.Event{
+    Signal:    signals.PostCreate,
+    ModelName: "Article",
+    Payload: map[string]any{
+        "id":    42,
+        "title": "Hello",
+    },
+    Ctx: r.Context(),
 })
 ```
 
-### No parallelism guarantee
+`Bus.Emit(...)`:
 
-Subscribers run **sequentially** in the same goroutine that calls `Send()`. If a subscriber blocks, all subsequent subscribers wait.
+- runs handlers in registration order
+- stops at the first returned error
+- is best for transactional or in-process orchestration
 
-For async processing, delegate to a worker:
+`Bus.EmitAsync(...)`:
+
+- launches each handler in its own goroutine
+- logs errors instead of returning them
+- is best for non-blocking local reactions
+
+## Model integration
+
+`pkg/model.CRUD` already accepts a `*signals.Bus`.
+
+When a bus is configured, CRUD operations emit:
+
+- `signals.PreCreate` / `signals.PostCreate`
+- `signals.PreUpdate` / `signals.PostUpdate`
+- `signals.PreDelete` / `signals.PostDelete`
+
+This keeps the Django-style signal model in-process and explicit.
+
+## Distributed relay
+
+When an event needs to cross process boundaries, use `RedisRelay` explicitly:
 
 ```go
-UserRegistered.Connect(func(payload any) error {
-    // Enqueue background job instead of blocking
-    return taskManager.EnqueueJSON("emails.send_welcome", payload)
-})
-```
-
----
-
-## Error Handling in Subscribers
-
-### Error propagation
-
-If a subscriber returns an error, `Send()` returns immediately with that error:
-
-```go
-UserRegistered.Connect(func(payload any) error {
-    err := sendWelcomeEmail(payload)
-    if err != nil {
-        return fmt.Errorf("welcome email failed: %w", err)
-    }
-    return nil
-})
-
-// Send returns the error from the failing subscriber
-err := UserRegistered.Send(payload)
+relay, err := signals.NewRedisRelay(signals.RedisRelayConfig{
+    RedisURL: "redis://127.0.0.1:6379/0",
+}, logger)
 if err != nil {
-    log.Error("user registration handler failed", "error", err)
-    // Subsequent subscribers were NOT called
+    return err
 }
+defer relay.Close()
+
+err = relay.Publish(r.Context(), signals.Event{
+    Signal:    signals.PostCreate,
+    ModelName: "Article",
+    Payload: map[string]any{
+        "id": 42,
+    },
+})
 ```
 
-### Continue-on-error pattern
+Each signal is published to one Redis channel derived from the signal name.
+The relay preserves `request_id`, `user_id`, and `trace_id` from the event context.
 
-If you want all subscribers to run regardless of individual failures:
+## Subscribe and forward
+
+Subscribe directly:
 
 ```go
-func ConnectResilient(signal *signals.Signal, handler func(any) error) {
-    signal.Connect(func(payload any) error {
-        err := handler(payload)
-        if err != nil {
-            log.Warn("subscriber error (non-blocking)", "error", err)
-            return nil // Swallow error, continue to next subscriber
-        }
+go func() {
+    _ = relay.Subscribe(context.Background(), signals.PostCreate, func(event signals.Event) error {
+        log.Printf("remote event: %s %s", event.Signal, event.ModelName)
         return nil
     })
-}
-
-// Usage
-ConnectResilient(UserRegistered, func(payload any) error {
-    return analytics.Track("user_registered", payload)
-})
+}()
 ```
 
-### Timeout for subscribers
+Or forward remote events back into the local bus:
 
 ```go
-UserRegistered.Connect(func(payload any) error {
-    ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-    defer cancel()
-
-    return handlerWithTimeout(ctx, payload)
-})
+go func() {
+    _ = relay.ForwardToBus(context.Background(), signals.PostCreate, bus)
+}()
 ```
 
----
+This keeps one local handler model while still allowing distributed delivery.
 
-## Use Cases
+## Current guarantees
 
-### Audit logging
+- in-process handlers run in registration order
+- `Emit(...)` propagates errors
+- `EmitAsync(...)` does not propagate errors
+- Redis relay is explicit and JSON-based
+- remote events can be re-emitted into the local bus
 
-```go
-var AuditLog = signals.NewSignal()
+## Not in scope
 
-func init() {
-    AuditLog.Connect(func(payload any) error {
-        entry, ok := payload.(AuditEntry)
-        if !ok {
-            return fmt.Errorf("invalid audit entry")
-        }
-        return db.Exec(
-            "INSERT INTO audit_log (action, user_id, details, created_at) VALUES (?, ?, ?, ?)",
-            entry.Action, entry.UserID, entry.Details, time.Now(),
-        )
-    })
-}
+- wildcard subscriptions
+- durable delivery guarantees
+- broker abstraction over multiple backends
+- outbox semantics
+- automatic wiring from every signal to Redis
 
-// Emit from handlers
-AuditLog.Send(AuditEntry{
-    Action: "user_login",
-    UserID: userID,
-    Details: map[string]any{"ip": r.RemoteAddr},
-})
-```
+## Practical guidance
 
-### Cache invalidation
+Prefer:
 
-```go
-ArticlePublished.Connect(func(payload any) error {
-    data := payload.(map[string]any)
-    articleID := data["article_id"].(string)
-
-    // Invalidate article cache
-    cache.Delete("article:" + articleID)
-    cache.Delete("articles:list")
-    return nil
-})
-```
-
-### Webhook dispatch
-
-```go
-OrderCompleted.Connect(func(payload any) error {
-    return taskManager.EnqueueJSON("webhooks.deliver", map[string]any{
-        "event":  "order.completed",
-        "payload": payload,
-    })
-})
-```
-
-### System startup/shutdown
-
-```go
-var AppStarted = signals.NewSignal()
-var AppStopping = signals.NewSignal()
-
-func init() {
-    AppStarted.Connect(func(payload any) error {
-        log.Info("application started", "version", version)
-        return nil
-    })
-
-    AppStopping.Connect(func(payload any) error {
-        log.Info("application shutting down")
-        return nil
-    })
-}
-
-// In main.go
-func main() {
-    app, _ := app.New(cfg)
-    AppStarted.Send(nil)
-    defer AppStopping.Send(nil)
-    app.Run(context.Background())
-}
-```
-
----
-
-## API Reference
-
-```go
-// Create a new signal
-sig := signals.NewSignal()
-
-// Subscribe
-sig.Connect(handler func(payload any) error)
-
-// Publish (sync, blocks until all subscribers complete)
-err := sig.Send(payload)
-
-// Publish with context
-err := sig.SendCtx(ctx, payload)
-
-// Get subscriber count
-count := sig.ListenerCount()
-
-// Disconnect all subscribers (for testing)
-sig.Reset()
-```
+- `Bus.Emit(...)` for request-scoped or transactional work
+- `Bus.EmitAsync(...)` for fire-and-forget local work
+- `tasks.EnqueueJSONCtxWithPolicy(...)` when a signal should become a durable background job
+- `RedisRelay` only when an event truly needs to cross process boundaries

@@ -557,6 +557,21 @@ info, err := manager.EnqueueJSONCtx(r.Context(), tasks.TaskArticleCreated, map[s
 
 This preserves `request_id`/`user_id`/`traceparent` metadata for worker-side observability.
 
+When a task needs a repeatable queue/retry/retention policy, prefer the explicit helper:
+
+```go
+policy := tasks.DefaultEnqueuePolicy()
+policy.Queue = "critical"
+policy.MaxRetry = 5
+policy.Timeout = 2 * time.Minute
+policy.Retention = 24 * time.Hour
+
+info, err := manager.EnqueueJSONCtxWithPolicy(r.Context(), tasks.TaskArticleCreated, map[string]any{
+    "article_id": articleID,
+    "title":      title,
+}, policy)
+```
+
 Generated task handlers also use `tasks.DecodeJSONPayload(...)` so worker glue stays explicit without repeating JSON decode boilerplate in every scaffold.
 
 Current runtime queue operations:
@@ -571,6 +586,51 @@ Current runtime queue operations:
 Observability dashboards and alert baseline:
 
 - `docs/OBSERVABILITY_BASELINE.md`
+
+## 14.2 Signals and distributed relay
+
+`pkg/signals` remains the main in-process event bus. For cross-process delivery, GoFrame now also exposes a small Redis relay instead of a hidden event framework.
+
+```go
+bus := signals.NewBus(logger)
+relay, err := signals.NewRedisRelay(signals.RedisRelayConfig{
+    RedisURL: "redis://127.0.0.1:6379/0",
+}, logger)
+if err != nil {
+    return err
+}
+defer relay.Close()
+
+go func() {
+    _ = relay.ForwardToBus(context.Background(), signals.PostCreate, bus)
+}()
+
+bus.On(signals.PostCreate, func(event signals.Event) error {
+    log.Printf("distributed post-create event for %s", event.ModelName)
+    return nil
+})
+
+err = relay.Publish(r.Context(), signals.Event{
+    Signal:    signals.PostCreate,
+    ModelName: "Article",
+    Payload: map[string]any{
+        "id": articleID,
+    },
+})
+```
+
+Current scope:
+
+- in-process `Bus.Emit(...)` and `Bus.EmitAsync(...)`
+- Redis-backed publish/subscribe for one signal per channel
+- forwarding remote events back into `signals.Bus`
+- request/user/trace correlation propagation through the relay context metadata
+
+Not in scope yet:
+
+- wildcard subscriptions
+- broker abstraction across multiple backends
+- delivery guarantees or outbox semantics
 
 ## 15. Generators (`generate`)
 

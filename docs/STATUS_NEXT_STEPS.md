@@ -135,11 +135,16 @@ Completed in the first cut:
 - the first dead-letter operational baseline is now real: retry queues can be archived, archived tasks can be re-run, and archived tasks can be purged
 - focused tests now lock the supported queue-action catalog and keep admin/runtime behavior aligned
 
+Completed in the second cut:
+
+- `pkg/tasks` now exposes explicit `EnqueuePolicy` helpers so queue, retries, timeout, delay, and retention can be declared as one readable unit instead of ad hoc Asynq options
+- task enqueue policies are validated before enqueue and covered by focused tests against a real Redis-compatible runtime via `miniredis`
+- `pkg/signals` now includes an explicit Redis relay for distributed pub/sub, so signal events can be published across processes without replacing the in-process bus
+- the Redis relay can forward remote events back into `signals.Bus`, which gives GoFrame a first small distributed event bridge aligned with the existing Django-style signal model
+
 Still pending in Point 7:
 
-- pub/sub primitives for application code
 - cron scheduling primitives beyond raw Asynq wiring
-- stronger retry policy ergonomics at enqueue time
 - outbox support and delivery guarantees
 - richer distributed observability and topology surfaces
 

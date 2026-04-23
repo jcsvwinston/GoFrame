@@ -233,12 +233,18 @@ Multi-tenant behavior:
 Tasks (`pkg/tasks`):
 
 - Asynq manager and worker runtime
+- explicit enqueue policy helpers for queue/retry/timeout/delay/retention
 - explicit queue runtime actions for pause/unpause/retry and first dead-letter operations (`archive-retry`, `retry-archived`, `purge-archived`)
 - enqueue/process instrumentation hooks
 
 Observability (`pkg/observe`):
 
 - `slog` logger setup
+
+Signals (`pkg/signals`):
+
+- in-process signal bus for model/domain events
+- explicit Redis relay for small distributed publish/subscribe forwarding
 - OpenTelemetry setup and shutdown
 
 Experimental API contracts (`pkg/openapi` + `internal/contracts` convention):

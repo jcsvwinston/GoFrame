@@ -29,11 +29,11 @@ Policy references:
 | `pkg/mail` | `stable` | Mail sender abstraction, provider registry (`RegisterProvider`), sender construction (`NewSender`) | Built-ins + external plugin/legacy bridge are supported. |
 | `pkg/plugins` | `stable` | Plugin SDK v1 envelopes/capability constants, inventory/probe/runtime execution APIs | SDK `v1` contract is intended stable through `v1.x`. |
 | `pkg/openapi` | `experimental` | Minimal OpenAPI 3.1 document model, JSON serialization helpers, runtime document handler helpers, and small schema/response/parameter helpers for scaffolded contracts | Official experimental base layer for project-level API contracts via `internal/contracts`, `goframe openapi`, and explicit runtime serving; the current helper subset covers repeated JSON schema shapes, shared `data`/`count` response envelopes, structured JSON error responses, empty responses, and explicit path/query parameters including the scaffolded optional `q` search convention, but the overall surface may still expand before `v1.0`. |
-| `pkg/tasks` | `stable` | Task manager config/runtime, queue runtime operations, and JSON task helpers | Queue runtime boundary for app code, including explicit queue action helpers used by admin/runtime operations. |
+| `pkg/tasks` | `stable` | Task manager config/runtime, explicit enqueue-policy helpers, queue runtime operations, and JSON task helpers | Queue runtime boundary for app code, including explicit queue action helpers used by admin/runtime operations. |
 | `pkg/observe` | `stable` | Logger/context correlation helpers and OTel setup entrypoint | Telemetry backend internals are not part of app contract. |
 | `pkg/errors` | `stable` | Domain error constructors + HTTP writer | Error payload shape and status mapping are public behavior. |
 | `pkg/validate` | `stable` | Validation entrypoint + custom rule registration | Shared validation boundary for handlers/models. |
-| `pkg/signals` | `stable` | In-process event bus types and APIs | Used by model hooks and domain events. |
+| `pkg/signals` | `stable` | In-process event bus types/APIs plus explicit Redis relay helpers for distributed forwarding | Used by model hooks, domain events, and small distributed pub/sub bridges. |
 | `pkg/admin` | `transitional` | Admin panel mount/handler integration surface | Embedded UI details can evolve faster than core runtime APIs. |
 
 ## Extension Points
