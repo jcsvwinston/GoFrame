@@ -124,22 +124,33 @@ Completed in the fourth cut:
 - runtime OpenAPI serving remains an explicit application decision via `app.MountOpenAPI(...)`; the framework now documents that explicit-only convention instead of adding hidden auto-mount behavior
 - generated API clients remain intentionally out of scope for the current experimental lane; the current scope closes at explicit document export/serve plus scaffolded contract coherence
 
-### Point 7 and beyond: distributed primitives
+### Point 7: distributed primitives
 
-Longer-term work:
+In progress.
 
-- stronger async primitives
-- pub/sub, cron, retries, dead-letter handling, and outbox support
-- more declarative infrastructure integration
-- service catalog, topology, and stronger runtime observability
+Completed in the first cut:
+
+- `pkg/tasks` queue operations now expose one explicit source of truth for supported runtime actions
+- the admin runtime lane now accepts the same supported queue actions as `pkg/tasks` instead of duplicating a separate whitelist
+- the first dead-letter operational baseline is now real: retry queues can be archived, archived tasks can be re-run, and archived tasks can be purged
+- focused tests now lock the supported queue-action catalog and keep admin/runtime behavior aligned
+
+Still pending in Point 7:
+
+- pub/sub primitives for application code
+- cron scheduling primitives beyond raw Asynq wiring
+- stronger retry policy ergonomics at enqueue time
+- outbox support and delivery guarantees
+- richer distributed observability and topology surfaces
 
 ## Recommended start for tomorrow
 
-Point 5 and Point 6 are now closed at the current experimental baseline.
+Point 5 and Point 6 are closed at the current experimental baseline.
+Point 7 has now started with a first real dead-letter/runtime-ops slice.
 
 Recommended next focus:
 
-1. start Point 7 with a small but real distributed primitive
+1. continue Point 7 with the same small-slice discipline
 2. keep the same discipline: narrow slice, one source of truth, strong structural tests
 3. run verification: `go test ./...` and `npm run build`
 4. commit and push the next batch

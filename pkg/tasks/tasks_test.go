@@ -101,6 +101,43 @@ func TestNewJSONTask_RequiresType(t *testing.T) {
 	}
 }
 
+func TestDecodeJSONPayload(t *testing.T) {
+	task, err := NewJSONTask("articles.created", map[string]any{
+		"article_id": 7,
+		"title":      "fresh",
+	})
+	if err != nil {
+		t.Fatalf("NewJSONTask failed: %v", err)
+	}
+
+	var payload struct {
+		ArticleID int64  `json:"article_id"`
+		Title     string `json:"title"`
+	}
+	if err := DecodeJSONPayload(task, &payload); err != nil {
+		t.Fatalf("DecodeJSONPayload failed: %v", err)
+	}
+	if payload.ArticleID != 7 || payload.Title != "fresh" {
+		t.Fatalf("unexpected payload: %+v", payload)
+	}
+}
+
+func TestDecodeJSONPayload_NilTask(t *testing.T) {
+	var payload struct{}
+	err := DecodeJSONPayload(nil, &payload)
+	if !errors.Is(err, ErrNilTask) {
+		t.Fatalf("expected ErrNilTask, got %v", err)
+	}
+}
+
+func TestDecodeJSONPayload_InvalidJSON(t *testing.T) {
+	task := asynq.NewTask("articles.created", []byte("{invalid"))
+	var payload struct{}
+	if err := DecodeJSONPayload(task, &payload); err == nil {
+		t.Fatal("expected decode error")
+	}
+}
+
 func TestTaskCorrelationFromContext(t *testing.T) {
 	origTP := otel.GetTracerProvider()
 	tp := sdktrace.NewTracerProvider()

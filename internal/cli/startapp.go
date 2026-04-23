@@ -550,8 +550,6 @@ const startAppTasksTemplate = `package tasks
 
 import (
 	"context"
-	"encoding/json"
-	"fmt"
 	"log"
 
 	"github.com/hibiken/asynq"
@@ -570,8 +568,8 @@ func Register%sTasks(manager *gftasks.Manager) error {
 
 func handle%sCreated(_ context.Context, task *asynq.Task) error {
 	var payload %sCreatedPayload
-	if err := json.Unmarshal(task.Payload(), &payload); err != nil {
-		return fmt.Errorf("decode payload: %%w", err)
+	if err := gftasks.DecodeJSONPayload(task, &payload); err != nil {
+		return err
 	}
 
 	log.Printf("task processed: %s created => %%s", payload.Name)
@@ -583,8 +581,6 @@ const startAppTasksWithServiceTemplate = `package tasks
 
 import (
 	"context"
-	"encoding/json"
-	"fmt"
 
 	"%s/internal/services"
 	"github.com/hibiken/asynq"
@@ -605,8 +601,8 @@ func Register%sTasks(manager *gftasks.Manager, service *services.%sService) erro
 
 func handle%sCreated(ctx context.Context, task *asynq.Task, service *services.%sService) error {
 	var payload %sCreatedPayload
-	if err := json.Unmarshal(task.Payload(), &payload); err != nil {
-		return fmt.Errorf("decode payload: %%w", err)
+	if err := gftasks.DecodeJSONPayload(task, &payload); err != nil {
+		return err
 	}
 
 	return service.RecordCreated(ctx, services.Record%sCreatedInput{

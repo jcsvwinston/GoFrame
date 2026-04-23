@@ -9,6 +9,24 @@ import (
 	"github.com/hibiken/asynq"
 )
 
+const (
+	QueueActionPause         = "pause"
+	QueueActionUnpause       = "unpause"
+	QueueActionRetry         = "retry"
+	QueueActionArchiveRetry  = "archive-retry"
+	QueueActionRetryArchived = "retry-archived"
+	QueueActionPurgeArchived = "purge-archived"
+)
+
+var supportedQueueActions = []string{
+	QueueActionPause,
+	QueueActionUnpause,
+	QueueActionRetry,
+	QueueActionArchiveRetry,
+	QueueActionRetryArchived,
+	QueueActionPurgeArchived,
+}
+
 // RuntimeSnapshot describes queue/worker state discoverable from Asynq runtime.
 type RuntimeSnapshot struct {
 	Enabled           bool                    `json:"enabled"`
@@ -250,13 +268,17 @@ func InspectRuntime(redisURL string) RuntimeSnapshot {
 // - pause
 // - unpause
 // - retry (run all retry tasks in queue)
+// - archive-retry (move retry tasks to archived/dead-letter)
+// - retry-archived (move archived/dead-letter tasks back to pending)
+// - purge-archived (delete archived/dead-letter tasks)
 func OperateQueue(redisURL, queue, action string) (QueueActionResult, error) {
 	now := time.Now().UTC()
+	normalizedAction, ok := NormalizeQueueAction(action)
 	out := QueueActionResult{
 		Enabled:     false,
 		GeneratedAt: now.Format(time.RFC3339),
 		Queue:       strings.TrimSpace(queue),
-		Action:      strings.ToLower(strings.TrimSpace(action)),
+		Action:      normalizedAction,
 		Applied:     false,
 	}
 
@@ -267,7 +289,7 @@ func OperateQueue(redisURL, queue, action string) (QueueActionResult, error) {
 	if out.Queue == "" {
 		return out, fmt.Errorf("queue is required")
 	}
-	if out.Action != "pause" && out.Action != "unpause" && out.Action != "retry" {
+	if !ok {
 		return out, fmt.Errorf("unsupported queue action %q", out.Action)
 	}
 
@@ -279,7 +301,7 @@ func OperateQueue(redisURL, queue, action string) (QueueActionResult, error) {
 	defer inspector.Close()
 
 	switch out.Action {
-	case "pause":
+	case QueueActionPause:
 		if err := inspector.PauseQueue(out.Queue); err != nil {
 			return out, err
 		}
@@ -287,7 +309,7 @@ func OperateQueue(redisURL, queue, action string) (QueueActionResult, error) {
 		out.Applied = true
 		out.Message = "queue paused"
 		return out, nil
-	case "unpause":
+	case QueueActionUnpause:
 		if err := inspector.UnpauseQueue(out.Queue); err != nil {
 			return out, err
 		}
@@ -295,7 +317,7 @@ func OperateQueue(redisURL, queue, action string) (QueueActionResult, error) {
 		out.Applied = true
 		out.Message = "queue resumed"
 		return out, nil
-	case "retry":
+	case QueueActionRetry:
 		count, err := inspector.RunAllRetryTasks(out.Queue)
 		if err != nil {
 			return out, err
@@ -305,7 +327,53 @@ func OperateQueue(redisURL, queue, action string) (QueueActionResult, error) {
 		out.Affected = count
 		out.Message = "retry tasks moved to pending"
 		return out, nil
+	case QueueActionArchiveRetry:
+		count, err := inspector.ArchiveAllRetryTasks(out.Queue)
+		if err != nil {
+			return out, err
+		}
+		out.Enabled = true
+		out.Applied = true
+		out.Affected = count
+		out.Message = "retry tasks moved to archived"
+		return out, nil
+	case QueueActionRetryArchived:
+		count, err := inspector.RunAllArchivedTasks(out.Queue)
+		if err != nil {
+			return out, err
+		}
+		out.Enabled = true
+		out.Applied = true
+		out.Affected = count
+		out.Message = "archived tasks moved to pending"
+		return out, nil
+	case QueueActionPurgeArchived:
+		count, err := inspector.DeleteAllArchivedTasks(out.Queue)
+		if err != nil {
+			return out, err
+		}
+		out.Enabled = true
+		out.Applied = true
+		out.Affected = count
+		out.Message = "archived tasks deleted"
+		return out, nil
 	default:
 		return out, fmt.Errorf("unsupported queue action %q", out.Action)
 	}
+}
+
+func NormalizeQueueAction(raw string) (string, bool) {
+	action := strings.ToLower(strings.TrimSpace(raw))
+	for _, candidate := range supportedQueueActions {
+		if action == candidate {
+			return action, true
+		}
+	}
+	return action, false
+}
+
+func SupportedQueueActions() []string {
+	out := make([]string, len(supportedQueueActions))
+	copy(out, supportedQueueActions)
+	return out
 }

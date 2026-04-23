@@ -557,6 +557,17 @@ info, err := manager.EnqueueJSONCtx(r.Context(), tasks.TaskArticleCreated, map[s
 
 This preserves `request_id`/`user_id`/`traceparent` metadata for worker-side observability.
 
+Generated task handlers also use `tasks.DecodeJSONPayload(...)` so worker glue stays explicit without repeating JSON decode boilerplate in every scaffold.
+
+Current runtime queue operations:
+
+- `pause`
+- `unpause`
+- `retry` (move retry tasks back to pending)
+- `archive-retry` (move retry tasks to archived/dead-letter)
+- `retry-archived` (move archived/dead-letter tasks back to pending)
+- `purge-archived` (delete archived/dead-letter tasks)
+
 Observability dashboards and alert baseline:
 
 - `docs/OBSERVABILITY_BASELINE.md`

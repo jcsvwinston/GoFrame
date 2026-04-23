@@ -262,14 +262,12 @@ func (p *Panel) handleSystemQueueAction(w http.ResponseWriter, r *http.Request) 
 	}
 
 	queue := strings.TrimSpace(r.PathValue("name"))
-	action := strings.ToLower(strings.TrimSpace(r.PathValue("action")))
+	action, ok := tasks.NormalizeQueueAction(r.PathValue("action"))
 	if queue == "" {
 		writeErr(w, gferrors.BadRequest("queue is required"))
 		return
 	}
-	switch action {
-	case "pause", "unpause", "retry":
-	default:
+	if !ok {
 		writeErr(w, gferrors.BadRequest("unsupported queue action"))
 		return
 	}

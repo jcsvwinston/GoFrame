@@ -33,3 +33,49 @@ func TestOperateQueue_Validation(t *testing.T) {
 		t.Fatalf("expected error for unsupported action")
 	}
 }
+
+func TestNormalizeQueueAction(t *testing.T) {
+	tests := []struct {
+		input string
+		want  string
+		ok    bool
+	}{
+		{input: "pause", want: QueueActionPause, ok: true},
+		{input: "  retry-archived ", want: QueueActionRetryArchived, ok: true},
+		{input: "PURGE-ARCHIVED", want: QueueActionPurgeArchived, ok: true},
+		{input: "unknown", want: "unknown", ok: false},
+	}
+
+	for _, tc := range tests {
+		got, ok := NormalizeQueueAction(tc.input)
+		if got != tc.want || ok != tc.ok {
+			t.Fatalf("NormalizeQueueAction(%q) = (%q, %t), want (%q, %t)", tc.input, got, ok, tc.want, tc.ok)
+		}
+	}
+}
+
+func TestSupportedQueueActions(t *testing.T) {
+	got := SupportedQueueActions()
+	want := []string{
+		QueueActionPause,
+		QueueActionUnpause,
+		QueueActionRetry,
+		QueueActionArchiveRetry,
+		QueueActionRetryArchived,
+		QueueActionPurgeArchived,
+	}
+	if len(got) != len(want) {
+		t.Fatalf("SupportedQueueActions len = %d, want %d", len(got), len(want))
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("SupportedQueueActions[%d] = %q, want %q", i, got[i], want[i])
+		}
+	}
+
+	got[0] = "mutated"
+	fresh := SupportedQueueActions()
+	if fresh[0] != QueueActionPause {
+		t.Fatalf("SupportedQueueActions should return a copy, got %q", fresh[0])
+	}
+}

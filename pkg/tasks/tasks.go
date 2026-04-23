@@ -28,6 +28,7 @@ var (
 	ErrTaskTypeRequired = errors.New("tasks: task type is required")
 	ErrNilHandler       = errors.New("tasks: handler is required")
 	ErrNilManager       = errors.New("tasks: manager is nil")
+	ErrNilTask          = errors.New("tasks: task is nil")
 )
 
 const taskCorrelationPayloadKey = "_goframe_ctx"
@@ -207,6 +208,17 @@ func (m *Manager) Close() error {
 // NewJSONTask builds an Asynq task with JSON payload.
 func NewJSONTask(taskType string, payload any) (*asynq.Task, error) {
 	return newJSONTask(taskType, payload, taskCorrelation{})
+}
+
+// DecodeJSONPayload unmarshals a JSON task payload into dst.
+func DecodeJSONPayload(task *asynq.Task, dst any) error {
+	if task == nil {
+		return ErrNilTask
+	}
+	if err := json.Unmarshal(task.Payload(), dst); err != nil {
+		return fmt.Errorf("tasks.DecodeJSONPayload: %w", err)
+	}
+	return nil
 }
 
 func newJSONTask(taskType string, payload any, correlation taskCorrelation) (*asynq.Task, error) {

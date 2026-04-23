@@ -289,7 +289,7 @@ func TestPanelSystemQueueActionGuards(t *testing.T) {
 	}
 
 	forcedBody := bytes.NewBufferString(`{"confirm_queue":"critical","acknowledge":"I_UNDERSTAND_RUNTIME_OPERATION","force":true}`)
-	forcedReq, err := http.NewRequest(http.MethodPost, srv.URL+"/api/system/jobs/queues/critical/actions/pause", forcedBody)
+	forcedReq, err := http.NewRequest(http.MethodPost, srv.URL+"/api/system/jobs/queues/critical/actions/retry-archived", forcedBody)
 	if err != nil {
 		t.Fatalf("new forced request failed: %v", err)
 	}
@@ -301,6 +301,6 @@ func TestPanelSystemQueueActionGuards(t *testing.T) {
 	defer forcedRes.Body.Close()
 	if forcedRes.StatusCode != http.StatusBadRequest {
 		raw, _ := io.ReadAll(forcedRes.Body)
-		t.Fatalf("expected status 400 when redis_url missing, got %d body=%s", forcedRes.StatusCode, string(raw))
+		t.Fatalf("expected status 400 when redis_url missing for supported action, got %d body=%s", forcedRes.StatusCode, string(raw))
 	}
 }

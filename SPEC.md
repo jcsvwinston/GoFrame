@@ -233,6 +233,7 @@ Multi-tenant behavior:
 Tasks (`pkg/tasks`):
 
 - Asynq manager and worker runtime
+- explicit queue runtime actions for pause/unpause/retry and first dead-letter operations (`archive-retry`, `retry-archived`, `purge-archived`)
 - enqueue/process instrumentation hooks
 
 Observability (`pkg/observe`):

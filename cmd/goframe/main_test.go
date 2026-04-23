@@ -1191,6 +1191,9 @@ func TestRun_NewProjectScaffold(t *testing.T) {
 	if !strings.Contains(taskText, "func Register(manager *gftasks.Manager, articleService *services.ArticleService) error") {
 		t.Fatalf("expected task registration to accept a service dependency: %s", taskText)
 	}
+	if !strings.Contains(taskText, "gftasks.DecodeJSONPayload(task, &payload)") {
+		t.Fatalf("expected task scaffold to use shared payload decoder helper: %s", taskText)
+	}
 	if !strings.Contains(taskText, "articleService.RecordCreated") {
 		t.Fatalf("expected task handler to delegate into service: %s", taskText)
 	}
@@ -1504,6 +1507,9 @@ replace github.com/jcsvwinston/GoFrame => %s
 	}
 	if !strings.Contains(taskText, "func RegisterBillingTasks(manager *gftasks.Manager, service *services.BillingService) error") {
 		t.Fatalf("expected module-aware task registration to accept service dependency: %s", taskText)
+	}
+	if !strings.Contains(taskText, "gftasks.DecodeJSONPayload(task, &payload)") {
+		t.Fatalf("expected module-aware task scaffold to use shared payload decoder helper: %s", taskText)
 	}
 	if !strings.Contains(taskText, "service.RecordCreated") {
 		t.Fatalf("expected module-aware task handler to delegate into service: %s", taskText)

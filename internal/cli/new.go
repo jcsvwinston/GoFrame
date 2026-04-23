@@ -704,8 +704,6 @@ const newTaskHandlersTemplate = `package tasks
 
 import (
 	"context"
-	"encoding/json"
-	"fmt"
 
 	"%s/internal/services"
 	"github.com/hibiken/asynq"
@@ -727,8 +725,8 @@ func Register(manager *gftasks.Manager, articleService *services.ArticleService)
 
 func handleArticleCreated(ctx context.Context, task *asynq.Task, articleService *services.ArticleService) error {
 	var payload ArticleCreatedPayload
-	if err := json.Unmarshal(task.Payload(), &payload); err != nil {
-		return fmt.Errorf("decode payload: %%w", err)
+	if err := gftasks.DecodeJSONPayload(task, &payload); err != nil {
+		return err
 	}
 
 	return articleService.RecordCreated(ctx, services.RecordArticleCreatedInput{
