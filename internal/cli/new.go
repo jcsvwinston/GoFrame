@@ -907,7 +907,6 @@ import (
 	"database/sql"
 	"log"
 	"net/http"
-	"time"
 
 	"%s/internal/controllers"
 	"%s/internal/contracts"
