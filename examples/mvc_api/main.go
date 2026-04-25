@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"embed"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"html/template"
@@ -14,14 +15,14 @@ import (
 	"strings"
 	"time"
 
-	"github.com/hibiken/asynq"
 	"github.com/jcsvwinston/GoFrame/pkg/app"
 	gferrors "github.com/jcsvwinston/GoFrame/pkg/errors"
 	"github.com/jcsvwinston/GoFrame/pkg/model"
 	"github.com/jcsvwinston/GoFrame/pkg/openapi"
 	"github.com/jcsvwinston/GoFrame/pkg/outbox"
-	gfrender "github.com/jcsvwinston/GoFrame/pkg/router"
+	router "github.com/jcsvwinston/GoFrame/pkg/router"
 	"github.com/jcsvwinston/GoFrame/pkg/tasks"
+	asynqprovider "github.com/jcsvwinston/GoFrame/pkg/tasks/providers/asynq"
 	"github.com/jcsvwinston/GoFrame/pkg/validate"
 )
 
@@ -98,8 +99,8 @@ type exampleServices struct {
 	sqlDB            *sql.DB
 	outboxStore      *outbox.Store
 	outboxDispatcher *outbox.Dispatcher
-	taskManager      *tasks.Manager
-	scheduler        *tasks.Scheduler
+	taskManager      tasks.Manager
+	scheduler        *asynqprovider.Scheduler
 }
 
 func main() {
@@ -292,29 +293,29 @@ func newExampleApp(cfg *app.Config) (*app.App, error) {
 		return nil, fmt.Errorf("parse templates: %w", err)
 	}
 
-	a.Router.Get("/", homeHandler(tpl, cfg))
-	a.Router.Get("/articles", publishedArticlesPageHandler(tpl, sqlDB))
-	a.Router.Get("/contact", leadCapturePageHandler(tpl))
-	a.Router.Post("/contact", leadCaptureSubmitHandler(a, tpl, services))
-	a.Router.Get("/app/login", appLoginPageHandler(tpl))
-	a.Router.Post("/app/login", appLoginPostHandler(a))
-	a.Router.Post("/app/logout", appLogoutHandler(a))
-	a.Router.Get("/app/dashboard", appDashboardHandler(a, tpl, sqlDB))
-	a.Router.Get("/api/health", func(w http.ResponseWriter, _ *http.Request) {
-		gfrender.JSON(w, http.StatusOK, map[string]any{
+	a.Router.Get("/", router.FromHTTP(homeHandler(tpl, cfg)))
+	a.Router.Get("/articles", router.FromHTTP(publishedArticlesPageHandler(tpl, sqlDB)))
+	a.Router.Get("/contact", router.FromHTTP(leadCapturePageHandler(tpl)))
+	a.Router.Post("/contact", router.FromHTTP(leadCaptureSubmitHandler(a, tpl, services)))
+	a.Router.Get("/app/login", router.FromHTTP(appLoginPageHandler(tpl)))
+	a.Router.Post("/app/login", router.FromHTTP(appLoginPostHandler(a)))
+	a.Router.Post("/app/logout", router.FromHTTP(appLogoutHandler(a)))
+	a.Router.Get("/app/dashboard", router.FromHTTP(appDashboardHandler(a, tpl, sqlDB)))
+	a.Router.Get("/api/health", func(c *router.Context) error {
+		return c.JSON(http.StatusOK, map[string]any{
 			"status":  "ok",
 			"service": "goframe-mvc-api-showcase",
 		})
 	})
-	a.Router.Get("/api/articles", listArticlesHandler(sqlDB))
-	a.Router.Post("/api/articles", createArticleHandler(a, services))
-	a.Router.Get("/api/articles/live-flag", listArticlesLiveFlagHandler(a, sqlDB))
-	a.Router.Get("/api/leads", listLeadsHandler(sqlDB))
-	a.Router.Post("/api/leads", createLeadHandler(a, sqlDB))
-	a.Router.Get("/api/demo/runtime", demoRuntimeHandler(a, services))
-	a.Router.Post("/api/demo/outbox", enqueueOutboxHandler(a, services))
-	a.Router.Post("/api/demo/outbox/drain", drainOutboxHandler(a, services))
-	a.Router.Post("/api/demo/tasks", enqueueTaskHandler(a, services))
+	a.Router.Get("/api/articles", router.FromHTTP(listArticlesHandler(sqlDB)))
+	a.Router.Post("/api/articles", router.FromHTTP(createArticleHandler(a, services)))
+	a.Router.Get("/api/articles/live-flag", router.FromHTTP(listArticlesLiveFlagHandler(a, sqlDB)))
+	a.Router.Get("/api/leads", router.FromHTTP(listLeadsHandler(sqlDB)))
+	a.Router.Post("/api/leads", router.FromHTTP(createLeadHandler(a, sqlDB)))
+	a.Router.Get("/api/demo/runtime", router.FromHTTP(demoRuntimeHandler(a, services)))
+	a.Router.Post("/api/demo/outbox", router.FromHTTP(enqueueOutboxHandler(a, services)))
+	a.Router.Post("/api/demo/outbox/drain", router.FromHTTP(drainOutboxHandler(a, services)))
+	a.Router.Post("/api/demo/tasks", router.FromHTTP(enqueueTaskHandler(a, services)))
 
 	if err := a.MountOpenAPI("/openapi.json", exampleOpenAPIDocument); err != nil {
 		return nil, fmt.Errorf("mount openapi: %w", err)
@@ -351,7 +352,7 @@ func bootstrapTaskRuntime(a *app.App, services *exampleServices) error {
 		return nil
 	}
 
-	manager, err := tasks.NewManager(tasks.Config{
+	manager, err := asynqprovider.NewManager(tasks.Config{
 		RedisURL:    a.Config.RedisURL,
 		Concurrency: 4,
 		Queues: map[string]int{
@@ -362,9 +363,9 @@ func bootstrapTaskRuntime(a *app.App, services *exampleServices) error {
 	if err != nil {
 		return fmt.Errorf("new task manager: %w", err)
 	}
-	if err := manager.HandleFunc("demo.email.send", func(ctx context.Context, task *asynq.Task) error {
+	if err := manager.HandleFunc("demo.email.send", func(ctx context.Context, task tasks.Task) error {
 		var payload demoTaskPayload
-		if err := tasks.DecodeJSONPayload(task, &payload); err != nil {
+		if err := json.Unmarshal(task.Payload(), &payload); err != nil {
 			return err
 		}
 		a.Logger.Info("showcase task processed", "kind", payload.Kind, "target", payload.Target, "source", payload.Source)
@@ -372,9 +373,9 @@ func bootstrapTaskRuntime(a *app.App, services *exampleServices) error {
 	}); err != nil {
 		return fmt.Errorf("register task handler: %w", err)
 	}
-	if err := manager.HandleFunc("demo.heartbeat", func(ctx context.Context, task *asynq.Task) error {
+	if err := manager.HandleFunc("demo.heartbeat", func(ctx context.Context, task tasks.Task) error {
 		var payload demoTaskPayload
-		if err := tasks.DecodeJSONPayload(task, &payload); err != nil {
+		if err := json.Unmarshal(task.Payload(), &payload); err != nil {
 			return err
 		}
 		a.Logger.Info("showcase scheduler heartbeat", "source", payload.Source, "queued_at", payload.QueuedAt)
@@ -394,7 +395,7 @@ func bootstrapTaskRuntime(a *app.App, services *exampleServices) error {
 		return manager.Close()
 	})
 
-	scheduler, err := tasks.NewScheduler(tasks.SchedulerConfig{
+	scheduler, err := asynqprovider.NewScheduler(asynqprovider.SchedulerConfig{
 		RedisURL:          a.Config.RedisURL,
 		HeartbeatInterval: 5 * time.Second,
 	})
@@ -405,7 +406,7 @@ func bootstrapTaskRuntime(a *app.App, services *exampleServices) error {
 	policy := tasks.DefaultEnqueuePolicy()
 	policy.Queue = "default"
 	policy.MaxRetry = 1
-	if _, err := scheduler.Register(tasks.PeriodicTask{
+	if _, err := scheduler.Register(asynqprovider.PeriodicTask{
 		Spec:     "@every 45s",
 		TaskType: "demo.heartbeat",
 		Payload: demoTaskPayload{
@@ -563,7 +564,7 @@ func publishedArticlesPageHandler(tpl *template.Template, sqlDB *sql.DB) http.Ha
 	return func(w http.ResponseWriter, r *http.Request) {
 		articles, err := listArticleRecords(r.Context(), sqlDB, true, 24)
 		if err != nil {
-			gfrender.Error(w, err)
+			router.Error(w, err)
 			return
 		}
 
@@ -616,7 +617,7 @@ func leadCaptureSubmitHandler(a *app.App, tpl *template.Template, services *exam
 
 		lead, err := createLeadRecord(r.Context(), services.sqlDB, in)
 		if err != nil {
-			gfrender.Error(w, err, a.Logger)
+			router.Error(w, err, a.Logger)
 			return
 		}
 		if services.outboxStore != nil {
@@ -697,12 +698,12 @@ func appDashboardHandler(a *app.App, tpl *template.Template, sqlDB *sql.DB) http
 		leadCount := countRows(r.Context(), sqlDB, "leads")
 		recentArticles, err := listArticleRecords(r.Context(), sqlDB, false, 5)
 		if err != nil {
-			gfrender.Error(w, err, a.Logger)
+			router.Error(w, err, a.Logger)
 			return
 		}
 		recentLeads, err := listLeadRecords(r.Context(), sqlDB, 5)
 		if err != nil {
-			gfrender.Error(w, err, a.Logger)
+			router.Error(w, err, a.Logger)
 			return
 		}
 		outboxSnapshot := outbox.InspectRuntime(sqlDB, outbox.Config{Flavor: outbox.FlavorSQLite})
@@ -736,11 +737,11 @@ func listArticlesHandler(sqlDB *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		items, err := listArticleRecords(r.Context(), sqlDB, false, 100)
 		if err != nil {
-			gfrender.Error(w, err)
+			router.Error(w, err)
 			return
 		}
 
-		gfrender.JSON(w, http.StatusOK, map[string]any{
+		router.JSON(w, http.StatusOK, map[string]any{
 			"data":  items,
 			"count": len(items),
 		})
@@ -752,7 +753,7 @@ func listArticlesLiveFlagHandler(a *app.App, sqlDB *sql.DB) http.HandlerFunc {
 		previewMode, _ := a.Admin.FeatureFlag("articles_preview_mode")
 		items, err := listArticleRecords(r.Context(), sqlDB, !previewMode, 100)
 		if err != nil {
-			gfrender.Error(w, err)
+			router.Error(w, err)
 			return
 		}
 
@@ -761,7 +762,7 @@ func listArticlesLiveFlagHandler(a *app.App, sqlDB *sql.DB) http.HandlerFunc {
 			mode = "preview_all"
 		}
 
-		gfrender.JSON(w, http.StatusOK, map[string]any{
+		router.JSON(w, http.StatusOK, map[string]any{
 			"feature_flag": "articles_preview_mode",
 			"enabled":      previewMode,
 			"mode":         mode,
@@ -774,8 +775,8 @@ func listArticlesLiveFlagHandler(a *app.App, sqlDB *sql.DB) http.HandlerFunc {
 func createArticleHandler(a *app.App, services *exampleServices) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var in createArticleInput
-		if err := gfrender.Bind(r, &in); err != nil {
-			gfrender.Error(w, err, a.Logger)
+		if err := router.Bind(r, &in); err != nil {
+			router.Error(w, err, a.Logger)
 			return
 		}
 
@@ -786,12 +787,12 @@ func createArticleHandler(a *app.App, services *exampleServices) http.HandlerFun
 			now, now, in.Title, in.Content, in.Published,
 		)
 		if err != nil {
-			gfrender.Error(w, err, a.Logger)
+			router.Error(w, err, a.Logger)
 			return
 		}
 		id, err := res.LastInsertId()
 		if err != nil {
-			gfrender.Error(w, err, a.Logger)
+			router.Error(w, err, a.Logger)
 			return
 		}
 
@@ -806,7 +807,7 @@ func createArticleHandler(a *app.App, services *exampleServices) http.HandlerFun
 			})
 		}
 
-		gfrender.Created(w, map[string]any{
+		router.Created(w, map[string]any{
 			"data": map[string]any{
 				"id":         id,
 				"title":      in.Title,
@@ -823,11 +824,11 @@ func listLeadsHandler(sqlDB *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		items, err := listLeadRecords(r.Context(), sqlDB, 100)
 		if err != nil {
-			gfrender.Error(w, err)
+			router.Error(w, err)
 			return
 		}
 
-		gfrender.JSON(w, http.StatusOK, map[string]any{
+		router.JSON(w, http.StatusOK, map[string]any{
 			"data":  items,
 			"count": len(items),
 		})
@@ -837,18 +838,18 @@ func listLeadsHandler(sqlDB *sql.DB) http.HandlerFunc {
 func createLeadHandler(a *app.App, sqlDB *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var in createLeadInput
-		if err := gfrender.Bind(r, &in); err != nil {
-			gfrender.Error(w, err, a.Logger)
+		if err := router.Bind(r, &in); err != nil {
+			router.Error(w, err, a.Logger)
 			return
 		}
 
 		lead, err := createLeadRecord(r.Context(), sqlDB, in)
 		if err != nil {
-			gfrender.Error(w, err, a.Logger)
+			router.Error(w, err, a.Logger)
 			return
 		}
 
-		gfrender.Created(w, map[string]any{
+		router.Created(w, map[string]any{
 			"data": lead,
 		})
 	}
@@ -978,11 +979,11 @@ func demoRuntimeHandler(a *app.App, services *exampleServices) http.HandlerFunc 
 
 		jobsSnapshot := tasks.RuntimeSnapshot{Enabled: false, Reason: "redis_url is not configured"}
 		if strings.TrimSpace(a.Config.RedisURL) != "" {
-			jobsSnapshot = tasks.InspectRuntime(a.Config.RedisURL)
+			jobsSnapshot = asynqprovider.InspectRuntime(a.Config.RedisURL)
 		}
 
 		previewMode, _ := a.Admin.FeatureFlag("articles_preview_mode")
-		gfrender.JSON(w, http.StatusOK, map[string]any{
+		router.JSON(w, http.StatusOK, map[string]any{
 			"name":                  "goframe-mvc-api-showcase",
 			"admin_prefix":          a.Config.AdminPrefix,
 			"openapi_path":          "/openapi.json",
@@ -998,7 +999,7 @@ func demoRuntimeHandler(a *app.App, services *exampleServices) http.HandlerFunc 
 func enqueueOutboxHandler(a *app.App, services *exampleServices) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if services.outboxStore == nil {
-			gfrender.JSON(w, http.StatusBadRequest, map[string]any{
+			router.JSON(w, http.StatusBadRequest, map[string]any{
 				"error": map[string]any{
 					"code":    "OUTBOX_DISABLED",
 					"message": "outbox store is not configured",
@@ -1014,10 +1015,10 @@ func enqueueOutboxHandler(a *app.App, services *exampleServices) http.HandlerFun
 			},
 		})
 		if err != nil {
-			gfrender.Error(w, err, a.Logger)
+			router.Error(w, err, a.Logger)
 			return
 		}
-		gfrender.Created(w, map[string]any{
+		router.Created(w, map[string]any{
 			"data":     msg,
 			"snapshot": services.outboxStore.Snapshot(r.Context()),
 		})
@@ -1027,7 +1028,7 @@ func enqueueOutboxHandler(a *app.App, services *exampleServices) http.HandlerFun
 func drainOutboxHandler(a *app.App, services *exampleServices) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if services.outboxDispatcher == nil || services.outboxStore == nil {
-			gfrender.JSON(w, http.StatusBadRequest, map[string]any{
+			router.JSON(w, http.StatusBadRequest, map[string]any{
 				"error": map[string]any{
 					"code":    "OUTBOX_DISABLED",
 					"message": "outbox runtime is not configured",
@@ -1037,10 +1038,10 @@ func drainOutboxHandler(a *app.App, services *exampleServices) http.HandlerFunc 
 		}
 		result, err := services.outboxDispatcher.RunOnce(r.Context())
 		if err != nil {
-			gfrender.Error(w, err, a.Logger)
+			router.Error(w, err, a.Logger)
 			return
 		}
-		gfrender.JSON(w, http.StatusOK, map[string]any{
+		router.JSON(w, http.StatusOK, map[string]any{
 			"result":   result,
 			"snapshot": services.outboxStore.Snapshot(r.Context()),
 		})
@@ -1050,7 +1051,7 @@ func drainOutboxHandler(a *app.App, services *exampleServices) http.HandlerFunc 
 func enqueueTaskHandler(a *app.App, services *exampleServices) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if services.taskManager == nil {
-			gfrender.JSON(w, http.StatusBadRequest, map[string]any{
+			router.JSON(w, http.StatusBadRequest, map[string]any{
 				"error": map[string]any{
 					"code":    "TASKS_DISABLED",
 					"message": "set GOFRAME_EXAMPLE_REDIS_URL to enable task demo endpoints",
@@ -1062,24 +1063,24 @@ func enqueueTaskHandler(a *app.App, services *exampleServices) http.HandlerFunc 
 		policy := tasks.DefaultEnqueuePolicy()
 		policy.Queue = "critical"
 		policy.MaxRetry = 2
-		info, err := services.taskManager.EnqueueJSONCtxWithPolicy(r.Context(), "demo.email.send", demoTaskPayload{
+		id, err := services.taskManager.EnqueueJSONCtxWithPolicy(r.Context(), "demo.email.send", demoTaskPayload{
 			Kind:     "manual",
 			Target:   "team@example.com",
 			Source:   "/api/demo/tasks",
 			QueuedAt: time.Now().UTC().Format(time.RFC3339),
 		}, policy)
 		if err != nil {
-			gfrender.Error(w, err, a.Logger)
+			router.Error(w, err, a.Logger)
 			return
 		}
 
-		gfrender.Created(w, map[string]any{
+		router.Created(w, map[string]any{
 			"data": map[string]any{
-				"id":    info.ID,
-				"queue": info.Queue,
-				"type":  info.Type,
+				"id":    id,
+				"queue": "critical",
+				"type":  "demo.email.send",
 			},
-			"snapshot": tasks.InspectRuntime(a.Config.RedisURL),
+			"snapshot": asynqprovider.InspectRuntime(a.Config.RedisURL),
 		})
 	}
 }

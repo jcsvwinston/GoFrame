@@ -11,21 +11,21 @@ import (
 
 	gfdb "github.com/jcsvwinston/GoFrame/pkg/db"
 	gferrors "github.com/jcsvwinston/GoFrame/pkg/errors"
+	"github.com/jcsvwinston/GoFrame/pkg/router"
 )
 
-func (p *Panel) handleListMigrations(w http.ResponseWriter, r *http.Request) {
-	if !p.authorizeAction(w, r, "*", "migration_view") {
-		return
+func (p *Panel) handleListMigrations(c *router.Context) error {
+	if err := p.authorizeAction(c, "*", "migration_view"); err != nil {
+		return err
 	}
 
 	migrationsPath := p.migrationsPath()
 	statuses, err := p.getMigrationStatus(migrationsPath)
 	if err != nil {
-		writeErr(w, fmt.Errorf("failed to list migrations: %w", err))
-		return
+		return fmt.Errorf("failed to list migrations: %w", err)
 	}
 
-	writeJSON(w, http.StatusOK, map[string]interface{}{
+	return c.JSON(http.StatusOK, map[string]interface{}{
 		"enabled":    true,
 		"path":       migrationsPath,
 		"mode":       p.migrationMode(),
@@ -34,30 +34,28 @@ func (p *Panel) handleListMigrations(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (p *Panel) handleApplyMigrations(w http.ResponseWriter, r *http.Request) {
-	if !p.authorizeAction(w, r, "*", "migration_apply") {
-		return
+func (p *Panel) handleApplyMigrations(c *router.Context) error {
+	r := c.Request
+	if err := p.authorizeAction(c, "*", "migration_apply"); err != nil {
+		return err
 	}
 
 	var req struct {
 		Steps int `json:"steps"` // 0 = all pending
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeErr(w, gferrors.BadRequest("invalid JSON"))
-		return
+		return gferrors.BadRequest("invalid JSON")
 	}
 
 	migrator := p.migrationRuntime()
 	if migrator == nil {
-		writeErr(w, gferrors.BadRequest("database runtime is not configured for migrations"))
-		return
+		return gferrors.BadRequest("database runtime is not configured for migrations")
 	}
 
 	migrationsPath := p.migrationsPath()
 	before, err := p.getMigrationStatus(migrationsPath)
 	if err != nil {
-		writeErr(w, fmt.Errorf("failed to get migration status: %w", err))
-		return
+		return fmt.Errorf("failed to get migration status: %w", err)
 	}
 
 	pendingBefore := countPendingMigrations(before)
@@ -74,19 +72,17 @@ func (p *Panel) handleApplyMigrations(w http.ResponseWriter, r *http.Request) {
 			err = migrator.Steps(steps)
 		}
 		if err != nil {
-			writeErr(w, fmt.Errorf("failed to apply migrations: %w", err))
-			return
+			return fmt.Errorf("failed to apply migrations: %w", err)
 		}
 	}
 
 	after, err := p.getMigrationStatus(migrationsPath)
 	if err != nil {
-		writeErr(w, fmt.Errorf("failed to refresh migration status: %w", err))
-		return
+		return fmt.Errorf("failed to refresh migration status: %w", err)
 	}
 
 	appliedIDs := appliedMigrationIDs(before, after)
-	writeJSON(w, http.StatusOK, map[string]interface{}{
+	return c.JSON(http.StatusOK, map[string]interface{}{
 		"applied":         len(appliedIDs),
 		"applied_ids":     appliedIDs,
 		"pending":         countPendingMigrations(after),

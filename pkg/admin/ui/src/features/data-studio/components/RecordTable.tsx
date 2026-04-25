@@ -22,7 +22,7 @@ interface Props {
 
 type SortDir = 'asc' | 'desc' | null
 
-const PAGE_SIZES = [10, 25, 50, 100]
+const PAGE_SIZES = [10, 25, 50, 100, 200]
 
 /**
  * Read a field value from a record. The backend may return fields in
@@ -276,6 +276,8 @@ export default function RecordTable({ modelName, schema, dbAlias }: Props) {
   const items = result?.items ?? []
   const total = result?.total ?? 0
   const totalPages = result?.total_pages ?? 0
+  const startIdx = total === 0 ? 0 : (page - 1) * pageSize + 1
+  const endIdx = Math.min(page * pageSize, total)
 
   return (
     <div className="flex flex-col h-full">
@@ -538,17 +540,29 @@ export default function RecordTable({ modelName, schema, dbAlias }: Props) {
       {result && totalPages > 0 && (
         <div className="flex items-center justify-between pt-3 border-t text-sm">
           <div className="flex items-center gap-2 text-muted-foreground">
-            <span>{total.toLocaleString()} record{total !== 1 ? 's' : ''}</span>
+            <span>
+              Showing <span className="font-medium text-foreground">{startIdx.toLocaleString()}</span> to{' '}
+              <span className="font-medium text-foreground">{endIdx.toLocaleString()}</span> of{' '}
+              <span className="font-medium text-foreground">{total.toLocaleString()}</span> records
+            </span>
             <span className="text-border">|</span>
-            <select
-              value={pageSize}
-              onChange={(e) => { setPageSize(Number(e.target.value)); setPage(1) }}
-              className="h-7 rounded border border-input bg-background px-1.5 text-xs"
-            >
-              {PAGE_SIZES.map((s) => (
-                <option key={s} value={s}>{s} / page</option>
-              ))}
-            </select>
+            <div className="flex items-center gap-1.5">
+              <span className="text-muted-foreground whitespace-nowrap">Records per page:</span>
+              <select
+                value={pageSize}
+                onChange={(e) => {
+                  setPageSize(Number(e.target.value))
+                  setPage(1)
+                }}
+                className="h-7 rounded border border-input bg-background px-1.5 text-xs font-medium focus:outline-none focus:ring-1 focus:ring-primary"
+              >
+                {PAGE_SIZES.map((size) => (
+                  <option key={size} value={size}>
+                    {size}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
           <div className="flex items-center gap-1">
             <Button variant="outline" size="icon" className="h-7 w-7" disabled={page <= 1} onClick={() => setPage(1)}>

@@ -14,6 +14,14 @@ import (
 	"strings"
 
 	"github.com/jcsvwinston/GoFrame/pkg/auth"
+	gferrors "github.com/jcsvwinston/GoFrame/pkg/errors"
+)
+
+type contextKey string
+
+const (
+	sessionKey   contextKey = "gf_session"
+	templatesKey contextKey = "gf_templates"
 )
 
 var (
@@ -25,6 +33,27 @@ var (
 	ErrSessionManagerNotSet    = errors.New("router.Context: session manager is not configured")
 	ErrDownloadFilenameInvalid = errors.New("router.Context: download filename is invalid")
 )
+
+// Handler is a function that processes a request and returns an error.
+type Handler func(c *Context) error
+
+// ContextHandlerFunc is an alias for Handler to maintain backward compatibility.
+type ContextHandlerFunc = Handler
+
+// HTTPError represents an error with an associated HTTP status code.
+type HTTPError struct {
+	Code    int    `json:"code"`
+	Message string `json:"message"`
+}
+
+func (e *HTTPError) Error() string {
+	return e.Message
+}
+
+// NewHTTPError creates a new HTTPError.
+func NewHTTPError(code int, message string) *HTTPError {
+	return &HTTPError{Code: code, Message: message}
+}
 
 // Context is a unified request context for handlers.
 // It wraps http.ResponseWriter and *http.Request and adds helpers for:
@@ -38,21 +67,40 @@ type Context struct {
 	binds     map[string]interface{}
 	session   *auth.SessionManager
 	templates *template.Template
+	handlers  []Handler
+	index     int
 }
 
 // ContextOption configures a Context.
 type ContextOption func(*Context)
 
-// ContextHandlerFunc is the function signature used by ContextHandler.
-type ContextHandlerFunc func(*Context)
+// Next executes the next handler in the chain.
+func (c *Context) Next() error {
+	c.index++
+	if c.index < len(c.handlers) {
+		return c.handlers[c.index](c)
+	}
+	return nil
+}
 
 // NewContext creates a Context from an HTTP request/response pair.
-func NewContext(w http.ResponseWriter, r *http.Request, opts ...ContextOption) *Context {
+func NewContext(w http.ResponseWriter, r *http.Request, handlers []Handler, opts ...ContextOption) *Context {
 	ctx := &Context{
-		Writer:  w,
-		Request: r,
-		binds:   make(map[string]interface{}),
+		Writer:   w,
+		Request:  r,
+		binds:    make(map[string]interface{}),
+		handlers: handlers,
+		index:    -1,
 	}
+
+	// Pull dependencies from request context if injected by Mux
+	if sm, ok := r.Context().Value(sessionKey).(*auth.SessionManager); ok {
+		ctx.session = sm
+	}
+	if tpl, ok := r.Context().Value(templatesKey).(*template.Template); ok {
+		ctx.templates = tpl
+	}
+
 	for _, opt := range opts {
 		if opt != nil {
 			opt(ctx)
@@ -61,15 +109,55 @@ func NewContext(w http.ResponseWriter, r *http.Request, opts ...ContextOption) *
 	return ctx
 }
 
-// ContextHandler adapts a ContextHandlerFunc to http.HandlerFunc.
-func ContextHandler(fn ContextHandlerFunc, opts ...ContextOption) http.HandlerFunc {
+// ContextHandler adapts a Handler to http.HandlerFunc.
+func ContextHandler(handlers ...Handler) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if fn == nil {
-			http.Error(w, "context handler is nil", http.StatusInternalServerError)
+		if len(handlers) == 0 {
+			http.Error(w, "no handlers defined", http.StatusInternalServerError)
 			return
 		}
-		fn(NewContext(w, r, opts...))
+		c := NewContext(w, r, handlers)
+		if err := c.Next(); err != nil {
+			handleError(c, err)
+		}
 	}
+}
+
+// FromHTTP adapts a standard http.HandlerFunc to a router.Handler.
+func FromHTTP(h http.HandlerFunc) Handler {
+	return func(c *Context) error {
+		h(c.Writer, c.Request)
+		return nil
+	}
+}
+
+// FromHandler adapts a standard http.Handler to a router.Handler.
+func FromHandler(h http.Handler) Handler {
+	return func(c *Context) error {
+		h.ServeHTTP(c.Writer, c.Request)
+		return nil
+	}
+}
+
+func handleError(c *Context, err error) {
+	var domainErr *gferrors.DomainError
+	if errors.As(err, &domainErr) {
+		_ = c.JSON(domainErr.StatusCode, map[string]interface{}{
+			"error": domainErr,
+		})
+		return
+	}
+
+	var httpErr *HTTPError
+	if errors.As(err, &httpErr) {
+		_ = c.JSON(httpErr.Code, map[string]interface{}{
+			"error": httpErr.Message,
+		})
+		return
+	}
+	_ = c.JSON(http.StatusInternalServerError, map[string]interface{}{
+		"error": err.Error(),
+	})
 }
 
 // WithSession injects an auth session manager into Context.

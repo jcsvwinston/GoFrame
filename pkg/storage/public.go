@@ -3,8 +3,8 @@ package storage
 import (
 	"context"
 	"fmt"
+	"github.com/jcsvwinston/GoFrame/pkg/router"
 	"io"
-	"net/http"
 	"strings"
 )
 
@@ -57,40 +57,36 @@ func (m *PublicMapper) PublicURL(ctx context.Context, key string, opts URLConfig
 //	app.Storage.Public().Mount(router, "/media", "storage/public/media/")
 //	// GET /media/blog/hero.png -> serves storage/public/media/blog/hero.png from storage
 func (m *PublicMapper) Mount(mux interface {
-	Get(string, http.HandlerFunc)
+	Get(string, ...router.Handler)
 }, publicPath string, storagePrefix string) {
 	storagePrefix = normalizeKey(storagePrefix)
 	publicPath = strings.TrimRight(publicPath, "/")
 
-	mux.Get(publicPath+"/{filepath...}", func(w http.ResponseWriter, r *http.Request) {
-		filepath := r.PathValue("filepath")
+	mux.Get(publicPath+"/{filepath...}", func(c *router.Context) error {
+		filepath := c.Param("filepath")
 		key := storagePrefix + "/" + filepath
 
-		reader, info, err := m.store.Get(r.Context(), key)
+		reader, info, err := m.store.Get(c.Request.Context(), key)
 		if err != nil {
-			if _, ok := err.(ErrNotFound); ok {
-				http.NotFound(w, r)
-				return
-			}
-			http.Error(w, "storage error", http.StatusInternalServerError)
-			return
+			return err
 		}
 		defer reader.Close()
 
 		// Set cache headers for public content
-		w.Header().Set("Content-Type", info.ContentType)
-		w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
-		w.Header().Set("X-Content-Type-Options", "nosniff")
+		c.Writer.Header().Set("Content-Type", info.ContentType)
+		c.Writer.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+		c.Writer.Header().Set("X-Content-Type-Options", "nosniff")
 
 		// Stream the file directly
-		w.Header().Set("Content-Length", fmt.Sprintf("%d", info.Size))
-		io.Copy(w, reader)
+		c.Writer.Header().Set("Content-Length", fmt.Sprintf("%d", info.Size))
+		_, err = io.Copy(c.Writer, reader)
+		return err
 	})
 }
 
 // MountAll registers HTTP handlers for ALL configured public paths.
 func (m *PublicMapper) MountAll(mux interface {
-	Get(string, http.HandlerFunc)
+	Get(string, ...router.Handler)
 }) {
 	for publicPath, storagePrefix := range m.publicPaths {
 		m.Mount(mux, publicPath, storagePrefix)

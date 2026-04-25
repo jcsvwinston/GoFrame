@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/jcsvwinston/GoFrame/pkg/auth"
+	"github.com/jcsvwinston/GoFrame/pkg/router"
 )
 
 const (
@@ -88,9 +89,10 @@ type iterableSessionStoreCtx interface {
 	AllCtx(context.Context) (map[string][]byte, error)
 }
 
-func (p *Panel) handleListSessions(w http.ResponseWriter, r *http.Request) {
-	if !p.authorizeAction(w, r, "*", "list_sessions") {
-		return
+func (p *Panel) handleListSessions(c *router.Context) error {
+	r := c.Request
+	if err := p.authorizeAction(c, "*", "list_sessions"); err != nil {
+		return err
 	}
 
 	now := time.Now().UTC()
@@ -121,8 +123,7 @@ func (p *Panel) handleListSessions(w http.ResponseWriter, r *http.Request) {
 
 	if p.config.Session == nil {
 		resp.Reason = "session manager is not configured in admin panel"
-		writeJSON(w, http.StatusOK, resp)
-		return
+		return c.JSON(http.StatusOK, resp)
 	}
 
 	resp.Enabled = true
@@ -137,14 +138,12 @@ func (p *Panel) handleListSessions(w http.ResponseWriter, r *http.Request) {
 
 	rawSessions, supported, err := allSessionPayloads(r.Context(), p.config.Session)
 	if err != nil {
-		writeErr(w, fmt.Errorf("admin.ListSessions load: %w", err))
-		return
+		return fmt.Errorf("admin.ListSessions load: %w", err)
 	}
 	if !supported {
 		resp.Enabled = false
 		resp.Reason = "session store does not support listing active sessions"
-		writeJSON(w, http.StatusOK, resp)
-		return
+		return c.JSON(http.StatusOK, resp)
 	}
 
 	rows := make([]sessionRow, 0, len(rawSessions))
@@ -191,7 +190,7 @@ func (p *Panel) handleListSessions(w http.ResponseWriter, r *http.Request) {
 	resp.Telemetry.LastHour.Points = buildSessionSeries(rows, now.Add(-sessionHourWindow), now, sessionHourBucket)
 	resp.Telemetry.Today.Points = buildTodaySeries(rows, now, sessionDayBucket)
 
-	writeJSON(w, http.StatusOK, resp)
+	return c.JSON(http.StatusOK, resp)
 }
 
 func buildSessionRow(token string, deadline time.Time, values map[string]interface{}, now time.Time) sessionRow {

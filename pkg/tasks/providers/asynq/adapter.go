@@ -1,0 +1,35 @@
+package asynqprovider
+
+import (
+	"context"
+
+	"github.com/hibiken/asynq"
+	"github.com/jcsvwinston/GoFrame/pkg/tasks"
+)
+
+// wrapHandler converts a generic tasks.HandlerFunc into an asynq.HandlerFunc
+func wrapHandler(h tasks.HandlerFunc) asynq.HandlerFunc {
+	return func(ctx context.Context, t *asynq.Task) error {
+		return h(ctx, t)
+	}
+}
+
+func policyToOptions(p tasks.EnqueuePolicy) []asynq.Option {
+	opts := make([]asynq.Option, 0, 5)
+	if p.Queue != "" {
+		opts = append(opts, asynq.Queue(p.Queue))
+	}
+	if p.MaxRetry >= 0 {
+		opts = append(opts, asynq.MaxRetry(p.MaxRetry))
+	}
+	if p.Timeout > 0 {
+		opts = append(opts, asynq.Timeout(p.Timeout))
+	}
+	if p.ProcessIn > 0 {
+		opts = append(opts, asynq.ProcessIn(p.ProcessIn))
+	}
+	if p.Retention > 0 {
+		opts = append(opts, asynq.Retention(p.Retention))
+	}
+	return opts
+}

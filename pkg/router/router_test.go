@@ -309,8 +309,9 @@ func TestRateLimitKeyFromRequest_UsesUserIDFromContext(t *testing.T) {
 func TestCORSMiddleware_DisallowsUnknownOriginWhenOriginsConfigured(t *testing.T) {
 	logger := observe.NewLogger("error", "text")
 	r := New(logger, WithCORSOrigins("https://allowed.example"))
-	r.Get("/test", func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusOK)
+	r.Get("/test", func(c *Context) error {
+		c.Writer.WriteHeader(http.StatusOK)
+		return nil
 	})
 
 	req := httptest.NewRequest(http.MethodGet, "/test", nil)
@@ -326,8 +327,9 @@ func TestCORSMiddleware_DisallowsUnknownOriginWhenOriginsConfigured(t *testing.T
 func TestCORSMiddleware_AllowsConfiguredOrigin(t *testing.T) {
 	logger := observe.NewLogger("error", "text")
 	r := New(logger, WithCORSOrigins("https://allowed.example"))
-	r.Get("/test", func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusOK)
+	r.Get("/test", func(c *Context) error {
+		c.Writer.WriteHeader(http.StatusOK)
+		return nil
 	})
 
 	req := httptest.NewRequest(http.MethodGet, "/test", nil)

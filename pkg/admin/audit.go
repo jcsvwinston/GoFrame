@@ -5,7 +5,6 @@ import (
 	"net/http"
 	"sort"
 	"strconv"
-	"strings"
 	"sync"
 	"time"
 
@@ -251,26 +250,25 @@ func entityToMap(meta *model.ModelMeta, entity interface{}) map[string]any {
 
 // Admin audit log API handlers
 
-func (p *Panel) handleListAuditLog(w http.ResponseWriter, r *http.Request) {
-	if !p.authorizeAction(w, r, "*", "audit_view") {
-		return
+func (p *Panel) handleListAuditLog(c *router.Context) error {
+	if err := p.authorizeAction(c, "*", "audit_view"); err != nil {
+		return err
 	}
 
 	if p.audit == nil {
-		writeJSON(w, http.StatusOK, map[string]interface{}{
+		return c.JSON(http.StatusOK, map[string]interface{}{
 			"enabled": false,
 			"reason":  "Audit logging not enabled",
 			"entries": []interface{}{},
 			"total":   0,
 		})
-		return
 	}
 
-	page, _, _ := parsePositiveQueryInt(r.URL.Query(), "page")
-	pageSize, _, _ := parsePositiveQueryInt(r.URL.Query(), "page_size")
-	userID := strings.TrimSpace(r.URL.Query().Get("user_id"))
-	modelName := strings.TrimSpace(r.URL.Query().Get("model"))
-	action := strings.TrimSpace(r.URL.Query().Get("action"))
+	page, _, _ := parsePositiveQueryInt(c.Request.URL.Query(), "page")
+	pageSize, _, _ := parsePositiveQueryInt(c.Request.URL.Query(), "page_size")
+	userID := c.Query("user_id")
+	modelName := c.Query("model")
+	action := c.Query("action")
 
 	entries := p.audit.list(auditQueryOpts{
 		UserID:    userID,
@@ -286,7 +284,7 @@ func (p *Panel) handleListAuditLog(w http.ResponseWriter, r *http.Request) {
 		totalPages = 1
 	}
 
-	writeJSON(w, http.StatusOK, map[string]interface{}{
+	return c.JSON(http.StatusOK, map[string]interface{}{
 		"enabled":     true,
 		"entries":     entries,
 		"total":       total,
@@ -296,21 +294,20 @@ func (p *Panel) handleListAuditLog(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (p *Panel) handleClearAuditLog(w http.ResponseWriter, r *http.Request) {
-	if !p.authorizeAction(w, r, "*", "audit_manage") {
-		return
+func (p *Panel) handleClearAuditLog(c *router.Context) error {
+	if err := p.authorizeAction(c, "*", "audit_manage"); err != nil {
+		return err
 	}
 
 	if p.audit == nil {
-		writeErr(w, gferrors.BadRequest("Audit logging not enabled"))
-		return
+		return gferrors.BadRequest("Audit logging not enabled")
 	}
 
 	p.audit.mu.Lock()
 	p.audit.entries = p.audit.entries[:0]
 	p.audit.mu.Unlock()
 
-	writeJSON(w, http.StatusOK, map[string]interface{}{
+	return c.JSON(http.StatusOK, map[string]interface{}{
 		"cleared": true,
 	})
 }

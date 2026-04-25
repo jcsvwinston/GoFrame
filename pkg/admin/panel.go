@@ -25,6 +25,7 @@ import (
 	"github.com/jcsvwinston/GoFrame/pkg/router"
 	"github.com/jcsvwinston/GoFrame/pkg/signals"
 	"github.com/jcsvwinston/GoFrame/pkg/storage"
+	"github.com/jcsvwinston/GoFrame/pkg/tasks"
 )
 
 //go:embed all:ui/dist/*
@@ -56,6 +57,7 @@ type PanelConfig struct {
 	Environment         string
 	OTLPEndpoint        string   // optional OTLP endpoint configured by the host app
 	RedisURL            string   // optional Redis URL for background jobs runtime snapshot
+	TaskInspector       tasks.Inspector // optional configured queue inspector
 	LiveExcludePatterns []string // optional path patterns excluded from live HTTP capture
 	LiveClusterEnabled  bool     // when true, publish/subscribe live telemetry through Redis
 	LiveClusterRedisURL string   // optional Redis URL for live cluster relay (falls back to RedisURL)
@@ -328,43 +330,22 @@ func (p *Panel) getCRUD(meta *model.ModelMeta, databaseAlias string) (model.CRUD
 // Handler returns a *router.Mux that can be mounted on the application router.
 func (p *Panel) Handler() *router.Mux {
 	r := router.NewMux()
+	p.mountRoutes(r)
+	return r
+}
 
+func (p *Panel) mountRoutes(r *router.Mux) {
 	// Serve embedded UI static assets unconditionally so the login page can use them
 	uiContent, _ := fs.Sub(uiFS, "ui/dist")
 	fileServer := http.FileServer(http.FS(uiContent))
-	r.Get("/static/{filepath...}", http.StripPrefix("/static", fileServer).ServeHTTP)
+	r.Get("/static/{filepath...}", router.FromHTTP(http.StripPrefix("/static", fileServer).ServeHTTP))
 
 	// Serve Vite build assets at /assets/ path (JS, CSS from React build)
 	assetsFS, _ := fs.Sub(uiFS, "ui/dist/assets")
 	assetsServer := http.FileServer(http.FS(assetsFS))
-	r.Get("/assets/{filepath...}", http.StripPrefix("/assets", assetsServer).ServeHTTP)
-	r.Get("/favicon.svg", fileServer.ServeHTTP)
+	r.Get("/assets/{filepath...}", router.FromHTTP(http.StripPrefix("/assets", assetsServer).ServeHTTP))
+	r.Get("/favicon.svg", router.FromHandler(fileServer))
 
-	// Auth middleware if configured
-	if p.config.Auth != nil {
-		loginHandler := p.config.Auth.LoginHandler()
-		r.Get("/login", loginHandler.ServeHTTP)
-		r.Post("/login", loginHandler.ServeHTTP)
-		r.Group(func(sub *router.Mux) {
-			sub.Use(p.authMiddleware)
-			sub.Use(p.tenantContextMiddleware)
-			sub.Use(p.auditMiddleware)
-			sub.Use(p.sessionActivityMiddleware)
-			sub.Use(p.liveTrafficMiddleware)
-			p.mountRoutes(sub, uiContent)
-		})
-	} else {
-		r.Use(p.tenantContextMiddleware)
-		r.Use(p.auditMiddleware)
-		r.Use(p.sessionActivityMiddleware)
-		r.Use(p.liveTrafficMiddleware)
-		p.mountRoutes(r, uiContent)
-	}
-
-	return r
-}
-
-func (p *Panel) mountRoutes(r *router.Mux, uiContent fs.FS) {
 	// API routes
 	r.Get("/api/models", p.handleListModels)
 	r.Get("/api/models/{name}/schema", p.handleGetSchema)
@@ -419,12 +400,12 @@ func (p *Panel) mountRoutes(r *router.Mux, uiContent fs.FS) {
 	r.Get("/api/storage", p.handleListStorage)
 	r.Get("/api/email", p.handleEmailStats)
 
-	// P3: Export/Import (Data Studio integration)
-	r.Post("/api/export", p.handleExportCreate)
-	r.Get("/api/export/list", p.handleExportList)
-	r.Get("/api/export/status", p.handleExportStatus)
-	r.Get("/api/export/download", p.handleExportDownload)
-	r.Post("/api/import/upload", p.handleImportUpload)
+	// Data management
+	r.Post("/api/exports", p.handleExportCreate)
+	r.Get("/api/exports", p.handleExportList)
+	r.Get("/api/exports/{id}", p.handleExportStatus)
+	r.Get("/api/exports/{id}/download", p.handleExportDownload)
+	r.Post("/api/imports", p.handleImportUpload)
 	r.Post("/api/import/validate", p.handleImportValidate)
 	r.Post("/api/import/execute", p.handleImportExecute)
 
@@ -432,8 +413,28 @@ func (p *Panel) mountRoutes(r *router.Mux, uiContent fs.FS) {
 	r.Post("/api/fixtures/dumpdata", p.handleDumpdata)
 	r.Post("/api/fixtures/loaddata", p.handleLoaddata)
 
-	// Serve the SPA interface fallback for all authenticated requests
-	r.Get("/{path...}", p.handleSPA(uiContent))
+	// Auth middleware and SPA fallback
+	if p.config.Auth != nil {
+		loginHandler := p.config.Auth.LoginHandler()
+		r.Get("/login", router.FromHandler(loginHandler))
+		r.Post("/login", router.FromHandler(loginHandler))
+
+		r.Group(func(sub *router.Mux) {
+			sub.Use(p.authMiddleware)
+			sub.Use(p.tenantContextMiddleware)
+			sub.Use(p.auditMiddleware)
+			sub.Use(p.sessionActivityMiddleware)
+			sub.Use(p.liveTrafficMiddleware)
+
+			sub.Get("/{path...}", p.handleSPA(uiContent))
+		})
+	} else {
+		r.Use(p.tenantContextMiddleware)
+		r.Use(p.auditMiddleware)
+		r.Use(p.sessionActivityMiddleware)
+		r.Use(p.liveTrafficMiddleware)
+		r.Get("/{path...}", p.handleSPA(uiContent))
+	}
 }
 
 // LiveTrafficMiddleware returns non-blocking runtime observation middleware
@@ -442,8 +443,9 @@ func (p *Panel) LiveTrafficMiddleware() func(http.Handler) http.Handler {
 	return p.liveTrafficMiddleware
 }
 
-func (p *Panel) handleSPA(fsys fs.FS) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
+func (p *Panel) handleSPA(fsys fs.FS) router.Handler {
+	return func(c *router.Context) error {
+		w, r := c.Writer, c.Request
 		// If the request is for a JS/CSS asset, serve it directly
 		if strings.HasSuffix(r.URL.Path, ".js") || strings.HasSuffix(r.URL.Path, ".css") {
 			assetPath := strings.TrimPrefix(r.URL.Path, "/")
@@ -455,7 +457,7 @@ func (p *Panel) handleSPA(fsys fs.FS) http.HandlerFunc {
 					w.Header().Set("Content-Type", "text/css")
 				}
 				_, _ = w.Write(content)
-				return
+				return nil
 			}
 		}
 
@@ -463,7 +465,7 @@ func (p *Panel) handleSPA(fsys fs.FS) http.HandlerFunc {
 		content, err := fs.ReadFile(fsys, "index.html")
 		if err != nil {
 			http.Error(w, "admin UI not found", 500)
-			return
+			return nil
 		}
 
 		// Inject admin prefix as a <meta> tag to avoid CSP issues with inline scripts.
@@ -483,6 +485,7 @@ func (p *Panel) handleSPA(fsys fs.FS) http.HandlerFunc {
 		content = []byte(contentStr)
 
 		http.ServeContent(w, r, "index.html", time.Time{}, bytes.NewReader(content))
+		return nil
 	}
 }
 
@@ -533,23 +536,21 @@ func (p *Panel) adminLoginURL(r *http.Request) string {
 	return loginPath + "?" + query.Encode()
 }
 
-func (p *Panel) handleLogout(w http.ResponseWriter, r *http.Request) {
+func (p *Panel) handleLogout(c *router.Context) error {
+	r := c.Request
 	if p == nil || p.config.Session == nil {
-		writeErr(w, fmt.Errorf("admin logout: session manager is not configured"))
-		return
+		return fmt.Errorf("admin logout: session manager is not configured")
 	}
 	if !sessionContextReady(p.config.Session, r.Context()) {
-		writeErr(w, fmt.Errorf("admin logout: session context is not available"))
-		return
+		return fmt.Errorf("admin logout: session context is not available")
 	}
 
 	if err := p.config.Session.Destroy(r.Context()); err != nil {
-		writeErr(w, fmt.Errorf("admin logout: %w", err))
-		return
+		return fmt.Errorf("admin logout: %w", err)
 	}
 
 	p.recordAuditEntry(r, AuditEntry{Action: "logout"})
-	writeJSON(w, http.StatusOK, map[string]interface{}{
+	return c.JSON(http.StatusOK, map[string]interface{}{
 		"logged_out": true,
 	})
 }
@@ -773,44 +774,41 @@ func sessionContextReady(sm *auth.SessionManager, ctx context.Context) (ok bool)
 	return true
 }
 
-func (p *Panel) authorizeAction(w http.ResponseWriter, r *http.Request, modelName, action string) bool {
+func (p *Panel) authorizeAction(c *router.Context, modelName, action string) error {
 	if p.config.Auth == nil {
-		return true
+		return nil
 	}
 
-	user, err := p.authenticatedUser(r)
+	user, err := p.authenticatedUser(c.Request)
 	if err != nil {
-		writeErr(w, authErrorToDomain(err))
-		return false
+		return authErrorToDomain(err)
 	}
 
 	// If RBAC enforcer is configured, use it for authorization
 	if p.rbac != nil {
 		// Superusers bypass policy checks
 		if user.IsSuperuser {
-			return true
+			return nil
 		}
 
 		resource := "admin:" + modelName
 		if p.rbac.Can(user.ID, resource, action) {
-			return true
+			return nil
 		}
 		if p.rbac.Can(user.Role, resource, action) {
-			return true
+			return nil
 		}
 		if p.rbac.Can(user.Username, resource, action) {
-			return true
+			return nil
 		}
-		writeErr(w, authDeniedDomain(modelName, action))
-		return false
+		return authDeniedDomain(modelName, action)
 	}
 
 	// Fallback to default auth provider
 	if !p.config.Auth.Authorize(user, modelName, action) {
-		writeErr(w, authDeniedDomain(modelName, action))
-		return false
+		return authDeniedDomain(modelName, action)
 	}
-	return true
+	return nil
 }
 
 func (p *Panel) authenticatedUser(r *http.Request) (*auth.User, error) {

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"net/http"
 	"net/url"
+	"math"
 	"os"
 	"runtime"
 	"runtime/pprof"
@@ -14,6 +15,7 @@ import (
 
 	"github.com/jcsvwinston/GoFrame/pkg/db"
 	"github.com/jcsvwinston/GoFrame/pkg/outbox"
+	"github.com/jcsvwinston/GoFrame/pkg/router"
 	"github.com/jcsvwinston/GoFrame/pkg/tasks"
 	"github.com/shirou/gopsutil/v3/cpu"
 	"github.com/shirou/gopsutil/v3/process"
@@ -94,9 +96,10 @@ type systemTelemetryInfo struct {
 	TraceURLTemplate     string `json:"trace_url_template,omitempty"`
 }
 
-func (p *Panel) handleSystemSnapshot(w http.ResponseWriter, r *http.Request) {
-	if !p.authorizeAction(w, r, "*", "system_pulse") {
-		return
+func (p *Panel) handleSystemSnapshot(c *router.Context) error {
+	r := c.Request
+	if err := p.authorizeAction(c, "*", "system_pulse"); err != nil {
+		return err
 	}
 
 	limit := parseSystemEnvLimit(r, defaultSystemEnvLimit)
@@ -128,11 +131,31 @@ func (p *Panel) handleSystemSnapshot(w http.ResponseWriter, r *http.Request) {
 			PauseTotalMS:    uint64(mem.PauseTotalNs / uint64(time.Millisecond)),
 		},
 		Databases:    p.systemDatabasePoolRows(),
-		Jobs:         tasks.InspectRuntime(p.config.RedisURL),
+		Jobs: func() tasks.RuntimeSnapshot {
+			if p.config.TaskInspector != nil {
+				return p.config.TaskInspector.InspectRuntime()
+			}
+			return tasks.RuntimeSnapshot{
+				Enabled: false,
+				Reason:  "task inspector not configured (check redis_url)",
+			}
+		}(),
 		Outbox:       p.systemOutboxSnapshot(),
 		Cluster:      p.liveClusterSnapshot(),
-		ClusterNodes: p.systemClusterNodes(time.Now().UTC()),
-		Flags:        p.systemFeatureFlags(),
+		ClusterNodes: func() []liveNodeSnapshot {
+			nodes := p.systemClusterNodes(time.Now().UTC())
+			if nodes == nil {
+				return []liveNodeSnapshot{}
+			}
+			return nodes
+		}(),
+		Flags: func() []featureFlagState {
+			flags := p.systemFeatureFlags()
+			if flags == nil {
+				return []featureFlagState{}
+			}
+			return flags
+		}(),
 		Telemetry: systemTelemetryInfo{
 			OTLPConfigured:       strings.TrimSpace(p.config.OTLPEndpoint) != "",
 			OTLPEndpoint:         summarizeOTLPEndpoint(p.config.OTLPEndpoint),
@@ -142,7 +165,7 @@ func (p *Panel) handleSystemSnapshot(w http.ResponseWriter, r *http.Request) {
 		Environment: p.systemEnvironmentRows(limit),
 	}
 
-	writeJSON(w, http.StatusOK, resp)
+	return c.JSON(http.StatusOK, resp)
 }
 
 func (p *Panel) systemOutboxSnapshot() outbox.RuntimeSnapshot {
@@ -431,7 +454,11 @@ func maskSystemEnvValue(value string, masked bool) string {
 func getCPULoad() float64 {
 	percents, err := cpu.Percent(0, false)
 	if err == nil && len(percents) > 0 {
-		return percents[0]
+		val := percents[0]
+		if math.IsNaN(val) || math.IsInf(val, 0) {
+			return 0
+		}
+		return val
 	}
 	return 0
 }
@@ -441,6 +468,9 @@ func getProcessCPULoad() float64 {
 	if err == nil {
 		percent, err := p.Percent(0)
 		if err == nil {
+			if math.IsNaN(percent) || math.IsInf(percent, 0) {
+				return 0
+			}
 			return percent
 		}
 	}

@@ -403,9 +403,8 @@ func (h *%sHandler) Mount(r *router.Mux) {
 	r.Get("/%s", h.List)
 }
 
-func (h *%sHandler) List(w http.ResponseWriter, _ *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(map[string]any{
+func (h *%sHandler) List(c *router.Context) error {
+	return c.JSON(http.StatusOK, map[string]any{
 		"message": "%s handler scaffold ready",
 	})
 }
@@ -433,14 +432,13 @@ func (h *%[2]sHandler) Mount(r *router.Mux) {
 	r.Get("/%[3]s", h.List)
 }
 
-func (h *%[2]sHandler) List(w http.ResponseWriter, r *http.Request) {
-	result, err := h.service.Health(r.Context(), services.%[2]sHealthInput{})
+func (h *%[2]sHandler) List(c *router.Context) error {
+	result, err := h.service.Health(c.Request.Context(), services.%[2]sHealthInput{})
 	if err != nil {
-		router.JSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
-		return
+		return err
 	}
 
-	router.JSON(w, http.StatusOK, map[string]any{
+	return c.JSON(http.StatusOK, map[string]any{
 		"message": "%[2]s handler scaffold ready",
 		"data":    result,
 	})
@@ -835,88 +833,78 @@ func (h *%[2]sHandler) Mount(r *router.Mux) {
 	})
 }
 
-func (h *%[2]sHandler) List(w http.ResponseWriter, r *http.Request) {
-	records, err := h.service.List(r.Context(), services.List%[2]sInput{
-		Query: strings.TrimSpace(r.URL.Query().Get("q")),
+func (h *%[2]sHandler) List(c *router.Context) error {
+	records, err := h.service.List(c.Request.Context(), services.List%[2]sInput{
+		Query: strings.TrimSpace(c.Query("q")),
 	})
 	if err != nil {
-		writeError(w, gferrors.InternalError("unable to list %[3]s"))
-		return
+		return gferrors.InternalError("unable to list %[3]s")
 	}
 
-	writeJSON(w, http.StatusOK, map[string]any{
+	return c.JSON(http.StatusOK, map[string]any{
 		"data":  records,
 		"count": len(records),
 	})
 }
 
-func (h *%[2]sHandler) Get(w http.ResponseWriter, r *http.Request) {
-	id, err := parseResourceID(r)
+func (h *%[2]sHandler) Get(c *router.Context) error {
+	id, err := parseResourceID(c.Request)
 	if err != nil {
-		writeError(w, gferrors.BadRequest(err.Error()))
-		return
+		return gferrors.BadRequest(err.Error())
 	}
 
-	record, err := h.service.Get(r.Context(), id)
+	record, err := h.service.Get(c.Request.Context(), id)
 	if err != nil {
-		writeError(w, gferrors.NotFound("%[2]s", strconv.FormatUint(uint64(id), 10)))
-		return
+		return gferrors.NotFound("%[2]s", strconv.FormatUint(uint64(id), 10))
 	}
 
-	writeJSON(w, http.StatusOK, map[string]any{"data": record})
+	return c.JSON(http.StatusOK, map[string]any{"data": record})
 }
 
-func (h *%[2]sHandler) Create(w http.ResponseWriter, r *http.Request) {
-	payload, err := decode%[2]sPayload(r)
+func (h *%[2]sHandler) Create(c *router.Context) error {
+	payload, err := decode%[2]sPayload(c.Request)
 	if err != nil {
-		writeError(w, gferrors.BadRequest(err.Error()))
-		return
+		return gferrors.BadRequest(err.Error())
 	}
 
-	record, err := h.service.Create(r.Context(), services.Create%[2]sInput{Name: payload.Name})
+	record, err := h.service.Create(c.Request.Context(), services.Create%[2]sInput{Name: payload.Name})
 	if err != nil {
-		writeError(w, gferrors.BadRequest(err.Error()))
-		return
+		return gferrors.BadRequest(err.Error())
 	}
 
-	writeJSON(w, http.StatusCreated, map[string]any{"data": record})
+	return c.JSON(http.StatusCreated, map[string]any{"data": record})
 }
 
-func (h *%[2]sHandler) Update(w http.ResponseWriter, r *http.Request) {
-	id, err := parseResourceID(r)
+func (h *%[2]sHandler) Update(c *router.Context) error {
+	id, err := parseResourceID(c.Request)
 	if err != nil {
-		writeError(w, gferrors.BadRequest(err.Error()))
-		return
+		return gferrors.BadRequest(err.Error())
 	}
 
-	payload, err := decode%[2]sPayload(r)
+	payload, err := decode%[2]sPayload(c.Request)
 	if err != nil {
-		writeError(w, gferrors.BadRequest(err.Error()))
-		return
+		return gferrors.BadRequest(err.Error())
 	}
 
-	record, err := h.service.Update(r.Context(), id, services.Update%[2]sInput{Name: payload.Name})
+	record, err := h.service.Update(c.Request.Context(), id, services.Update%[2]sInput{Name: payload.Name})
 	if err != nil {
-		writeError(w, gferrors.NotFound("%[2]s", strconv.FormatUint(uint64(id), 10)))
-		return
+		return gferrors.NotFound("%[2]s", strconv.FormatUint(uint64(id), 10))
 	}
 
-	writeJSON(w, http.StatusOK, map[string]any{"data": record})
+	return c.JSON(http.StatusOK, map[string]any{"data": record})
 }
 
-func (h *%[2]sHandler) Delete(w http.ResponseWriter, r *http.Request) {
-	id, err := parseResourceID(r)
+func (h *%[2]sHandler) Delete(c *router.Context) error {
+	id, err := parseResourceID(c.Request)
 	if err != nil {
-		writeError(w, gferrors.BadRequest(err.Error()))
-		return
+		return gferrors.BadRequest(err.Error())
 	}
 
-	if err := h.service.Delete(r.Context(), id); err != nil {
-		writeError(w, gferrors.NotFound("%[2]s", strconv.FormatUint(uint64(id), 10)))
-		return
+	if err := h.service.Delete(c.Request.Context(), id); err != nil {
+		return gferrors.NotFound("%[2]s", strconv.FormatUint(uint64(id), 10))
 	}
 
-	w.WriteHeader(http.StatusNoContent)
+	return c.NoContent()
 }
 
 func decode%[2]sPayload(r *http.Request) (%[2]sPayload, error) {

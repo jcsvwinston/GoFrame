@@ -1,9 +1,13 @@
 package router
 
 import (
+	"context"
 	"net/http"
 	"strings"
 	"sync"
+
+	"github.com/jcsvwinston/GoFrame/pkg/auth"
+	"html/template"
 )
 
 // Middleware is a function that wraps an http.Handler with additional behavior.
@@ -27,6 +31,9 @@ type Mux struct {
 	routes      []RouteEntry
 	mu          sync.RWMutex
 	isGroup     bool // true when this Mux is a Group scope sharing parent's ServeMux
+
+	session   *auth.SessionManager
+	templates *template.Template
 }
 
 // NewMux creates a new Mux backed by a fresh http.ServeMux.
@@ -81,49 +88,90 @@ func (m *Mux) applyGroupMiddlewares(h http.Handler) http.Handler {
 // ---------------------------------------------------------------------------
 
 // Get registers a handler for GET requests matching pattern.
-func (m *Mux) Get(pattern string, h http.HandlerFunc) {
-	m.handle("GET", pattern, h)
+func (m *Mux) Get(pattern string, handlers ...Handler) {
+	m.handle("GET", pattern, handlers...)
 }
 
 // Post registers a handler for POST requests matching pattern.
-func (m *Mux) Post(pattern string, h http.HandlerFunc) {
-	m.handle("POST", pattern, h)
+func (m *Mux) Post(pattern string, handlers ...Handler) {
+	m.handle("POST", pattern, handlers...)
 }
 
 // Put registers a handler for PUT requests matching pattern.
-func (m *Mux) Put(pattern string, h http.HandlerFunc) {
-	m.handle("PUT", pattern, h)
+func (m *Mux) Put(pattern string, handlers ...Handler) {
+	m.handle("PUT", pattern, handlers...)
 }
 
 // Patch registers a handler for PATCH requests matching pattern.
-func (m *Mux) Patch(pattern string, h http.HandlerFunc) {
-	m.handle("PATCH", pattern, h)
+func (m *Mux) Patch(pattern string, handlers ...Handler) {
+	m.handle("PATCH", pattern, handlers...)
 }
 
 // Delete registers a handler for DELETE requests matching pattern.
-func (m *Mux) Delete(pattern string, h http.HandlerFunc) {
-	m.handle("DELETE", pattern, h)
+func (m *Mux) Delete(pattern string, handlers ...Handler) {
+	m.handle("DELETE", pattern, handlers...)
 }
 
 // Handle registers a handler for all HTTP methods matching pattern.
 func (m *Mux) Handle(pattern string, h http.Handler) {
-	m.handle("", pattern, h)
+	m.handleStandard("", pattern, h)
 }
 
 // HandleFunc registers a HandlerFunc for all HTTP methods matching pattern.
 func (m *Mux) HandleFunc(pattern string, h http.HandlerFunc) {
-	m.handle("", pattern, h)
+	m.handleStandard("", pattern, h)
 }
 
-func (m *Mux) handle(method, pattern string, h http.Handler) {
-	// In Group scopes, wrap handlers so only routes inside the group are
-	// affected by group-local middleware.
-	h = m.applyGroupMiddlewares(h)
+func (m *Mux) handle(method, pattern string, handlers ...Handler) {
+	h := m.applyGroupMiddlewares(ContextHandler(handlers...))
+	// Wrap with a middleware that injects Mux-level dependencies into Context
+	h = m.injectDependencies(h)
+	m.register(method, pattern, h)
+}
 
+func (m *Mux) injectDependencies(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		m.mu.RLock()
+		sm := m.session
+		tpl := m.templates
+		m.mu.RUnlock()
+
+		ctx := r.Context()
+		if sm != nil {
+			ctx = context.WithValue(ctx, sessionKey, sm)
+		}
+		if tpl != nil {
+			ctx = context.WithValue(ctx, templatesKey, tpl)
+		}
+
+		if ctx != r.Context() {
+			r = r.WithContext(ctx)
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+// SetSessionManager sets the session manager for the Mux and its sub-routers.
+func (m *Mux) SetSessionManager(sm *auth.SessionManager) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.session = sm
+}
+
+// SetHTMLTemplates sets the template engine for the Mux and its sub-routers.
+func (m *Mux) SetHTMLTemplates(t *template.Template) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.templates = t
+}
+
+func (m *Mux) handleStandard(method, pattern string, h http.Handler) {
+	h = m.applyGroupMiddlewares(h)
+	m.register(method, pattern, h)
+}
+
+func (m *Mux) register(method, pattern string, h http.Handler) {
 	p := pattern
-	// In ServeMux (Go 1.22+), a trailing slash denotes a subtree match.
-	// To preserve Chi's exact-match semantics and avoid pattern conflicts
-	// (e.g., "GET /" vs Mount "/admin/"), we force exact matches.
 	if strings.HasSuffix(p, "/") && !strings.HasSuffix(p, "{$}") {
 		p = p + "{$}"
 	}
@@ -151,8 +199,10 @@ func (m *Mux) handle(method, pattern string, h http.Handler) {
 // group only apply to routes registered within that group.
 func (m *Mux) Group(fn func(sub *Mux)) {
 	sub := &Mux{
-		mux:     m.mux,
-		isGroup: true,
+		mux:       m.mux,
+		isGroup:   true,
+		session:   m.session,
+		templates: m.templates,
 	}
 	// Nested Group scopes inherit parent group middlewares.
 	if m.isGroup && len(m.middlewares) > 0 {
@@ -163,6 +213,21 @@ func (m *Mux) Group(fn func(sub *Mux)) {
 	m.mu.Lock()
 	m.routes = append(m.routes, sub.routes...)
 	m.mu.Unlock()
+}
+
+// With adds a list of middlewares to an inline sub-router and returns it.
+func (m *Mux) With(mws ...Middleware) *Mux {
+	sub := &Mux{
+		mux:       m.mux,
+		isGroup:   true,
+		session:   m.session,
+		templates: m.templates,
+	}
+	if len(m.middlewares) > 0 {
+		sub.middlewares = append(sub.middlewares, m.middlewares...)
+	}
+	sub.middlewares = append(sub.middlewares, mws...)
+	return sub
 }
 
 // Route creates a sub-router mounted under the given pattern prefix. The sub-

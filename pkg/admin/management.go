@@ -10,6 +10,7 @@ import (
 	"time"
 
 	gferrors "github.com/jcsvwinston/GoFrame/pkg/errors"
+	"github.com/jcsvwinston/GoFrame/pkg/router"
 	"github.com/jcsvwinston/GoFrame/pkg/storage"
 	"github.com/jcsvwinston/GoFrame/pkg/tasks"
 )
@@ -31,9 +32,9 @@ type healthSummary struct {
 	Version   string              `json:"version"`
 }
 
-func (p *Panel) handleHealthCheck(w http.ResponseWriter, r *http.Request) {
-	if !p.authorizeAction(w, r, "*", "health_check") {
-		return
+func (p *Panel) handleHealthCheck(c *router.Context) error {
+	if err := p.authorizeAction(c, "*", "health_check"); err != nil {
+		return err
 	}
 
 	checks := make([]healthCheckResult, 0)
@@ -102,7 +103,7 @@ func (p *Panel) handleHealthCheck(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	writeJSON(w, http.StatusOK, healthSummary{
+	return c.JSON(http.StatusOK, healthSummary{
 		Status:    overallStatus,
 		CheckedAt: time.Now().UTC().Format(time.RFC3339),
 		Checks:    checks,
@@ -112,14 +113,17 @@ func (p *Panel) handleHealthCheck(w http.ResponseWriter, r *http.Request) {
 
 // Job queue detail handlers
 
-func (p *Panel) handleListJobQueues(w http.ResponseWriter, r *http.Request) {
-	if !p.authorizeAction(w, r, "*", "jobs_view") {
-		return
+func (p *Panel) handleListJobQueues(c *router.Context) error {
+	if err := p.authorizeAction(c, "*", "jobs_view"); err != nil {
+		return err
 	}
 
 	// Return job queue info from tasks runtime
-	snapshot := tasks.InspectRuntime(p.config.RedisURL)
-	writeJSON(w, http.StatusOK, map[string]interface{}{
+	snapshot := tasks.RuntimeSnapshot{}
+	if p.config.TaskInspector != nil {
+		snapshot = p.config.TaskInspector.InspectRuntime()
+	}
+	return c.JSON(http.StatusOK, map[string]interface{}{
 		"enabled":   p.config.RedisURL != "",
 		"redis_url": p.config.RedisURL,
 		"snapshot":  snapshot,
@@ -128,18 +132,17 @@ func (p *Panel) handleListJobQueues(w http.ResponseWriter, r *http.Request) {
 
 // Multi-site management API handlers
 
-func (p *Panel) handleListSites(w http.ResponseWriter, r *http.Request) {
-	if !p.authorizeAction(w, r, "*", "sites_view") {
-		return
+func (p *Panel) handleListSites(c *router.Context) error {
+	if err := p.authorizeAction(c, "*", "sites_view"); err != nil {
+		return err
 	}
 
 	if !p.config.MultiSiteEnabled {
-		writeJSON(w, http.StatusOK, map[string]interface{}{
+		return c.JSON(http.StatusOK, map[string]interface{}{
 			"enabled": false,
 			"reason":  "Multi-site not enabled",
 			"sites":   []interface{}{},
 		})
-		return
 	}
 
 	sites := make([]siteInfo, 0)
@@ -150,7 +153,7 @@ func (p *Panel) handleListSites(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 
-	writeJSON(w, http.StatusOK, map[string]interface{}{
+	return c.JSON(http.StatusOK, map[string]interface{}{
 		"enabled": true,
 		"default": p.config.MultiSiteDefault,
 		"sites":   sites,
@@ -168,15 +171,15 @@ type siteInfo struct {
 
 // Export/Import API handlers (Data Studio integration)
 
-func (p *Panel) handleExportCreate(w http.ResponseWriter, r *http.Request) {
-	if !p.authorizeAction(w, r, "*", "export_data") {
-		return
+func (p *Panel) handleExportCreate(c *router.Context) error {
+	r := c.Request
+	if err := p.authorizeAction(c, "*", "export_data"); err != nil {
+		return err
 	}
 
 	var cfg ExportConfig
 	if err := json.NewDecoder(r.Body).Decode(&cfg); err != nil {
-		writeErr(w, gferrors.BadRequest("invalid JSON"))
-		return
+		return gferrors.BadRequest("invalid JSON")
 	}
 
 	if cfg.Format == "" {
@@ -201,54 +204,50 @@ func (p *Panel) handleExportCreate(w http.ResponseWriter, r *http.Request) {
 	if result.Status == "failed" {
 		status = http.StatusInternalServerError
 	}
-	writeJSON(w, status, result)
+	return c.JSON(status, result)
 }
 
-func (p *Panel) handleExportList(w http.ResponseWriter, r *http.Request) {
-	if !p.authorizeAction(w, r, "*", "export_data") {
-		return
+func (p *Panel) handleExportList(c *router.Context) error {
+	if err := p.authorizeAction(c, "*", "export_data"); err != nil {
+		return err
 	}
-	writeJSON(w, http.StatusOK, p.listExportJobs())
+	return c.JSON(http.StatusOK, p.listExportJobs())
 }
 
-func (p *Panel) handleExportStatus(w http.ResponseWriter, r *http.Request) {
-	if !p.authorizeAction(w, r, "*", "export_data") {
-		return
+func (p *Panel) handleExportStatus(c *router.Context) error {
+	if err := p.authorizeAction(c, "*", "export_data"); err != nil {
+		return err
 	}
-	id := strings.TrimSpace(r.URL.Query().Get("id"))
+	id := c.Param("id")
 	if id == "" {
-		writeErr(w, gferrors.BadRequest("id query parameter is required"))
-		return
+		id = c.Query("id")
 	}
 
 	result, ok := p.getExportJob(id)
 	if !ok {
-		writeErr(w, gferrors.NotFound("export", id))
-		return
+		return gferrors.NotFound("export", id)
 	}
-	writeJSON(w, http.StatusOK, result)
+	return c.JSON(http.StatusOK, result)
 }
 
-func (p *Panel) handleExportDownload(w http.ResponseWriter, r *http.Request) {
-	if !p.authorizeAction(w, r, "*", "export_data") {
-		return
+func (p *Panel) handleExportDownload(c *router.Context) error {
+	w, r := c.Writer, c.Request
+	if err := p.authorizeAction(c, "*", "export_data"); err != nil {
+		return err
 	}
 
-	key := strings.TrimSpace(r.URL.Query().Get("key"))
+	key := c.Query("key")
 	if key == "" {
-		writeErr(w, gferrors.BadRequest("key query parameter is required"))
-		return
+		return gferrors.BadRequest("key query parameter is required")
 	}
 
 	if p.store == nil {
-		writeErr(w, gferrors.BadRequest("storage not configured"))
-		return
+		return gferrors.BadRequest("storage not configured")
 	}
 
 	reader, info, err := p.store.Get(r.Context(), key)
 	if err != nil {
-		writeErr(w, err)
-		return
+		return err
 	}
 	defer reader.Close()
 
@@ -256,55 +255,51 @@ func (p *Panel) handleExportDownload(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", info.Key))
 	w.Header().Set("Content-Length", fmt.Sprintf("%d", info.Size))
 	io.Copy(w, reader)
+	return nil
 }
 
-func (p *Panel) handleImportValidate(w http.ResponseWriter, r *http.Request) {
-	if !p.authorizeAction(w, r, "*", "import_data") {
-		return
+func (p *Panel) handleImportValidate(c *router.Context) error {
+	r := c.Request
+	if err := p.authorizeAction(c, "*", "import_data"); err != nil {
+		return err
 	}
 
 	// Read upload into temp storage key
-	key := strings.TrimSpace(r.URL.Query().Get("key"))
+	key := c.Query("key")
 	if key == "" {
-		writeErr(w, gferrors.BadRequest("key query parameter is required"))
-		return
+		return gferrors.BadRequest("key query parameter is required")
 	}
 
 	var cfg ImportConfig
 	if err := json.NewDecoder(r.Body).Decode(&cfg); err != nil {
-		writeErr(w, gferrors.BadRequest("invalid JSON"))
-		return
+		return gferrors.BadRequest("invalid JSON")
 	}
 
 	meta, ok := p.registry.Get(cfg.Model)
 	if !ok {
-		writeErr(w, gferrors.BadRequest(fmt.Sprintf("model %q not found", cfg.Model)))
-		return
+		return gferrors.BadRequest(fmt.Sprintf("model %q not found", cfg.Model))
 	}
 
 	// Read file from storage
 	if p.store == nil {
-		writeErr(w, gferrors.BadRequest("storage not configured"))
-		return
+		return gferrors.BadRequest("storage not configured")
 	}
 
 	reader, _, err := p.store.Get(r.Context(), key)
 	if err != nil {
-		writeErr(w, fmt.Errorf("read upload: %w", err))
-		return
+		return fmt.Errorf("read upload: %w", err)
 	}
 	defer reader.Close()
 
 	// Parse
 	records, err := ParseImportData(reader, cfg.Format)
 	if err != nil {
-		writeErr(w, fmt.Errorf("parse: %w", err))
-		return
+		return fmt.Errorf("parse: %w", err)
 	}
 
 	// Validate
 	errors := ValidateImportData(meta, records, cfg.TenantID)
-	writeJSON(w, http.StatusOK, map[string]interface{}{
+	return c.JSON(http.StatusOK, map[string]interface{}{
 		"total_records": len(records),
 		"valid_records": len(records) - len(errors),
 		"errors":        errors,
@@ -312,21 +307,20 @@ func (p *Panel) handleImportValidate(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (p *Panel) handleImportExecute(w http.ResponseWriter, r *http.Request) {
-	if !p.authorizeAction(w, r, "*", "import_data") {
-		return
+func (p *Panel) handleImportExecute(c *router.Context) error {
+	r := c.Request
+	if err := p.authorizeAction(c, "*", "import_data"); err != nil {
+		return err
 	}
 
-	key := strings.TrimSpace(r.URL.Query().Get("key"))
+	key := c.Query("key")
 	if key == "" {
-		writeErr(w, gferrors.BadRequest("key query parameter is required"))
-		return
+		return gferrors.BadRequest("key query parameter is required")
 	}
 
 	var cfg ImportConfig
 	if err := json.NewDecoder(r.Body).Decode(&cfg); err != nil {
-		writeErr(w, gferrors.BadRequest("invalid JSON"))
-		return
+		return gferrors.BadRequest("invalid JSON")
 	}
 
 	// Get tenant from context if not specified
@@ -338,33 +332,30 @@ func (p *Panel) handleImportExecute(w http.ResponseWriter, r *http.Request) {
 
 	report, err := p.ImportFromFile(r.Context(), key, cfg)
 	if err != nil {
-		writeErr(w, err)
-		return
+		return err
 	}
 
-	writeJSON(w, http.StatusOK, report)
+	return c.JSON(http.StatusOK, report)
 }
 
-func (p *Panel) handleImportUpload(w http.ResponseWriter, r *http.Request) {
-	if !p.authorizeAction(w, r, "*", "import_data") {
-		return
+func (p *Panel) handleImportUpload(c *router.Context) error {
+	r := c.Request
+	if err := p.authorizeAction(c, "*", "import_data"); err != nil {
+		return err
 	}
 
 	if p.store == nil {
-		writeErr(w, gferrors.BadRequest("storage not configured"))
-		return
+		return gferrors.BadRequest("storage not configured")
 	}
 
 	// Parse multipart form
 	if err := r.ParseMultipartForm(50 << 20); err != nil { // 50MB max
-		writeErr(w, gferrors.BadRequest("file too large (max 50MB)"))
-		return
+		return gferrors.BadRequest("file too large (max 50MB)")
 	}
 
 	file, header, err := r.FormFile("file")
 	if err != nil {
-		writeErr(w, gferrors.BadRequest("file is required"))
-		return
+		return gferrors.BadRequest("file is required")
 	}
 	defer file.Close()
 
@@ -383,11 +374,10 @@ func (p *Panel) handleImportUpload(w http.ResponseWriter, r *http.Request) {
 		ContentType: header.Header.Get("Content-Type"),
 	})
 	if err != nil {
-		writeErr(w, fmt.Errorf("store upload: %w", err))
-		return
+		return fmt.Errorf("store upload: %w", err)
 	}
 
-	writeJSON(w, http.StatusCreated, map[string]interface{}{
+	return c.JSON(http.StatusCreated, map[string]interface{}{
 		"key":      info.Key,
 		"size":     info.Size,
 		"format":   format,

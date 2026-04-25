@@ -291,6 +291,7 @@ import (
 	"%s/internal/services"
 	"github.com/jcsvwinston/GoFrame/pkg/app"
 	"github.com/jcsvwinston/GoFrame/pkg/model"
+	"github.com/jcsvwinston/GoFrame/pkg/router"
 )
 
 func main() {
@@ -340,9 +341,8 @@ func main() {
 	if err := a.MountOpenAPI("/openapi.json", contracts.NewDocument); err != nil {
 		log.Fatal(err)
 	}
-	a.Router.Get("/health", func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte("ok"))
+	a.Router.Get("/health", func(c *router.Context) error {
+		return c.JSON(http.StatusOK, "ok")
 	})
 
 	log.Println("%s running:")
@@ -397,6 +397,7 @@ import (
 	projecttasks "%s/internal/tasks"
 	"github.com/jcsvwinston/GoFrame/pkg/app"
 	gftasks "github.com/jcsvwinston/GoFrame/pkg/tasks"
+	asynqprovider "github.com/jcsvwinston/GoFrame/pkg/tasks/providers/asynq"
 )
 
 func main() {
@@ -421,7 +422,7 @@ func main() {
 	articleRepository := repositories.NewArticleRepository(sqlDB)
 	articleService := services.NewArticleService(articleRepository)
 
-	manager, err := gftasks.NewManager(gftasks.Config{
+	manager, err := asynqprovider.NewManager(gftasks.Config{
 		RedisURL:    cfg.RedisURL,
 		Concurrency: 10,
 		Queues:      map[string]int{"default": 1},
@@ -459,12 +460,13 @@ const newHomePageTemplate = `package controllers
 import (
 	"html/template"
 	"net/http"
+
+	gfrender "github.com/jcsvwinston/GoFrame/pkg/router"
 )
 
-func HomePage(tpl *template.Template) http.HandlerFunc {
-	return func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		_ = tpl.ExecuteTemplate(w, "home.html", map[string]any{
+func HomePage(tpl *template.Template) gfrender.Handler {
+	return func(c *gfrender.Context) error {
+		return c.HTML(http.StatusOK, "home.html", map[string]any{
 			"Title": "GoFrame Starter",
 		})
 	}
@@ -475,7 +477,6 @@ const newArticleAPITemplate = `package controllers
 
 import (
 	"net/http"
-	"strings"
 
 	"%s/internal/services"
 	gfrender "github.com/jcsvwinston/GoFrame/pkg/router"
@@ -487,45 +488,42 @@ type createArticleInput struct {
 	Published bool   ` + "`json:\"published\"`" + `
 }
 
-func Health(w http.ResponseWriter, _ *http.Request) {
-	gfrender.JSON(w, http.StatusOK, map[string]any{"status": "ok"})
+func Health(c *gfrender.Context) error {
+	return c.JSON(http.StatusOK, map[string]any{"status": "ok"})
 }
 
-func ListArticles(articleService *services.ArticleService) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		items, err := articleService.List(r.Context(), services.ListArticleInput{
-			Query: strings.TrimSpace(r.URL.Query().Get("q")),
+func ListArticles(articleService *services.ArticleService) gfrender.Handler {
+	return func(c *gfrender.Context) error {
+		items, err := articleService.List(c.Request.Context(), services.ListArticleInput{
+			Query: c.Query("q"),
 		})
 		if err != nil {
-			gfrender.Error(w, err)
-			return
+			return err
 		}
 
-		gfrender.JSON(w, http.StatusOK, map[string]any{
+		return c.JSON(http.StatusOK, map[string]any{
 			"data":  items,
 			"count": len(items),
 		})
 	}
 }
 
-func CreateArticle(articleService *services.ArticleService) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
+func CreateArticle(articleService *services.ArticleService) gfrender.Handler {
+	return func(c *gfrender.Context) error {
 		var in createArticleInput
-		if err := gfrender.Bind(r, &in); err != nil {
-			gfrender.Error(w, err)
-			return
+		if err := c.Bind(&in); err != nil {
+			return err
 		}
 
-		item, err := articleService.Create(r.Context(), services.CreateArticleInput{
+		item, err := articleService.Create(c.Request.Context(), services.CreateArticleInput{
 			Title:     in.Title,
 			Content:   in.Content,
 			Published: in.Published,
 		})
 		if err != nil {
-			gfrender.Error(w, err)
-			return
+			return err
 		}
-		gfrender.Created(w, map[string]any{
+		return c.JSON(http.StatusCreated, map[string]any{
 			"data": item,
 		})
 	}
@@ -775,7 +773,6 @@ import (
 	"context"
 
 	"%s/internal/services"
-	"github.com/hibiken/asynq"
 	gftasks "github.com/jcsvwinston/GoFrame/pkg/tasks"
 )
 
@@ -786,13 +783,13 @@ type ArticleCreatedPayload struct {
 	Title     string ` + "`json:\"title\"`" + `
 }
 
-func Register(manager *gftasks.Manager, articleService *services.ArticleService) error {
-	return manager.HandleFunc(TaskArticleCreated, func(ctx context.Context, task *asynq.Task) error {
+func Register(manager gftasks.Manager, articleService *services.ArticleService) error {
+	return manager.HandleFunc(TaskArticleCreated, func(ctx context.Context, task gftasks.Task) error {
 		return handleArticleCreated(ctx, task, articleService)
 	})
 }
 
-func handleArticleCreated(ctx context.Context, task *asynq.Task, articleService *services.ArticleService) error {
+func handleArticleCreated(ctx context.Context, task gftasks.Task, articleService *services.ArticleService) error {
 	var payload ArticleCreatedPayload
 	if err := gftasks.DecodeJSONPayload(task, &payload); err != nil {
 		return err
@@ -913,6 +910,7 @@ import (
 	"%s/internal/repositories"
 	"%s/internal/services"
 	"github.com/jcsvwinston/GoFrame/pkg/app"
+	"github.com/jcsvwinston/GoFrame/pkg/router"
 )
 
 func main() {
@@ -942,13 +940,13 @@ func main() {
 
 	a.Router.Get("/api/articles", controllers.ListArticles(articleService))
 	a.Router.Post("/api/articles", controllers.CreateArticle(articleService))
+	a.Router.Get("/health", func(c *router.Context) error {
+		return c.JSON(http.StatusOK, "ok")
+	})
+
 	if err := a.MountOpenAPI("/openapi.json", contracts.NewDocument); err != nil {
 		log.Fatal(err)
 	}
-	a.Router.Get("/health", func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte("ok"))
-	})
 
 	log.Println("%s API running:")
 	log.Printf("  api:     http://localhost:%%d/api/articles\n", cfg.Port)

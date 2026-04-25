@@ -51,18 +51,24 @@ export default function SystemPulsePage() {
         if (!mounted) return
 
         setSnapshot(data)
-        setHistory((prev) => [
-          ...prev.slice(-19),
-          {
-            time: new Date().toLocaleTimeString(),
-            goroutines: data.goroutines.count,
-            cpu: data.process_cpu_load ?? data.cpu_load ?? 0,
-            backlog: data.jobs.total_pending,
-            outbox: data.outbox.pending,
-          },
-        ])
-      } catch (error) {
+        if (data) {
+          setHistory((prev) => [
+            ...prev.slice(-19),
+            {
+              time: new Date().toLocaleTimeString(),
+              goroutines: data.goroutines?.count ?? 0,
+              cpu: data.process_cpu_load ?? data.cpu_load ?? 0,
+              backlog: data.jobs?.total_pending ?? 0,
+              outbox: data.outbox?.pending ?? 0,
+            },
+          ])
+        }
+      } catch (error: any) {
         console.error('Failed to fetch system snapshot:', error)
+        if (error.message === 'Unauthorized') {
+          mounted = false
+          window.clearInterval(interval)
+        }
       } finally {
         if (mounted) {
           setLoading(false)
@@ -97,26 +103,26 @@ export default function SystemPulsePage() {
   const summary = [
     {
       label: 'Goroutines',
-      value: snapshot.goroutines.count,
-      hint: `${snapshot.gomaxprocs} GOMAXPROCS / ${snapshot.cpus} CPUs`,
+      value: snapshot?.goroutines?.count ?? 0,
+      hint: `${snapshot?.gomaxprocs ?? 0} GOMAXPROCS / ${snapshot?.cpus ?? 0} CPUs`,
       icon: Activity,
     },
     {
       label: 'Heap alloc',
-      value: formatBytes(snapshot.memory.heap_alloc_bytes),
-      hint: `${snapshot.memory.num_gc} GC cycles`,
+      value: formatBytes(snapshot?.memory?.heap_alloc_bytes ?? 0),
+      hint: `${snapshot?.memory?.num_gc ?? 0} GC cycles`,
       icon: MemoryStick,
     },
     {
       label: 'Queue backlog',
-      value: snapshot.jobs.total_pending,
-      hint: `${snapshot.jobs.total_queues} queues / ${snapshot.jobs.total_schedules} schedules`,
+      value: snapshot?.jobs?.total_pending ?? 0,
+      hint: `${snapshot?.jobs?.total_queues ?? 0} queues / ${snapshot?.jobs?.total_schedules ?? 0} schedules`,
       icon: PackageCheck,
     },
     {
       label: 'Cluster nodes',
-      value: snapshot.cluster_nodes.length,
-      hint: snapshot.cluster.connected ? 'relay connected' : snapshot.cluster.reason ?? 'relay idle',
+      value: snapshot?.cluster_nodes?.length ?? 0,
+      hint: snapshot?.cluster?.connected ? 'relay connected' : snapshot?.cluster?.reason ?? 'relay idle',
       icon: Network,
     },
   ]
@@ -126,9 +132,9 @@ export default function SystemPulsePage() {
       <div className="space-y-2">
         <div className="flex flex-wrap items-center gap-3">
           <h1 className="text-3xl font-bold">System Pulse</h1>
-          <Badge variant={snapshot.jobs.enabled ? 'default' : 'secondary'}>Tasks</Badge>
-          <Badge variant={snapshot.outbox.enabled ? 'default' : 'secondary'}>Outbox</Badge>
-          <Badge variant={snapshot.cluster.connected ? 'default' : 'secondary'}>Cluster relay</Badge>
+          <Badge variant={snapshot?.jobs?.enabled ? 'default' : 'secondary'}>Tasks</Badge>
+          <Badge variant={snapshot?.outbox?.enabled ? 'default' : 'secondary'}>Outbox</Badge>
+          <Badge variant={snapshot?.cluster?.connected ? 'default' : 'secondary'}>Cluster relay</Badge>
         </div>
         <p className="text-muted-foreground">
           Live operational view of the Go runtime, SQL pools, background execution, outbox delivery, and distributed node activity.
@@ -179,7 +185,7 @@ export default function SystemPulsePage() {
             <CardDescription>Connection pressure and runtime availability per configured database alias.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
-            {snapshot.databases.length === 0 ? (
+            {(!snapshot?.databases || snapshot.databases.length === 0) ? (
               <p className="text-sm text-muted-foreground">No database pools were reported.</p>
             ) : (
               snapshot.databases.map((pool) => (
@@ -206,19 +212,19 @@ export default function SystemPulsePage() {
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="grid gap-3 sm:grid-cols-2">
-              <MetricTile label="Pending" value={snapshot.outbox.pending} />
-              <MetricTile label="Processing" value={snapshot.outbox.processing} />
-              <MetricTile label="Delivered" value={snapshot.outbox.delivered} />
-              <MetricTile label="Failed" value={snapshot.outbox.failed} />
+              <MetricTile label="Pending" value={snapshot?.outbox?.pending ?? 0} />
+              <MetricTile label="Processing" value={snapshot?.outbox?.processing ?? 0} />
+              <MetricTile label="Delivered" value={snapshot?.outbox?.delivered ?? 0} />
+              <MetricTile label="Failed" value={snapshot?.outbox?.failed ?? 0} />
             </div>
             <div className="rounded-lg border border-border px-4 py-3">
-              <p className="font-medium">{snapshot.outbox.table}</p>
+              <p className="font-medium">{snapshot?.outbox?.table ?? 'outbox'}</p>
               <p className="mt-1 text-sm text-muted-foreground">
-                {snapshot.outbox.enabled
-                  ? `Oldest pending: ${formatTimestamp(snapshot.outbox.oldest_pending_at)}`
-                  : snapshot.outbox.reason || 'Outbox runtime not initialized'}
+                {snapshot?.outbox?.enabled
+                  ? `Oldest pending: ${formatTimestamp(snapshot?.outbox?.oldest_pending_at)}`
+                  : snapshot?.outbox?.reason || 'Outbox runtime not initialized'}
               </p>
-              {snapshot.outbox.last_delivered_at ? (
+              {snapshot?.outbox?.last_delivered_at ? (
                 <p className="mt-2 text-sm text-muted-foreground">
                   Last delivered at {formatTimestamp(snapshot.outbox.last_delivered_at)}
                 </p>
@@ -235,8 +241,8 @@ export default function SystemPulsePage() {
             <CardDescription>Queue backlog and periodic scheduler registrations discovered at runtime.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
-            {snapshot.jobs.queues.length === 0 ? (
-              <p className="text-sm text-muted-foreground">{snapshot.jobs.reason || 'No queues detected.'}</p>
+            {(!snapshot?.jobs?.queues || snapshot.jobs.queues.length === 0) ? (
+              <p className="text-sm text-muted-foreground">{snapshot?.jobs?.reason || 'No queues detected.'}</p>
             ) : (
               snapshot.jobs.queues.slice(0, 6).map((queue) => (
                 <div key={queue.name} className="rounded-lg border border-border px-4 py-3">
@@ -253,7 +259,7 @@ export default function SystemPulsePage() {
               ))
             )}
 
-            {snapshot.jobs.schedules.length > 0 ? (
+            {(snapshot?.jobs?.schedules && snapshot.jobs.schedules.length > 0) ? (
               <div className="space-y-3 pt-2">
                 <p className="text-sm font-medium">Registered schedules</p>
                 {snapshot.jobs.schedules.slice(0, 4).map((schedule) => (
@@ -274,23 +280,23 @@ export default function SystemPulsePage() {
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="grid gap-3 sm:grid-cols-2">
-              <MetricTile label="Published" value={snapshot.cluster.published} />
-              <MetricTile label="Received" value={snapshot.cluster.received} />
-              <MetricTile label="Dropped" value={snapshot.cluster.dropped} />
-              <MetricTile label="Ignored" value={snapshot.cluster.ignored} />
+              <MetricTile label="Published" value={snapshot?.cluster?.published ?? 0} />
+              <MetricTile label="Received" value={snapshot?.cluster?.received ?? 0} />
+              <MetricTile label="Dropped" value={snapshot?.cluster?.dropped ?? 0} />
+              <MetricTile label="Ignored" value={snapshot?.cluster?.ignored ?? 0} />
             </div>
 
             <div className="rounded-lg border border-border px-4 py-3">
-              <p className="font-medium">{snapshot.cluster.node_id || 'node-local'}</p>
+              <p className="font-medium">{snapshot?.cluster?.node_id || 'node-local'}</p>
               <p className="mt-1 text-sm text-muted-foreground">
-                {snapshot.cluster.connected
-                  ? `Connected on ${snapshot.cluster.channel || 'configured channel'}`
-                  : snapshot.cluster.reason || 'Relay is not connected'}
+                {snapshot?.cluster?.connected
+                  ? `Connected on ${snapshot?.cluster?.channel || 'configured channel'}`
+                  : snapshot?.cluster?.reason || 'Relay is not connected'}
               </p>
             </div>
 
             <div className="space-y-3">
-              {snapshot.cluster_nodes.length === 0 ? (
+              {(!snapshot?.cluster_nodes || snapshot.cluster_nodes.length === 0) ? (
                 <p className="text-sm text-muted-foreground">No cluster nodes observed yet.</p>
               ) : (
                 snapshot.cluster_nodes.map((node) => (
@@ -316,10 +322,10 @@ export default function SystemPulsePage() {
           <CardDescription>Fast operational facts straight from the current snapshot.</CardDescription>
         </CardHeader>
         <CardContent className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-          <MetaRow icon={Cpu} label="Process CPU" value={`${(snapshot.process_cpu_load ?? 0).toFixed(2)}%`} />
-          <MetaRow icon={Database} label="Trace endpoint" value={snapshot.telemetry.otlp_endpoint || 'Not configured'} />
-          <MetaRow icon={MemoryStick} label="Last GC pause" value={`${snapshot.memory.last_pause_ms} ms`} />
-          <MetaRow icon={Activity} label="Generated at" value={formatTimestamp(snapshot.generated_at)} />
+          <MetaRow icon={Cpu} label="Process CPU" value={`${(snapshot?.process_cpu_load ?? 0).toFixed(2)}%`} />
+          <MetaRow icon={Database} label="Trace endpoint" value={snapshot?.telemetry?.otlp_endpoint || 'Not configured'} />
+          <MetaRow icon={MemoryStick} label="Last GC pause" value={`${snapshot?.memory?.last_pause_ms ?? 0} ms`} />
+          <MetaRow icon={Activity} label="Generated at" value={formatTimestamp(snapshot?.generated_at)} />
         </CardContent>
       </Card>
     </div>

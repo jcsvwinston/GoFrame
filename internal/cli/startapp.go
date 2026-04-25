@@ -262,9 +262,9 @@ var (
 	startApp%[1]sItems []%[1]sRecord
 )
 
-func List%[2]s(_ *sql.DB) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		query := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("q")))
+func List%[2]s(_ *sql.DB) gfrender.Handler {
+	return func(c *gfrender.Context) error {
+		query := strings.ToLower(strings.TrimSpace(c.Query("q")))
 
 		startApp%[1]sMu.RLock()
 		items := make([]%[1]sRecord, 0, len(startApp%[1]sItems))
@@ -276,19 +276,18 @@ func List%[2]s(_ *sql.DB) http.HandlerFunc {
 		}
 		startApp%[1]sMu.RUnlock()
 
-		gfrender.JSON(w, http.StatusOK, map[string]any{
+		return c.JSON(http.StatusOK, map[string]any{
 			"data":  items,
 			"count": len(items),
 		})
 	}
 }
 
-func Create%[1]s(_ *sql.DB) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
+func Create%[1]s(_ *sql.DB) gfrender.Handler {
+	return func(c *gfrender.Context) error {
 		var in create%[1]sInput
-		if err := gfrender.Bind(r, &in); err != nil {
-			gfrender.Error(w, err)
-			return
+		if err := c.Bind(&in); err != nil {
+			return err
 		}
 
 		record := %[1]sRecord{Name: strings.TrimSpace(in.Name)}
@@ -297,7 +296,7 @@ func Create%[1]s(_ *sql.DB) http.HandlerFunc {
 		startApp%[1]sItems = append(startApp%[1]sItems, record)
 		startApp%[1]sMu.Unlock()
 
-		gfrender.Created(w, map[string]any{
+		return c.JSON(http.StatusCreated, map[string]any{
 			"data": record,
 		})
 	}
@@ -314,38 +313,35 @@ import (
 	gfrender "github.com/jcsvwinston/GoFrame/pkg/router"
 )
 
-func List%[2]s(service *services.%[3]sService) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		items, err := service.List(r.Context(), services.List%[3]sInput{
-			Query: strings.TrimSpace(r.URL.Query().Get("q")),
+func List%[2]s(service *services.%[3]sService) gfrender.Handler {
+	return func(c *gfrender.Context) error {
+		items, err := service.List(c.Request.Context(), services.List%[3]sInput{
+			Query: strings.TrimSpace(c.Query("q")),
 		})
 		if err != nil {
-			gfrender.Error(w, err)
-			return
+			return err
 		}
 
-		gfrender.JSON(w, http.StatusOK, map[string]any{
+		return c.JSON(http.StatusOK, map[string]any{
 			"data":  items,
 			"count": len(items),
 		})
 	}
 }
 
-func Create%[3]s(service *services.%[3]sService) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
+func Create%[3]s(service *services.%[3]sService) gfrender.Handler {
+	return func(c *gfrender.Context) error {
 		var input services.Create%[3]sInput
-		if err := gfrender.Bind(r, &input); err != nil {
-			gfrender.Error(w, err)
-			return
+		if err := c.Bind(&input); err != nil {
+			return err
 		}
 
-		item, err := service.Create(r.Context(), input)
+		item, err := service.Create(c.Request.Context(), input)
 		if err != nil {
-			gfrender.Error(w, err)
-			return
+			return err
 		}
 
-		gfrender.Created(w, map[string]any{
+		return c.JSON(http.StatusCreated, map[string]any{
 			"data": item,
 		})
 	}
@@ -535,13 +531,14 @@ const startAppPageTemplate = `package controllers
 
 import (
 	"html/template"
-	"net/http"
+
+	gfrender "github.com/jcsvwinston/GoFrame/pkg/router"
 )
 
-func %sPage(tpl *template.Template) http.HandlerFunc {
-	return func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		_ = tpl.ExecuteTemplate(w, "%s/index.html", map[string]any{})
+func %sPage(tpl *template.Template) gfrender.Handler {
+	return func(c *gfrender.Context) error {
+		c.Writer.Header().Set("Content-Type", "text/html; charset=utf-8")
+		return tpl.ExecuteTemplate(c.Writer, "%s/index.html", map[string]any{})
 	}
 }
 `
@@ -552,7 +549,6 @@ import (
 	"context"
 	"log"
 
-	"github.com/hibiken/asynq"
 	gftasks "github.com/jcsvwinston/GoFrame/pkg/tasks"
 )
 
@@ -562,11 +558,11 @@ type %sCreatedPayload struct {
 	Name string ` + "`json:\"name\"`" + `
 }
 
-func Register%sTasks(manager *gftasks.Manager) error {
+func Register%sTasks(manager gftasks.Manager) error {
 	return manager.HandleFunc(Task%sCreated, handle%sCreated)
 }
 
-func handle%sCreated(_ context.Context, task *asynq.Task) error {
+func handle%sCreated(_ context.Context, task gftasks.Task) error {
 	var payload %sCreatedPayload
 	if err := gftasks.DecodeJSONPayload(task, &payload); err != nil {
 		return err
@@ -583,7 +579,6 @@ import (
 	"context"
 
 	"%s/internal/services"
-	"github.com/hibiken/asynq"
 	gftasks "github.com/jcsvwinston/GoFrame/pkg/tasks"
 )
 
@@ -593,13 +588,13 @@ type %sCreatedPayload struct {
 	Name string ` + "`json:\"name\"`" + `
 }
 
-func Register%sTasks(manager *gftasks.Manager, service *services.%sService) error {
-	return manager.HandleFunc(Task%sCreated, func(ctx context.Context, task *asynq.Task) error {
+func Register%sTasks(manager gftasks.Manager, service *services.%sService) error {
+	return manager.HandleFunc(Task%sCreated, func(ctx context.Context, task gftasks.Task) error {
 		return handle%sCreated(ctx, task, service)
 	})
 }
 
-func handle%sCreated(ctx context.Context, task *asynq.Task, service *services.%sService) error {
+func handle%sCreated(ctx context.Context, task gftasks.Task, service *services.%sService) error {
 	var payload %sCreatedPayload
 	if err := gftasks.DecodeJSONPayload(task, &payload); err != nil {
 		return err

@@ -963,7 +963,7 @@ replace github.com/jcsvwinston/GoFrame => %s
 	if !strings.Contains(handlerText, `h.service.Create(`) {
 		t.Fatalf("expected generated handler to delegate create to service: %s", handlerText)
 	}
-	if !strings.Contains(handlerText, `services.ListCategoryInput{`) || !strings.Contains(handlerText, `r.URL.Query().Get("q")`) {
+	if !strings.Contains(handlerText, `services.ListCategoryInput{`) || !strings.Contains(handlerText, `c.Query("q")`) {
 		t.Fatalf("expected generated handler to pass list query input into service: %s", handlerText)
 	}
 
@@ -1152,7 +1152,7 @@ func TestRun_NewProjectScaffold(t *testing.T) {
 	if !strings.Contains(articleControllerText, `"data": item`) {
 		t.Fatalf("expected article controller create scaffold to use shared data envelope: %s", articleControllerText)
 	}
-	if !strings.Contains(articleControllerText, `services.ListArticleInput{`) || !strings.Contains(articleControllerText, `r.URL.Query().Get("q")`) {
+	if !strings.Contains(articleControllerText, `services.ListArticleInput{`) || !strings.Contains(articleControllerText, `c.Query("q")`) {
 		t.Fatalf("expected article controller list scaffold to pass query input into service: %s", articleControllerText)
 	}
 	if strings.Contains(articleControllerText, `"items": items`) || strings.Contains(articleControllerText, `"total": len(items)`) {
@@ -1188,7 +1188,7 @@ func TestRun_NewProjectScaffold(t *testing.T) {
 	if !strings.Contains(taskText, `"example.com/blogapp/internal/services"`) {
 		t.Fatalf("expected task scaffold to import services: %s", taskText)
 	}
-	if !strings.Contains(taskText, "func Register(manager *gftasks.Manager, articleService *services.ArticleService) error") {
+	if !strings.Contains(taskText, "func Register(manager gftasks.Manager, articleService *services.ArticleService) error") {
 		t.Fatalf("expected task registration to accept a service dependency: %s", taskText)
 	}
 	if !strings.Contains(taskText, "gftasks.DecodeJSONPayload(task, &payload)") {
@@ -1448,7 +1448,7 @@ replace github.com/jcsvwinston/GoFrame => %s
 	if !strings.Contains(controllerText, `"data": item`) {
 		t.Fatalf("expected startapp controller create scaffold to use shared data envelope: %s", controllerText)
 	}
-	if !strings.Contains(controllerText, `services.ListBillingInput{`) || !strings.Contains(controllerText, `r.URL.Query().Get("q")`) {
+	if !strings.Contains(controllerText, `services.ListBillingInput{`) || !strings.Contains(controllerText, `c.Query("q")`) {
 		t.Fatalf("expected startapp controller list scaffold to pass query input into service: %s", controllerText)
 	}
 	if strings.Contains(controllerText, `"resource":`) || strings.Contains(controllerText, `"items":    items`) || strings.Contains(controllerText, `"item":     item`) {
@@ -1505,7 +1505,7 @@ replace github.com/jcsvwinston/GoFrame => %s
 	if !strings.Contains(taskText, `"example.com/scaffold/internal/services"`) {
 		t.Fatalf("expected module-aware task scaffold to import services: %s", taskText)
 	}
-	if !strings.Contains(taskText, "func RegisterBillingTasks(manager *gftasks.Manager, service *services.BillingService) error") {
+	if !strings.Contains(taskText, "func RegisterBillingTasks(manager gftasks.Manager, service *services.BillingService) error") {
 		t.Fatalf("expected module-aware task registration to accept service dependency: %s", taskText)
 	}
 	if !strings.Contains(taskText, "gftasks.DecodeJSONPayload(task, &payload)") {

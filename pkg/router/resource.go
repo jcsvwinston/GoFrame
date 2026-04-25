@@ -1,18 +1,17 @@
 package router
 
 import (
-	"net/http"
 	"strings"
 )
 
 // ResourceHandlers groups CRUD handlers for one REST resource.
 // Nil handlers are skipped.
 type ResourceHandlers struct {
-	List     http.HandlerFunc
-	Create   http.HandlerFunc
-	Retrieve http.HandlerFunc
-	Update   http.HandlerFunc
-	Delete   http.HandlerFunc
+	List     Handler
+	Create   Handler
+	Retrieve Handler
+	Update   Handler
+	Delete   Handler
 }
 
 // Resource registers a conventional REST route set for one resource prefix:

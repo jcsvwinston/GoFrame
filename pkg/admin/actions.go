@@ -3,49 +3,45 @@ package admin
 import (
 	"encoding/csv"
 	"fmt"
-	"net/http"
 	"reflect"
 	"strconv"
 	"strings"
 
 	gferrors "github.com/jcsvwinston/GoFrame/pkg/errors"
 	"github.com/jcsvwinston/GoFrame/pkg/model"
+	"github.com/jcsvwinston/GoFrame/pkg/router"
 )
 
 // handleExportCSV exports all records of a model as CSV.
-func (p *Panel) handleExportCSV(w http.ResponseWriter, r *http.Request) {
-	name := r.PathValue("name")
+func (p *Panel) handleExportCSV(c *router.Context) error {
+	w, r := c.Writer, c.Request
+	name := c.Param("name")
 	meta, ok := p.registry.Get(name)
 	if !ok {
-		writeErr(w, gferrors.NotFound("model", name))
-		return
+		return gferrors.NotFound("model", name)
 	}
-	if !p.authorizeAction(w, r, meta.Name, "export_csv") {
-		return
+	if err := p.authorizeAction(c, meta.Name, "export_csv"); err != nil {
+		return err
 	}
 
 	databaseAlias, err := p.requestDatabaseAlias(r)
 	if err != nil {
-		writeErr(w, gferrors.BadRequest(err.Error()))
-		return
+		return gferrors.BadRequest(err.Error())
 	}
 
 	crud, err := p.getCRUD(meta, databaseAlias)
 	if err != nil {
-		writeErr(w, err)
-		return
+		return err
 	}
-	idSet, err := parseIDSet(r.URL.Query().Get("ids"))
+	idSet, err := parseIDSet(c.Query("ids"))
 	if err != nil {
-		writeErr(w, gferrors.BadRequest("invalid ids query param"))
-		return
+		return gferrors.BadRequest("invalid ids query param")
 	}
 	result, err := crud.FindAll(r.Context(), model.QueryOpts{
 		Page: 1, PageSize: 10000,
 	})
 	if err != nil {
-		writeErr(w, err)
-		return
+		return err
 	}
 
 	// Determine visible columns
@@ -93,6 +89,7 @@ func (p *Panel) handleExportCSV(w http.ResponseWriter, r *http.Request) {
 		}
 		writer.Write(row)
 	}
+	return nil
 }
 
 func parseIDSet(raw string) (map[uint64]struct{}, error) {

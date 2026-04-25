@@ -16,10 +16,10 @@ import (
 	"time"
 
 	"github.com/jcsvwinston/GoFrame/pkg/auth"
+	"github.com/jcsvwinston/GoFrame/pkg/router"
 	gferrors "github.com/jcsvwinston/GoFrame/pkg/errors"
 	"github.com/jcsvwinston/GoFrame/pkg/model"
 	"github.com/jcsvwinston/GoFrame/pkg/observe"
-	"github.com/jcsvwinston/GoFrame/pkg/router"
 	"golang.org/x/net/websocket"
 )
 
@@ -927,9 +927,10 @@ func shouldExcludeLivePath(requestPath string, patterns []string) bool {
 	return false
 }
 
-func (p *Panel) handleLiveSnapshot(w http.ResponseWriter, r *http.Request) {
-	if !p.authorizeAction(w, r, "*", "live_traffic") {
-		return
+func (p *Panel) handleLiveSnapshot(c *router.Context) error {
+	r := c.Request
+	if err := p.authorizeAction(c, "*", "live_traffic"); err != nil {
+		return err
 	}
 	now := time.Now().UTC()
 	limit := parseLiveListLimit(r, defaultLiveListLimit)
@@ -955,8 +956,7 @@ func (p *Panel) handleLiveSnapshot(w http.ResponseWriter, r *http.Request) {
 		Cluster:          p.liveClusterSnapshot(),
 	}
 	if p == nil || p.live == nil {
-		writeJSON(w, http.StatusOK, resp)
-		return
+		return c.JSON(http.StatusOK, resp)
 	}
 
 	resp.ExcludePatterns = p.liveExcludePatterns()
@@ -970,10 +970,10 @@ func (p *Panel) handleLiveSnapshot(w http.ResponseWriter, r *http.Request) {
 	resp.Requests = p.live.requests.latestFilteredByNode(requestLimit, resp.ExcludePatterns, nodeFilter)
 	resp.Queries = filterLiveSQLByNode(p.live.sql.latest(sqlLimit), nodeFilter, sqlLimit)
 	resp.Sessions = filterLiveSessionsByNode(p.live.sessions.snapshot(sessionLimit), nodeFilter, sessionLimit)
-	resp.Stream = p.live.bus.stats()
 	resp.RequestBuffer = requestStats
 	resp.SQLBuffer = sqlStats
-	writeJSON(w, http.StatusOK, resp)
+	resp.Stream = p.live.bus.stats()
+	return c.JSON(http.StatusOK, resp)
 }
 
 func filterLiveSQLByNode(rows []liveSQLEvent, nodeID string, limit int) []liveSQLEvent {
@@ -1120,68 +1120,65 @@ func liveNodeStatus(now, lastSeen time.Time) string {
 	return "stale"
 }
 
-func (p *Panel) handleListLiveExcludePatterns(w http.ResponseWriter, r *http.Request) {
-	if !p.authorizeAction(w, r, "*", "live_traffic") {
-		return
+func (p *Panel) handleListLiveExcludePatterns(c *router.Context) error {
+	if err := p.authorizeAction(c, "*", "live_traffic"); err != nil {
+		return err
 	}
 	patterns := p.liveExcludePatterns()
-	writeJSON(w, http.StatusOK, map[string]interface{}{
+	return c.JSON(http.StatusOK, map[string]interface{}{
 		"patterns": patterns,
 		"count":    len(patterns),
 	})
 }
 
-func (p *Panel) handleAddLiveExcludePattern(w http.ResponseWriter, r *http.Request) {
-	if !p.authorizeAction(w, r, "*", "live_traffic") {
-		return
+func (p *Panel) handleAddLiveExcludePattern(c *router.Context) error {
+	r := c.Request
+	if err := p.authorizeAction(c, "*", "live_traffic"); err != nil {
+		return err
 	}
 	var payload struct {
 		Pattern string `json:"pattern"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
-		writeErr(w, gferrors.BadRequest("invalid JSON"))
-		return
+		return gferrors.BadRequest("invalid JSON")
 	}
 	patterns, err := p.addLiveExcludePattern(payload.Pattern)
 	if err != nil {
-		writeErr(w, gferrors.BadRequest(err.Error()))
-		return
+		return gferrors.BadRequest(err.Error())
 	}
-	writeJSON(w, http.StatusCreated, map[string]interface{}{
+	return c.JSON(http.StatusCreated, map[string]interface{}{
 		"updated":  true,
 		"patterns": patterns,
 		"count":    len(patterns),
 	})
 }
 
-func (p *Panel) handleDeleteLiveExcludePattern(w http.ResponseWriter, r *http.Request) {
-	if !p.authorizeAction(w, r, "*", "live_traffic") {
-		return
+func (p *Panel) handleDeleteLiveExcludePattern(c *router.Context) error {
+	if err := p.authorizeAction(c, "*", "live_traffic"); err != nil {
+		return err
 	}
-	pattern := strings.TrimSpace(r.URL.Query().Get("pattern"))
+	pattern := c.Query("pattern")
 	patterns, err := p.removeLiveExcludePattern(pattern)
 	if err != nil {
-		writeErr(w, gferrors.BadRequest(err.Error()))
-		return
+		return gferrors.BadRequest(err.Error())
 	}
-	writeJSON(w, http.StatusOK, map[string]interface{}{
+	return c.JSON(http.StatusOK, map[string]interface{}{
 		"updated":  true,
 		"patterns": patterns,
 		"count":    len(patterns),
 	})
 }
 
-func (p *Panel) handleLiveWS(w http.ResponseWriter, r *http.Request) {
-	if !p.authorizeAction(w, r, "*", "live_traffic") {
-		return
+func (p *Panel) handleLiveWS(c *router.Context) error {
+	w, r := c.Writer, c.Request
+	if err := p.authorizeAction(c, "*", "live_traffic"); err != nil {
+		return err
 	}
 	if p == nil || p.live == nil {
-		writeErr(w, fmt.Errorf("live runtime is not enabled"))
-		return
+		return fmt.Errorf("live runtime is not enabled")
 	}
 	if !allowLiveWSOrigin(r) {
-		http.Error(w, "websocket origin not allowed", http.StatusForbidden)
-		return
+		return gferrors.Forbidden("websocket origin not allowed")
 	}
 
 	websocket.Handler(func(conn *websocket.Conn) {
@@ -1205,6 +1202,7 @@ func (p *Panel) handleLiveWS(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}).ServeHTTP(w, r)
+	return nil
 }
 
 func allowLiveWSOrigin(r *http.Request) bool {

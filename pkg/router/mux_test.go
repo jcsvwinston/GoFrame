@@ -27,8 +27,8 @@ func TestMux_NestedGroupMiddlewareInheritance(t *testing.T) {
 		r.Use(outerMW)
 		r.Group(func(r *Mux) {
 			r.Use(innerMW)
-			r.Get("/nested", func(w http.ResponseWriter, _ *http.Request) {
-				w.WriteHeader(http.StatusOK)
+			r.Get("/nested", func(c *Context) error {
+				return c.NoContent()
 			})
 		})
 	})
@@ -37,8 +37,8 @@ func TestMux_NestedGroupMiddlewareInheritance(t *testing.T) {
 	rec := httptest.NewRecorder()
 	m.ServeHTTP(rec, req)
 
-	if rec.Code != http.StatusOK {
-		t.Fatalf("expected 200, got %d", rec.Code)
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("expected 204, got %d", rec.Code)
 	}
 	if got := rec.Header().Get("X-Outer-MW"); got != "1" {
 		t.Fatalf("expected outer middleware header, got %q", got)
@@ -51,8 +51,8 @@ func TestMux_NestedGroupMiddlewareInheritance(t *testing.T) {
 func TestMux_MountRoot(t *testing.T) {
 	m := NewMux()
 	sub := NewMux()
-	sub.Get("/health", func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusOK)
+	sub.Get("/health", func(c *Context) error {
+		return c.NoContent()
 	})
 
 	m.Mount("/", sub)
@@ -61,8 +61,8 @@ func TestMux_MountRoot(t *testing.T) {
 	rec := httptest.NewRecorder()
 	m.ServeHTTP(rec, req)
 
-	if rec.Code != http.StatusOK {
-		t.Fatalf("expected 200, got %d", rec.Code)
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("expected 204, got %d", rec.Code)
 	}
 }
 
@@ -79,8 +79,8 @@ func TestMux_GroupRouteInheritsGroupMiddleware(t *testing.T) {
 	m.Group(func(r *Mux) {
 		r.Use(groupMW)
 		r.Route("/api", func(sub *Mux) {
-			sub.Get("/ping", func(w http.ResponseWriter, _ *http.Request) {
-				w.WriteHeader(http.StatusOK)
+			sub.Get("/ping", func(c *Context) error {
+				return c.NoContent()
 			})
 		})
 	})
@@ -89,8 +89,8 @@ func TestMux_GroupRouteInheritsGroupMiddleware(t *testing.T) {
 	rec := httptest.NewRecorder()
 	m.ServeHTTP(rec, req)
 
-	if rec.Code != http.StatusOK {
-		t.Fatalf("expected 200, got %d", rec.Code)
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("expected 204, got %d", rec.Code)
 	}
 	if got := rec.Header().Get("X-Group-MW"); got != "1" {
 		t.Fatalf("expected group middleware header, got %q", got)
@@ -100,8 +100,8 @@ func TestMux_GroupRouteInheritsGroupMiddleware(t *testing.T) {
 func TestMux_MountExactPrefixRedirectsToCanonicalSubtree(t *testing.T) {
 	m := NewMux()
 	sub := NewMux()
-	sub.Get("/", func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusOK)
+	sub.Get("/", func(c *Context) error {
+		return c.NoContent()
 	})
 
 	m.Mount("/admin", sub)

@@ -16,8 +16,8 @@ import (
 
 func TestContextHandler_UnifiedAccess(t *testing.T) {
 	mux := NewMux()
-	mux.Post("/users/{id}", ContextHandler(func(c *Context) {
-		_ = c.JSON(http.StatusOK, map[string]string{
+	mux.Post("/users/{id}", func(c *Context) error {
+		return c.JSON(http.StatusOK, map[string]string{
 			"id":         c.Param("id"),
 			"tenant":     c.Query("tenant"),
 			"title":      c.Form("title"),
@@ -25,7 +25,7 @@ func TestContextHandler_UnifiedAccess(t *testing.T) {
 			"value_ten":  c.Value("tenant"),
 			"value_form": c.Value("title"),
 		})
-	}))
+	})
 
 	req := httptest.NewRequest(http.MethodPost, "/users/42?tenant=acme", strings.NewReader("title=hello"))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
@@ -59,13 +59,12 @@ func TestContext_HTMLWithBindings(t *testing.T) {
 	tpl := template.Must(template.New("page.html").Parse(`{{define "page.html"}}{{.Title}}|{{.ID}}|{{.State}}{{end}}`))
 
 	mux := NewMux()
-	mux.Get("/", ContextHandler(func(c *Context) {
+	mux.SetHTMLTemplates(tpl)
+	mux.Get("/", func(c *Context) error {
 		c.Set("Title", "Dashboard")
 		c.BindData(map[string]interface{}{"State": "ok"})
-		if err := c.HTML(http.StatusCreated, "page.html", map[string]interface{}{"ID": 7}); err != nil {
-			t.Fatalf("render html: %v", err)
-		}
-	}, WithTemplates(tpl)))
+		return c.HTML(http.StatusCreated, "page.html", map[string]interface{}{"ID": 7})
+	})
 
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	rec := httptest.NewRecorder()
@@ -89,11 +88,9 @@ func TestContext_XML(t *testing.T) {
 	}
 
 	mux := NewMux()
-	mux.Get("/xml", ContextHandler(func(c *Context) {
-		if err := c.XML(http.StatusOK, payload{Status: "ok"}); err != nil {
-			t.Fatalf("write xml: %v", err)
-		}
-	}))
+	mux.Get("/xml", func(c *Context) error {
+		return c.XML(http.StatusOK, payload{Status: "ok"})
+	})
 
 	req := httptest.NewRequest(http.MethodGet, "/xml", nil)
 	rec := httptest.NewRecorder()
@@ -118,11 +115,9 @@ func TestContext_Download(t *testing.T) {
 	}
 
 	mux := NewMux()
-	mux.Get("/download", ContextHandler(func(c *Context) {
-		if err := c.Download(path, "export.txt"); err != nil {
-			t.Fatalf("download file: %v", err)
-		}
-	}))
+	mux.Get("/download", func(c *Context) error {
+		return c.Download(path, "export.txt")
+	})
 
 	req := httptest.NewRequest(http.MethodGet, "/download", nil)
 	rec := httptest.NewRecorder()
@@ -141,25 +136,22 @@ func TestContext_Download(t *testing.T) {
 
 func TestContext_SessionHelpers(t *testing.T) {
 	sessionManager := auth.NewSessionManager(auth.SessionConfig{})
-	opts := []ContextOption{WithSession(sessionManager)}
-
 	mux := NewMux()
 	mux.Use(sessionManager.Middleware())
+	mux.SetSessionManager(sessionManager)
 
-	mux.Get("/set", ContextHandler(func(c *Context) {
+	mux.Get("/set", func(c *Context) error {
 		if err := c.SessionPutString("name", "alice"); err != nil {
-			t.Fatalf("session put: %v", err)
+			return err
 		}
-		if err := c.NoContent(); err != nil {
-			t.Fatalf("no content: %v", err)
-		}
-	}, opts...))
+		return c.NoContent()
+	})
 
-	mux.Get("/get", ContextHandler(func(c *Context) {
-		_ = c.JSON(http.StatusOK, map[string]string{
+	mux.Get("/get", func(c *Context) error {
+		return c.JSON(http.StatusOK, map[string]string{
 			"name": c.SessionGetString("name"),
 		})
-	}, opts...))
+	})
 
 	setReq := httptest.NewRequest(http.MethodGet, "/set", nil)
 	setRec := httptest.NewRecorder()
@@ -198,9 +190,9 @@ func TestContext_SessionHelpers(t *testing.T) {
 	}
 }
 
-func TestContextHandler_NilHandler(t *testing.T) {
+func TestContextHandler_EmptyHandlers(t *testing.T) {
 	mux := NewMux()
-	mux.Get("/", ContextHandler(nil))
+	mux.HandleFunc("/", ContextHandler())
 
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	rec := httptest.NewRecorder()

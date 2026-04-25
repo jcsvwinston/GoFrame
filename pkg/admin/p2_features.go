@@ -10,6 +10,7 @@ import (
 	"time"
 
 	gferrors "github.com/jcsvwinston/GoFrame/pkg/errors"
+	"github.com/jcsvwinston/GoFrame/pkg/router"
 )
 
 // Deployment detection API handlers
@@ -37,9 +38,9 @@ type clusterNodeInfo struct {
 	Status   string `json:"status"`
 }
 
-func (p *Panel) handleDeploymentInfo(w http.ResponseWriter, r *http.Request) {
-	if !p.authorizeAction(w, r, "*", "deployment_view") {
-		return
+func (p *Panel) handleDeploymentInfo(c *router.Context) error {
+	if err := p.authorizeAction(c, "*", "system_view"); err != nil {
+		return err
 	}
 
 	runtimeLabel := classifyRuntime(p.config.SessionRuntime)
@@ -63,7 +64,7 @@ func (p *Panel) handleDeploymentInfo(w http.ResponseWriter, r *http.Request) {
 		info.ClusterNodes = p.getClusterNodes()
 	}
 
-	writeJSON(w, http.StatusOK, info)
+	return c.JSON(http.StatusOK, info)
 }
 
 func (p *Panel) getClusterNodes() []clusterNodeInfo {
@@ -92,22 +93,15 @@ func (p *Panel) getClusterNodes() []clusterNodeInfo {
 
 // Cache management API handlers
 
-func (p *Panel) handleCacheStats(w http.ResponseWriter, r *http.Request) {
-	if !p.authorizeAction(w, r, "*", "cache_view") {
-		return
+func (p *Panel) handleCacheStats(c *router.Context) error {
+	r := c.Request
+	if err := p.authorizeAction(c, "*", "cache_view"); err != nil {
+		return err
 	}
 
 	snapshot := inspectRedisRuntime(r.Context(), p.config.RedisURL)
-	if !snapshot.Enabled {
-		writeJSON(w, http.StatusOK, map[string]interface{}{
-			"enabled": false,
-			"reason":  snapshot.Message,
-		})
-		return
-	}
-
-	writeJSON(w, http.StatusOK, map[string]interface{}{
-		"enabled":    true,
+	return c.JSON(http.StatusOK, map[string]interface{}{
+		"enabled":    snapshot.Enabled,
 		"redis_url":  snapshot.RedisURL,
 		"status":     snapshot.Status,
 		"message":    snapshot.Message,
@@ -116,18 +110,18 @@ func (p *Panel) handleCacheStats(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (p *Panel) handleFlushCache(w http.ResponseWriter, r *http.Request) {
-	if !p.authorizeAction(w, r, "*", "cache_manage") {
-		return
+func (p *Panel) handleFlushCache(c *router.Context) error {
+	r := c.Request
+	if err := p.authorizeAction(c, "*", "cache_manage"); err != nil {
+		return err
 	}
 
 	result, err := flushRedisRuntime(r.Context(), p.config.RedisURL)
 	if err != nil {
-		writeErr(w, gferrors.BadRequest(err.Error()))
-		return
+		return gferrors.BadRequest(err.Error())
 	}
 
-	writeJSON(w, http.StatusOK, map[string]interface{}{
+	return c.JSON(http.StatusOK, map[string]interface{}{
 		"flushed":          true,
 		"redis_url":        result.RedisURL,
 		"status":           result.Status,
@@ -148,31 +142,25 @@ type storageFileInfo struct {
 	ModTime time.Time `json:"mod_time"`
 }
 
-func (p *Panel) handleListStorage(w http.ResponseWriter, r *http.Request) {
-	if !p.authorizeAction(w, r, "*", "storage_view") {
-		return
-	}
-
-	storagePath, err := normalizeStorageBrowsePath(r.URL.Query().Get("path"))
-	if err != nil {
-		writeErr(w, gferrors.Forbidden(err.Error()))
-		return
+func (p *Panel) handleListStorage(c *router.Context) error {
+	r := c.Request
+	storagePath := c.Query("path")
+	if err := p.authorizeAction(c, "*", "storage_view"); err != nil {
+		return err
 	}
 
 	if p.store != nil {
 		files, err := listConfiguredStorage(r.Context(), p.store, storagePath)
 		if err != nil {
-			writeErr(w, err)
-			return
+			return err
 		}
 
-		writeJSON(w, http.StatusOK, map[string]interface{}{
+		return c.JSON(http.StatusOK, map[string]interface{}{
 			"backend": "store",
 			"path":    storagePath,
 			"files":   files,
 			"total":   len(files),
 		})
-		return
 	}
 
 	relativePath := strings.TrimPrefix(storagePath, adminStorageBrowseRoot)
@@ -180,15 +168,17 @@ func (p *Panel) handleListStorage(w http.ResponseWriter, r *http.Request) {
 
 	absRoot, err := filepath.Abs(adminStorageBrowseRoot)
 	if err != nil {
-		writeErr(w, gferrors.InternalError("resolve storage root"))
-		return
+		return gferrors.InternalError("resolve storage root")
 	}
 	absPath := filepath.Join(absRoot, filepath.FromSlash(relativePath))
 
+	if !strings.HasPrefix(absPath, absRoot) {
+		return gferrors.Forbidden("access denied: path outside storage root")
+	}
+
 	entries, err := os.ReadDir(absPath)
 	if err != nil {
-		writeErr(w, gferrors.NotFound("storage path", storagePath))
-		return
+		return gferrors.NotFound("storage path", storagePath)
 	}
 
 	files := make([]storageFileInfo, 0, len(entries))
@@ -208,7 +198,7 @@ func (p *Panel) handleListStorage(w http.ResponseWriter, r *http.Request) {
 
 	sortStorageEntries(files)
 
-	writeJSON(w, http.StatusOK, map[string]interface{}{
+	return c.JSON(http.StatusOK, map[string]interface{}{
 		"backend": "filesystem",
 		"path":    storagePath,
 		"files":   files,
@@ -218,11 +208,11 @@ func (p *Panel) handleListStorage(w http.ResponseWriter, r *http.Request) {
 
 // Email stats API handlers
 
-func (p *Panel) handleEmailStats(w http.ResponseWriter, r *http.Request) {
-	if !p.authorizeAction(w, r, "*", "email_view") {
-		return
+func (p *Panel) handleEmailStats(c *router.Context) error {
+	if err := p.authorizeAction(c, "*", "email_view"); err != nil {
+		return err
 	}
 
 	snapshot := inspectEmailRuntime(p.config)
-	writeJSON(w, http.StatusOK, snapshot)
+	return c.JSON(http.StatusOK, snapshot)
 }

@@ -9,25 +9,20 @@ import (
 func TestMux_ResourceRegistersRESTRoutes(t *testing.T) {
 	mux := NewMux()
 	mux.Resource("/users", ResourceHandlers{
-		List: func(w http.ResponseWriter, _ *http.Request) {
-			w.WriteHeader(http.StatusOK)
-			_, _ = w.Write([]byte("list"))
+		List: func(c *Context) error {
+			return c.JSON(http.StatusOK, "list")
 		},
-		Create: func(w http.ResponseWriter, _ *http.Request) {
-			w.WriteHeader(http.StatusCreated)
-			_, _ = w.Write([]byte("create"))
+		Create: func(c *Context) error {
+			return c.JSON(http.StatusCreated, "create")
 		},
-		Retrieve: func(w http.ResponseWriter, r *http.Request) {
-			w.WriteHeader(http.StatusOK)
-			_, _ = w.Write([]byte("get:" + r.PathValue("id")))
+		Retrieve: func(c *Context) error {
+			return c.JSON(http.StatusOK, "get:"+c.Param("id"))
 		},
-		Update: func(w http.ResponseWriter, r *http.Request) {
-			w.WriteHeader(http.StatusOK)
-			_, _ = w.Write([]byte("update:" + r.PathValue("id")))
+		Update: func(c *Context) error {
+			return c.JSON(http.StatusOK, "update:"+c.Param("id"))
 		},
-		Delete: func(w http.ResponseWriter, r *http.Request) {
-			w.WriteHeader(http.StatusOK)
-			_, _ = w.Write([]byte("delete:" + r.PathValue("id")))
+		Delete: func(c *Context) error {
+			return c.JSON(http.StatusOK, "delete:"+c.Param("id"))
 		},
 	})
 
@@ -37,11 +32,11 @@ func TestMux_ResourceRegistersRESTRoutes(t *testing.T) {
 		code   int
 		body   string
 	}{
-		{method: http.MethodGet, path: "/users/", code: http.StatusOK, body: "list"},
-		{method: http.MethodPost, path: "/users/", code: http.StatusCreated, body: "create"},
-		{method: http.MethodGet, path: "/users/7", code: http.StatusOK, body: "get:7"},
-		{method: http.MethodPut, path: "/users/7", code: http.StatusOK, body: "update:7"},
-		{method: http.MethodDelete, path: "/users/7", code: http.StatusOK, body: "delete:7"},
+		{method: http.MethodGet, path: "/users/", code: http.StatusOK, body: "\"list\"\n"},
+		{method: http.MethodPost, path: "/users/", code: http.StatusCreated, body: "\"create\"\n"},
+		{method: http.MethodGet, path: "/users/7", code: http.StatusOK, body: "\"get:7\"\n"},
+		{method: http.MethodPut, path: "/users/7", code: http.StatusOK, body: "\"update:7\"\n"},
+		{method: http.MethodDelete, path: "/users/7", code: http.StatusOK, body: "\"delete:7\"\n"},
 	}
 
 	for _, tc := range cases {
@@ -61,9 +56,8 @@ func TestMux_ResourceRegistersRESTRoutes(t *testing.T) {
 func TestMux_ResourceSkipsNilHandlers(t *testing.T) {
 	mux := NewMux()
 	mux.Resource("projects", ResourceHandlers{
-		List: func(w http.ResponseWriter, _ *http.Request) {
-			w.WriteHeader(http.StatusOK)
-			_, _ = w.Write([]byte("list"))
+		List: func(c *Context) error {
+			return c.JSON(http.StatusOK, "list")
 		},
 	})
 
@@ -72,6 +66,9 @@ func TestMux_ResourceSkipsNilHandlers(t *testing.T) {
 	mux.ServeHTTP(getRec, getReq)
 	if getRec.Code != http.StatusOK {
 		t.Fatalf("GET /projects/ expected status 200, got %d", getRec.Code)
+	}
+	if getRec.Body.String() != "\"list\"\n" {
+		t.Fatalf("GET /projects/ expected body list, got %q", getRec.Body.String())
 	}
 
 	postReq := httptest.NewRequest(http.MethodPost, "/projects/", nil)
@@ -85,8 +82,8 @@ func TestMux_ResourceSkipsNilHandlers(t *testing.T) {
 func TestMux_ResourceCanonicalRedirect(t *testing.T) {
 	mux := NewMux()
 	mux.Resource("/reports", ResourceHandlers{
-		List: func(w http.ResponseWriter, _ *http.Request) {
-			w.WriteHeader(http.StatusOK)
+		List: func(c *Context) error {
+			return c.NoContent()
 		},
 	})
 

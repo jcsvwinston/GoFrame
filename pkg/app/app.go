@@ -453,7 +453,7 @@ func (a *App) MountOpenAPI(pattern string, provider openapi.DocumentProvider) er
 		return nil
 	}
 
-	a.Router.Get(path, openapi.HandlerFunc(provider))
+	a.Router.Get(path, router.FromHTTP(openapi.HandlerFunc(provider)))
 	a.openAPIRoutes[path] = struct{}{}
 	return nil
 }

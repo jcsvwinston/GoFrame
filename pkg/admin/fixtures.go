@@ -14,6 +14,7 @@ import (
 
 	gferrors "github.com/jcsvwinston/GoFrame/pkg/errors"
 	"github.com/jcsvwinston/GoFrame/pkg/model"
+	"github.com/jcsvwinston/GoFrame/pkg/router"
 	"github.com/jcsvwinston/GoFrame/pkg/storage"
 )
 
@@ -335,15 +336,15 @@ func (p *Panel) Loaddata(ctx context.Context, cfg LoaddataConfig) (*ImportReport
 // POST /api/fixtures/dumpdata
 // Body: {"models": ["User", "Post"], "database": "default"}
 // Returns export result with download URL.
-func (p *Panel) handleDumpdata(w http.ResponseWriter, r *http.Request) {
-	if !p.authorizeAction(w, r, "*", "export_data") {
-		return
+func (p *Panel) handleDumpdata(c *router.Context) error {
+	r := c.Request
+	if err := p.authorizeAction(c, "*", "export_data"); err != nil {
+		return err
 	}
 
 	var cfg DumpdataConfig
 	if err := json.NewDecoder(r.Body).Decode(&cfg); err != nil {
-		writeErr(w, gferrors.BadRequest("invalid JSON: "+err.Error()))
-		return
+		return gferrors.BadRequest("invalid JSON: " + err.Error())
 	}
 
 	result, err := p.Dumpdata(r.Context(), cfg)
@@ -364,36 +365,34 @@ func (p *Panel) handleDumpdata(w http.ResponseWriter, r *http.Request) {
 	if result.Status == "failed" {
 		status = http.StatusInternalServerError
 	}
-	writeJSON(w, status, result)
+	return c.JSON(status, result)
 }
 
 // handleLoaddata is the HTTP handler for loaddata.
 // POST /api/fixtures/loaddata
 // Body: {"key": "storage-key", "on_conflict": "skip"}
 // Returns import report.
-func (p *Panel) handleLoaddata(w http.ResponseWriter, r *http.Request) {
-	if !p.authorizeAction(w, r, "*", "import_data") {
-		return
+func (p *Panel) handleLoaddata(c *router.Context) error {
+	r := c.Request
+	if err := p.authorizeAction(c, "*", "import_data"); err != nil {
+		return err
 	}
 
 	var cfg LoaddataConfig
 	if err := json.NewDecoder(r.Body).Decode(&cfg); err != nil {
-		writeErr(w, gferrors.BadRequest("invalid JSON: "+err.Error()))
-		return
+		return gferrors.BadRequest("invalid JSON: " + err.Error())
 	}
 
 	if cfg.StorageKey == "" {
-		writeErr(w, gferrors.BadRequest("key is required"))
-		return
+		return gferrors.BadRequest("key is required")
 	}
 
 	report, err := p.Loaddata(r.Context(), cfg)
 	if err != nil {
-		writeErr(w, fmt.Errorf("loaddata: %w", err))
-		return
+		return fmt.Errorf("loaddata: %w", err)
 	}
 
-	writeJSON(w, http.StatusOK, report)
+	return c.JSON(http.StatusOK, report)
 }
 
 // extractPKValue extracts the primary key value from a struct reflect value.

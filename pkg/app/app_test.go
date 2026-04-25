@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/jcsvwinston/GoFrame/pkg/openapi"
+	"github.com/jcsvwinston/GoFrame/pkg/router"
 )
 
 func testAppConfig() *Config {
@@ -406,12 +407,13 @@ func TestAppNew_SQLSessionStorePersistsAcrossRequests(t *testing.T) {
 	}
 	defer a.Shutdown(context.Background())
 
-	a.Router.Get("/set", func(w http.ResponseWriter, r *http.Request) {
-		a.Session.Put(r.Context(), "name", "alice")
-		w.WriteHeader(http.StatusNoContent)
+	a.Router.Get("/set", func(c *router.Context) error {
+		a.Session.Put(c.Request.Context(), "name", "alice")
+		return c.NoContent()
 	})
-	a.Router.Get("/get", func(w http.ResponseWriter, r *http.Request) {
-		_, _ = w.Write([]byte(a.Session.GetString(r.Context(), "name")))
+	a.Router.Get("/get", func(c *router.Context) error {
+		_, _ = c.Writer.Write([]byte(a.Session.GetString(c.Request.Context(), "name")))
+		return nil
 	})
 
 	setReq := httptest.NewRequest(http.MethodGet, "/set", nil)
@@ -667,17 +669,16 @@ func TestAppDatabaseForRequest_UsesTenantDatabaseAlias(t *testing.T) {
 	}
 	defer a.Shutdown(context.Background())
 
-	a.Router.Get("/scope", func(w http.ResponseWriter, r *http.Request) {
-		scope, ok := RequestScopeFromContext(r.Context())
+	a.Router.Get("/scope", func(c *router.Context) error {
+		scope, ok := RequestScopeFromContext(c.Request.Context())
 		if !ok {
-			http.Error(w, "scope missing", http.StatusInternalServerError)
-			return
+			return errors.New("scope missing")
 		}
-		if _, err := a.DatabaseForRequest(r); err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
+		if _, err := a.DatabaseForRequest(c.Request); err != nil {
+			return c.JSON(http.StatusBadRequest, map[string]any{"error": err.Error()})
 		}
-		_, _ = w.Write([]byte(scope.Site + "|" + scope.Tenant + "|" + scope.DatabaseAlias))
+		_, _ = c.Writer.Write([]byte(scope.Site + "|" + scope.Tenant + "|" + scope.DatabaseAlias))
+		return nil
 	})
 
 	req := httptest.NewRequest(http.MethodGet, "/scope", nil)

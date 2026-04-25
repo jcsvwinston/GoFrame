@@ -147,6 +147,9 @@ func (c *CRUD) FindAll(ctx context.Context, opts QueryOpts) (*PaginatedResult, e
 	}
 
 	totalPages := int(math.Ceil(float64(total) / float64(opts.PageSize)))
+	if totalPages < 1 {
+		totalPages = 1
+	}
 	return &PaginatedResult{
 		Items:      items.Interface(),
 		Total:      total,

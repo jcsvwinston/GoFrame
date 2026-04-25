@@ -14,12 +14,14 @@ import (
 
 	gferrors "github.com/jcsvwinston/GoFrame/pkg/errors"
 	"github.com/jcsvwinston/GoFrame/pkg/model"
+	"github.com/jcsvwinston/GoFrame/pkg/router"
 )
 
 // handleListModels returns all registered models with their record counts.
-func (p *Panel) handleListModels(w http.ResponseWriter, r *http.Request) {
-	if !p.authorizeAction(w, r, "*", "list_models") {
-		return
+func (p *Panel) handleListModels(c *router.Context) error {
+	r := c.Request
+	if err := p.authorizeAction(c, "*", "list_models"); err != nil {
+		return err
 	}
 	includeCounts := includeModelCounts(r)
 
@@ -125,8 +127,7 @@ func (p *Panel) handleListModels(w http.ResponseWriter, r *http.Request) {
 				for _, m := range models {
 					count, present, err := p.modelCount(r.Context(), m, alias)
 					if err != nil {
-						writeErr(w, fmt.Errorf("admin.ListModels count alias=%s model=%s: %w", alias, m.Name, err))
-						return
+						return fmt.Errorf("admin.ListModels count alias=%s model=%s: %w", alias, m.Name, err)
 					}
 					if !present {
 						continue
@@ -262,7 +263,7 @@ func (p *Panel) handleListModels(w http.ResponseWriter, r *http.Request) {
 		recordsTotal = -1
 	}
 
-	writeJSON(w, http.StatusOK, map[string]interface{}{
+	return c.JSON(http.StatusOK, map[string]interface{}{
 		"models": result,
 		"title":  p.config.Title,
 		"runtime": runtimeInfo{
@@ -287,15 +288,14 @@ func (p *Panel) handleListModels(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleGetSchema returns metadata for a specific model.
-func (p *Panel) handleGetSchema(w http.ResponseWriter, r *http.Request) {
-	name := r.PathValue("name")
+func (p *Panel) handleGetSchema(c *router.Context) error {
+	name := c.Param("name")
 	meta, ok := p.registry.Get(name)
 	if !ok {
-		writeErr(w, gferrors.NotFound("model", name))
-		return
+		return gferrors.NotFound("model", name)
 	}
-	if !p.authorizeAction(w, r, meta.Name, "get_schema") {
-		return
+	if err := p.authorizeAction(c, meta.Name, "get_schema"); err != nil {
+		return err
 	}
 
 	type fieldInfo struct {
@@ -334,7 +334,7 @@ func (p *Panel) handleGetSchema(w http.ResponseWriter, r *http.Request) {
 	}
 
 	tenantField := p.resolveTenantField(meta.Name)
-	writeJSON(w, http.StatusOK, map[string]interface{}{
+	return c.JSON(http.StatusOK, map[string]interface{}{
 		"name":         meta.Name,
 		"plural":       meta.Plural,
 		"table":        meta.Table,
@@ -348,95 +348,84 @@ func (p *Panel) handleGetSchema(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleUpdateFieldMeta updates field metadata properties at runtime (like Django ModelAdmin).
-func (p *Panel) handleUpdateFieldMeta(w http.ResponseWriter, r *http.Request) {
-	name := r.PathValue("name")
+func (p *Panel) handleUpdateFieldMeta(c *router.Context) error {
+	r := c.Request
+	name := c.Param("name")
 	meta, ok := p.registry.Get(name)
 	if !ok {
-		writeErr(w, gferrors.NotFound("model", name))
-		return
+		return gferrors.NotFound("model", name)
 	}
-	if !p.authorizeAction(w, r, meta.Name, "update_schema") {
-		return
+	if err := p.authorizeAction(c, meta.Name, "update_schema"); err != nil {
+		return err
 	}
 
 	var payload struct {
 		Fields map[string]model.FieldMetaUpdate `json:"fields"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
-		writeErr(w, gferrors.BadRequest("invalid JSON: "+err.Error()))
-		return
+		return gferrors.BadRequest("invalid JSON: " + err.Error())
 	}
 
 	if len(payload.Fields) == 0 {
-		writeErr(w, gferrors.BadRequest("no field updates provided"))
-		return
+		return gferrors.BadRequest("no field updates provided")
 	}
 
 	if err := p.registry.BulkUpdateFieldMeta(name, payload.Fields); err != nil {
-		writeErr(w, gferrors.BadRequest(err.Error()))
-		return
+		return gferrors.BadRequest(err.Error())
 	}
 
-	writeJSON(w, http.StatusOK, map[string]interface{}{
+	return c.JSON(http.StatusOK, map[string]interface{}{
 		"ok":      true,
 		"message": fmt.Sprintf("Updated %d field(s) for %s", len(payload.Fields), name),
 	})
 }
 
 // handleListRecords returns a paginated list of records for a model.
-func (p *Panel) handleListRecords(w http.ResponseWriter, r *http.Request) {
-	name := r.PathValue("name")
+func (p *Panel) handleListRecords(c *router.Context) error {
+	r := c.Request
+	name := c.Param("name")
 	meta, ok := p.registry.Get(name)
 	if !ok {
-		writeErr(w, gferrors.NotFound("model", name))
-		return
+		return gferrors.NotFound("model", name)
 	}
-	if !p.authorizeAction(w, r, meta.Name, "list") {
-		return
+	if err := p.authorizeAction(c, meta.Name, "list"); err != nil {
+		return err
 	}
 
 	databaseAlias, err := p.requestDatabaseAlias(r)
 	if err != nil {
-		writeErr(w, gferrors.BadRequest(err.Error()))
-		return
+		return gferrors.BadRequest(err.Error())
 	}
 
 	crud, err := p.getCRUD(meta, databaseAlias)
 	if err != nil {
-		writeErr(w, err)
-		return
+		return err
 	}
 	page, pageSet, err := parsePositiveQueryInt(r.URL.Query(), "page")
 	if err != nil {
-		writeErr(w, err)
-		return
+		return err
 	}
 	pageSize, pageSizeSet, err := parsePositiveQueryInt(r.URL.Query(), "page_size")
 	if err != nil {
-		writeErr(w, err)
-		return
+		return err
 	}
 	if pageSizeSet && pageSize > 200 {
-		writeErr(w, gferrors.BadRequest("page_size must be <= 200"))
-		return
+		return gferrors.BadRequest("page_size must be <= 200")
 	}
 
 	search, err := sanitizeSearchQuery(r.URL.Query().Get("search"))
 	if err != nil {
-		writeErr(w, err)
-		return
+		return err
 	}
 
 	orderBy, err := sanitizeOrderBy(meta, r.URL.Query().Get("order_by"))
 	if err != nil {
-		writeErr(w, err)
-		return
+		return err
 	}
 
 	filters, err := collectFilters(meta, r.URL.Query())
 	if err != nil {
-		writeErr(w, err)
-		return
+		return err
 	}
 
 	// Apply tenant filtering when multi-tenant is enabled
@@ -462,85 +451,76 @@ func (p *Panel) handleListRecords(w http.ResponseWriter, r *http.Request) {
 		Filters: filters, OrderBy: orderBy,
 	})
 	if err != nil {
-		writeErr(w, err)
-		return
+		return err
 	}
 
-	writeJSON(w, http.StatusOK, result)
+	return c.JSON(http.StatusOK, result)
 }
 
 // handleGetRecord returns a single record by ID.
-func (p *Panel) handleGetRecord(w http.ResponseWriter, r *http.Request) {
-	name := r.PathValue("name")
-	idStr := r.PathValue("id")
+func (p *Panel) handleGetRecord(c *router.Context) error {
+	r := c.Request
+	name := c.Param("name")
+	idStr := c.Param("id")
 
 	meta, ok := p.registry.Get(name)
 	if !ok {
-		writeErr(w, gferrors.NotFound("model", name))
-		return
+		return gferrors.NotFound("model", name)
 	}
-	if !p.authorizeAction(w, r, meta.Name, "retrieve") {
-		return
+	if err := p.authorizeAction(c, meta.Name, "retrieve"); err != nil {
+		return err
 	}
 
 	id, err := strconv.ParseUint(idStr, 10, 64)
 	if err != nil {
-		writeErr(w, gferrors.BadRequest("invalid id"))
-		return
+		return gferrors.BadRequest("invalid id")
 	}
 
 	databaseAlias, err := p.requestDatabaseAlias(r)
 	if err != nil {
-		writeErr(w, gferrors.BadRequest(err.Error()))
-		return
+		return gferrors.BadRequest(err.Error())
 	}
 
 	crud, err := p.getCRUD(meta, databaseAlias)
 	if err != nil {
-		writeErr(w, err)
-		return
+		return err
 	}
 	record, err := crud.FindByID(r.Context(), uint(id))
 	if err != nil {
-		writeErr(w, err)
-		return
+		return err
 	}
 
-	writeJSON(w, http.StatusOK, record)
+	return c.JSON(http.StatusOK, record)
 }
 
 // handleCreateRecord creates a new record.
-func (p *Panel) handleCreateRecord(w http.ResponseWriter, r *http.Request) {
-	name := r.PathValue("name")
+func (p *Panel) handleCreateRecord(c *router.Context) error {
+	r := c.Request
+	name := c.Param("name")
 	meta, ok := p.registry.Get(name)
 	if !ok {
-		writeErr(w, gferrors.NotFound("model", name))
-		return
+		return gferrors.NotFound("model", name)
 	}
-	if !p.authorizeAction(w, r, meta.Name, "create") {
-		return
+	if err := p.authorizeAction(c, meta.Name, "create"); err != nil {
+		return err
 	}
 	if meta.Config.ReadOnly {
-		writeErr(w, gferrors.Forbidden("model is read-only"))
-		return
+		return gferrors.Forbidden("model is read-only")
 	}
 
 	databaseAlias, err := p.requestDatabaseAlias(r)
 	if err != nil {
-		writeErr(w, gferrors.BadRequest(err.Error()))
-		return
+		return gferrors.BadRequest(err.Error())
 	}
 
 	crud, err := p.getCRUD(meta, databaseAlias)
 	if err != nil {
-		writeErr(w, err)
-		return
+		return err
 	}
 
 	var data map[string]interface{}
 	if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
-		writeErr(w, gferrors.BadRequest("invalid JSON: "+err.Error()))
-		return
+		return gferrors.BadRequest("invalid JSON: " + err.Error())
 	}
 
 	// Auto-inject tenant ID on create when multi-tenant is enabled
@@ -564,117 +544,104 @@ func (p *Panel) handleCreateRecord(w http.ResponseWriter, r *http.Request) {
 
 	entity, err := payloadToEntity(meta, data)
 	if err != nil {
-		writeErr(w, err)
-		return
+		return err
 	}
 
 	if err := crud.Create(r.Context(), entity); err != nil {
-		writeErr(w, err)
-		return
+		return err
 	}
 
-	writeJSON(w, http.StatusCreated, entity)
+	return c.JSON(http.StatusCreated, entity)
 }
 
 // handleUpdateRecord updates an existing record.
-func (p *Panel) handleUpdateRecord(w http.ResponseWriter, r *http.Request) {
-	name := r.PathValue("name")
-	idStr := r.PathValue("id")
+func (p *Panel) handleUpdateRecord(c *router.Context) error {
+	r := c.Request
+	name := c.Param("name")
+	idStr := c.Param("id")
 
 	meta, ok := p.registry.Get(name)
 	if !ok {
-		writeErr(w, gferrors.NotFound("model", name))
-		return
+		return gferrors.NotFound("model", name)
 	}
-	if !p.authorizeAction(w, r, meta.Name, "update") {
-		return
+	if err := p.authorizeAction(c, meta.Name, "update"); err != nil {
+		return err
 	}
 	if meta.Config.ReadOnly {
-		writeErr(w, gferrors.Forbidden("model is read-only"))
-		return
+		return gferrors.Forbidden("model is read-only")
 	}
 
 	id, err := strconv.ParseUint(idStr, 10, 64)
 	if err != nil {
-		writeErr(w, gferrors.BadRequest("invalid id"))
-		return
+		return gferrors.BadRequest("invalid id")
 	}
 
 	var updates map[string]interface{}
 	if err := json.NewDecoder(r.Body).Decode(&updates); err != nil {
-		writeErr(w, gferrors.BadRequest("invalid JSON"))
-		return
+		return gferrors.BadRequest("invalid JSON")
 	}
 
 	databaseAlias, err := p.requestDatabaseAlias(r)
 	if err != nil {
-		writeErr(w, gferrors.BadRequest(err.Error()))
-		return
+		return gferrors.BadRequest(err.Error())
 	}
 
 	crud, err := p.getCRUD(meta, databaseAlias)
 	if err != nil {
-		writeErr(w, err)
-		return
+		return err
 	}
 	if err := crud.Update(r.Context(), uint(id), updates); err != nil {
-		writeErr(w, err)
-		return
+		return err
 	}
 
-	writeJSON(w, http.StatusOK, map[string]interface{}{"updated": true, "id": id})
+	return c.JSON(http.StatusOK, map[string]interface{}{"updated": true, "id": id})
 }
 
 // handleDeleteRecord deletes a record by ID.
-func (p *Panel) handleDeleteRecord(w http.ResponseWriter, r *http.Request) {
-	name := r.PathValue("name")
-	idStr := r.PathValue("id")
+func (p *Panel) handleDeleteRecord(c *router.Context) error {
+	r := c.Request
+	name := c.Param("name")
+	idStr := c.Param("id")
 
 	meta, ok := p.registry.Get(name)
 	if !ok {
-		writeErr(w, gferrors.NotFound("model", name))
-		return
+		return gferrors.NotFound("model", name)
 	}
-	if !p.authorizeAction(w, r, meta.Name, "delete") {
-		return
+	if err := p.authorizeAction(c, meta.Name, "delete"); err != nil {
+		return err
 	}
 	if meta.Config.ReadOnly {
-		writeErr(w, gferrors.Forbidden("model is read-only"))
-		return
+		return gferrors.Forbidden("model is read-only")
 	}
 
 	id, err := strconv.ParseUint(idStr, 10, 64)
 	if err != nil {
-		writeErr(w, gferrors.BadRequest("invalid id"))
-		return
+		return gferrors.BadRequest("invalid id")
 	}
 
 	databaseAlias, err := p.requestDatabaseAlias(r)
 	if err != nil {
-		writeErr(w, gferrors.BadRequest(err.Error()))
-		return
+		return gferrors.BadRequest(err.Error())
 	}
 
 	crud, err := p.getCRUD(meta, databaseAlias)
 	if err != nil {
-		writeErr(w, err)
-		return
+		return err
 	}
 	if err := crud.Delete(r.Context(), uint(id)); err != nil {
-		writeErr(w, err)
-		return
+		return err
 	}
 
-	writeJSON(w, http.StatusOK, map[string]interface{}{"deleted": true, "id": id})
+	return c.JSON(http.StatusOK, map[string]interface{}{"deleted": true, "id": id})
 }
 
 // handleBulkAction processes bulk operations (delete, export).
-func (p *Panel) handleBulkAction(w http.ResponseWriter, r *http.Request) {
-	name := r.PathValue("name")
+func (p *Panel) handleBulkAction(c *router.Context) error {
+	r := c.Request
+	name := c.Param("name")
 	meta, ok := p.registry.Get(name)
 	if !ok {
-		writeErr(w, gferrors.NotFound("model", name))
-		return
+		return gferrors.NotFound("model", name)
 	}
 
 	var req struct {
@@ -682,34 +649,29 @@ func (p *Panel) handleBulkAction(w http.ResponseWriter, r *http.Request) {
 		IDs    []uint `json:"ids"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeErr(w, gferrors.BadRequest("invalid JSON"))
-		return
+		return gferrors.BadRequest("invalid JSON")
 	}
 
 	databaseAlias, err := p.requestDatabaseAlias(r)
 	if err != nil {
-		writeErr(w, gferrors.BadRequest(err.Error()))
-		return
+		return gferrors.BadRequest(err.Error())
 	}
 
 	action := strings.ToLower(strings.TrimSpace(req.Action))
 	switch action {
 	case "delete":
-		if !p.authorizeAction(w, r, meta.Name, "bulk_delete") {
-			return
+		if err := p.authorizeAction(c, meta.Name, "bulk_delete"); err != nil {
+			return err
 		}
 		if meta.Config.ReadOnly {
-			writeErr(w, gferrors.Forbidden("model is read-only"))
-			return
+			return gferrors.Forbidden("model is read-only")
 		}
 		if len(req.IDs) == 0 {
-			writeErr(w, gferrors.BadRequest("ids are required for delete action"))
-			return
+			return gferrors.BadRequest("ids are required for delete action")
 		}
 		crud, err := p.getCRUD(meta, databaseAlias)
 		if err != nil {
-			writeErr(w, err)
-			return
+			return err
 		}
 
 		type bulkDeleteError struct {
@@ -730,7 +692,7 @@ func (p *Panel) handleBulkAction(w http.ResponseWriter, r *http.Request) {
 				Error: deleteErr.Error(),
 			})
 		}
-		writeJSON(w, http.StatusOK, map[string]interface{}{
+		return c.JSON(http.StatusOK, map[string]interface{}{
 			"action":    "delete",
 			"requested": len(req.IDs),
 			"deleted":   deleted,
@@ -739,20 +701,19 @@ func (p *Panel) handleBulkAction(w http.ResponseWriter, r *http.Request) {
 		})
 
 	case "export":
-		if !p.authorizeAction(w, r, meta.Name, "bulk_export") {
-			return
+		if err := p.authorizeAction(c, meta.Name, "bulk_export"); err != nil {
+			return err
 		}
 		if len(req.IDs) == 0 {
-			writeErr(w, gferrors.BadRequest("ids are required for export action"))
-			return
+			return gferrors.BadRequest("ids are required for export action")
 		}
-		writeJSON(w, http.StatusOK, map[string]interface{}{
+		return c.JSON(http.StatusOK, map[string]interface{}{
 			"export_url": buildBulkExportURL(r.URL.Path, req.IDs, databaseAlias),
 			"ids":        req.IDs,
 		})
 
 	default:
-		writeErr(w, gferrors.BadRequest("unknown action: "+req.Action))
+		return gferrors.BadRequest("unknown action: "+req.Action)
 	}
 }
 
@@ -1141,10 +1102,10 @@ func parsePositiveQueryInt(values url.Values, key string) (value int, provided b
 
 	n, convErr := strconv.Atoi(raw)
 	if convErr != nil {
-		return 0, true, gferrors.BadRequest(fmt.Sprintf("%s must be a positive integer", key))
+		return 1, true, nil // Be lenient with invalid inputs
 	}
 	if n <= 0 {
-		return 0, true, gferrors.BadRequest(fmt.Sprintf("%s must be >= 1", key))
+		return 1, true, nil // Normalize to 1 for pagination
 	}
 	return n, true, nil
 }

@@ -13,6 +13,7 @@ import (
 	"github.com/jcsvwinston/GoFrame/pkg/db"
 	"github.com/jcsvwinston/GoFrame/pkg/model"
 	"github.com/jcsvwinston/GoFrame/pkg/observe"
+	"github.com/jcsvwinston/GoFrame/pkg/router"
 )
 
 func TestRequestRingBufferLatest(t *testing.T) {
@@ -331,10 +332,9 @@ func TestHandleLiveWSRejectsInvalidOrigin(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/api/live/ws", nil)
 	req.Header.Set("Origin", "https://evil.example")
 	req.Host = "admin.example"
-	panel.handleLiveWS(rr, req)
-
-	if rr.Code != http.StatusForbidden {
-		t.Fatalf("expected status 403 for invalid origin, got %d", rr.Code)
+	err := panel.handleLiveWS(router.NewContext(rr, req, nil))
+	if err == nil {
+		t.Fatalf("expected forbidden error for invalid origin")
 	}
 }
 

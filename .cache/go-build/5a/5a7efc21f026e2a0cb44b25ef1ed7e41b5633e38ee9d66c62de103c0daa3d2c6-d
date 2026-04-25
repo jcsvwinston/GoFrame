@@ -1,6 +1,0 @@
-./actions.go
-./default_auth.go
-./handlers.go
-./live.go
-./panel.go
-./sessions.go

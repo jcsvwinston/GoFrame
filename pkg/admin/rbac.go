@@ -5,11 +5,11 @@ import (
 	"fmt"
 	"net/http"
 	"sort"
-	"strings"
 
 	"github.com/jcsvwinston/GoFrame/pkg/auth"
 	"github.com/jcsvwinston/GoFrame/pkg/authz"
 	gferrors "github.com/jcsvwinston/GoFrame/pkg/errors"
+	"github.com/jcsvwinston/GoFrame/pkg/router"
 )
 
 // rbacEnforcer wraps the Casbin enforcer for admin authorization.
@@ -128,19 +128,18 @@ func (c *combinedAdminAuth) LoginHandler() http.Handler {
 
 // RBAC API Handlers
 
-func (p *Panel) handleListRBACPolicies(w http.ResponseWriter, r *http.Request) {
-	if !p.authorizeAction(w, r, "*", "rbac_list") {
-		return
+func (p *Panel) handleListRBACPolicies(c *router.Context) error {
+	if err := p.authorizeAction(c, "*", "rbac_list"); err != nil {
+		return err
 	}
 
 	if p.rbac == nil {
-		writeJSON(w, http.StatusOK, map[string]interface{}{
+		return c.JSON(http.StatusOK, map[string]interface{}{
 			"enabled":  false,
 			"reason":   "RBAC enforcer not configured",
 			"policies": []interface{}{},
 			"roles":    []interface{}{},
 		})
-		return
 	}
 
 	policies, _ := p.rbac.GetPolicy()
@@ -191,7 +190,7 @@ func (p *Panel) handleListRBACPolicies(w http.ResponseWriter, r *http.Request) {
 	}
 	sort.Strings(roleList)
 
-	writeJSON(w, http.StatusOK, map[string]interface{}{
+	return c.JSON(http.StatusOK, map[string]interface{}{
 		"enabled":   true,
 		"policies":  formattedPolicies,
 		"roles":     formattedRoles,
@@ -200,14 +199,14 @@ func (p *Panel) handleListRBACPolicies(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (p *Panel) handleAddRBACPolicy(w http.ResponseWriter, r *http.Request) {
-	if !p.authorizeAction(w, r, "*", "rbac_manage") {
-		return
+func (p *Panel) handleAddRBACPolicy(c *router.Context) error {
+	r := c.Request
+	if err := p.authorizeAction(c, "*", "rbac_manage"); err != nil {
+		return err
 	}
 
 	if p.rbac == nil {
-		writeErr(w, gferrors.BadRequest("RBAC enforcer not configured"))
-		return
+		return gferrors.BadRequest("RBAC enforcer not configured")
 	}
 
 	var req struct {
@@ -216,21 +215,18 @@ func (p *Panel) handleAddRBACPolicy(w http.ResponseWriter, r *http.Request) {
 		Act string `json:"act"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeErr(w, gferrors.BadRequest("invalid JSON"))
-		return
+		return gferrors.BadRequest("invalid JSON")
 	}
 
 	if req.Sub == "" || req.Obj == "" || req.Act == "" {
-		writeErr(w, gferrors.BadRequest("sub, obj, and act are required"))
-		return
+		return gferrors.BadRequest("sub, obj, and act are required")
 	}
 
 	if err := p.rbac.AddPolicy(req.Sub, req.Obj, req.Act); err != nil {
-		writeErr(w, err)
-		return
+		return err
 	}
 
-	writeJSON(w, http.StatusCreated, map[string]interface{}{
+	return c.JSON(http.StatusCreated, map[string]interface{}{
 		"added": true,
 		"sub":   req.Sub,
 		"obj":   req.Obj,
@@ -238,14 +234,14 @@ func (p *Panel) handleAddRBACPolicy(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (p *Panel) handleRemoveRBACPolicy(w http.ResponseWriter, r *http.Request) {
-	if !p.authorizeAction(w, r, "*", "rbac_manage") {
-		return
+func (p *Panel) handleRemoveRBACPolicy(c *router.Context) error {
+	r := c.Request
+	if err := p.authorizeAction(c, "*", "rbac_manage"); err != nil {
+		return err
 	}
 
 	if p.rbac == nil {
-		writeErr(w, gferrors.BadRequest("RBAC enforcer not configured"))
-		return
+		return gferrors.BadRequest("RBAC enforcer not configured")
 	}
 
 	var req struct {
@@ -254,21 +250,18 @@ func (p *Panel) handleRemoveRBACPolicy(w http.ResponseWriter, r *http.Request) {
 		Act string `json:"act"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeErr(w, gferrors.BadRequest("invalid JSON"))
-		return
+		return gferrors.BadRequest("invalid JSON")
 	}
 
 	if req.Sub == "" || req.Obj == "" || req.Act == "" {
-		writeErr(w, gferrors.BadRequest("sub, obj, and act are required"))
-		return
+		return gferrors.BadRequest("sub, obj, and act are required")
 	}
 
 	if err := p.rbac.RemovePolicy(req.Sub, req.Obj, req.Act); err != nil {
-		writeErr(w, err)
-		return
+		return err
 	}
 
-	writeJSON(w, http.StatusOK, map[string]interface{}{
+	return c.JSON(http.StatusOK, map[string]interface{}{
 		"removed": true,
 		"sub":     req.Sub,
 		"obj":     req.Obj,
@@ -276,14 +269,14 @@ func (p *Panel) handleRemoveRBACPolicy(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (p *Panel) handleAssignRBACRole(w http.ResponseWriter, r *http.Request) {
-	if !p.authorizeAction(w, r, "*", "rbac_manage") {
-		return
+func (p *Panel) handleAssignRBACRole(c *router.Context) error {
+	r := c.Request
+	if err := p.authorizeAction(c, "*", "rbac_manage"); err != nil {
+		return err
 	}
 
 	if p.rbac == nil {
-		writeErr(w, gferrors.BadRequest("RBAC enforcer not configured"))
-		return
+		return gferrors.BadRequest("RBAC enforcer not configured")
 	}
 
 	var req struct {
@@ -291,35 +284,32 @@ func (p *Panel) handleAssignRBACRole(w http.ResponseWriter, r *http.Request) {
 		Role string `json:"role"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeErr(w, gferrors.BadRequest("invalid JSON"))
-		return
+		return gferrors.BadRequest("invalid JSON")
 	}
 
 	if req.User == "" || req.Role == "" {
-		writeErr(w, gferrors.BadRequest("user and role are required"))
-		return
+		return gferrors.BadRequest("user and role are required")
 	}
 
 	if err := p.rbac.AddRole(req.User, req.Role); err != nil {
-		writeErr(w, err)
-		return
+		return err
 	}
 
-	writeJSON(w, http.StatusCreated, map[string]interface{}{
+	return c.JSON(http.StatusCreated, map[string]interface{}{
 		"assigned": true,
 		"user":     req.User,
 		"role":     req.Role,
 	})
 }
 
-func (p *Panel) handleRemoveRBACRole(w http.ResponseWriter, r *http.Request) {
-	if !p.authorizeAction(w, r, "*", "rbac_manage") {
-		return
+func (p *Panel) handleRemoveRBACRole(c *router.Context) error {
+	r := c.Request
+	if err := p.authorizeAction(c, "*", "rbac_manage"); err != nil {
+		return err
 	}
 
 	if p.rbac == nil {
-		writeErr(w, gferrors.BadRequest("RBAC enforcer not configured"))
-		return
+		return gferrors.BadRequest("RBAC enforcer not configured")
 	}
 
 	var req struct {
@@ -327,81 +317,74 @@ func (p *Panel) handleRemoveRBACRole(w http.ResponseWriter, r *http.Request) {
 		Role string `json:"role"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeErr(w, gferrors.BadRequest("invalid JSON"))
-		return
+		return gferrors.BadRequest("invalid JSON")
 	}
 
 	if req.User == "" || req.Role == "" {
-		writeErr(w, gferrors.BadRequest("user and role are required"))
-		return
+		return gferrors.BadRequest("user and role are required")
 	}
 
 	if err := p.rbac.RemoveRole(req.User, req.Role); err != nil {
-		writeErr(w, err)
-		return
+		return err
 	}
 
-	writeJSON(w, http.StatusOK, map[string]interface{}{
+	return c.JSON(http.StatusOK, map[string]interface{}{
 		"removed": true,
 		"user":    req.User,
 		"role":    req.Role,
 	})
 }
 
-func (p *Panel) handleGetRBACRoles(w http.ResponseWriter, r *http.Request) {
-	if !p.authorizeAction(w, r, "*", "rbac_list") {
-		return
+func (p *Panel) handleGetRBACRoles(c *router.Context) error {
+	if err := p.authorizeAction(c, "*", "rbac_list"); err != nil {
+		return err
 	}
 
 	if p.rbac == nil {
-		writeJSON(w, http.StatusOK, map[string]interface{}{
+		return c.JSON(http.StatusOK, map[string]interface{}{
 			"enabled": false,
 			"roles":   []interface{}{},
 		})
-		return
 	}
 
-	user := strings.TrimSpace(r.URL.Query().Get("user"))
+	user := c.Query("user")
 	if user == "" {
 		// Return all roles
 		roles, _ := p.rbac.GetAllRoles()
-		writeJSON(w, http.StatusOK, map[string]interface{}{
+		return c.JSON(http.StatusOK, map[string]interface{}{
 			"enabled": true,
 			"roles":   roles,
 		})
-		return
 	}
 
 	// Return roles for specific user
 	userRoles := p.rbac.GetRoles(user)
-	writeJSON(w, http.StatusOK, map[string]interface{}{
+	return c.JSON(http.StatusOK, map[string]interface{}{
 		"enabled": true,
 		"user":    user,
 		"roles":   userRoles,
 	})
 }
 
-func (p *Panel) handleCheckRBACPermission(w http.ResponseWriter, r *http.Request) {
-	if !p.authorizeAction(w, r, "*", "rbac_list") {
-		return
+func (p *Panel) handleCheckRBACPermission(c *router.Context) error {
+	if err := p.authorizeAction(c, "*", "rbac_list"); err != nil {
+		return err
 	}
 
 	if p.rbac == nil {
-		writeErr(w, gferrors.BadRequest("RBAC enforcer not configured"))
-		return
+		return gferrors.BadRequest("RBAC enforcer not configured")
 	}
 
-	sub := strings.TrimSpace(r.URL.Query().Get("sub"))
-	obj := strings.TrimSpace(r.URL.Query().Get("obj"))
-	act := strings.TrimSpace(r.URL.Query().Get("act"))
+	sub := c.Query("sub")
+	obj := c.Query("obj")
+	act := c.Query("act")
 
 	if sub == "" || obj == "" || act == "" {
-		writeErr(w, gferrors.BadRequest("sub, obj, and act query parameters are required"))
-		return
+		return gferrors.BadRequest("sub, obj, and act query parameters are required")
 	}
 
 	allowed := p.rbac.Can(sub, obj, act)
-	writeJSON(w, http.StatusOK, map[string]interface{}{
+	return c.JSON(http.StatusOK, map[string]interface{}{
 		"sub":     sub,
 		"obj":     obj,
 		"act":     act,
