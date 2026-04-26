@@ -212,3 +212,15 @@ All modularization work is complete. Possible next steps:
 2. Commit the modularization work
 3. Plan v0.6.0 release
 
+### Point 9: Outbox as a first-class module
+
+**Status: Planning.**
+
+Goal: Integrate `pkg/outbox` into the `app.App` lifecycle and add support for external "Bridges" (Kafka, Webhooks, etc.) via configuration.
+
+Pending tasks:
+
+- [ ] Add `OutboxConfig` to `pkg/app/config.go`
+- [ ] Implement `Bridge` interface and registry in `pkg/outbox`
+- [ ] Update `app.App` to manage the Outbox lifecycle automatically
+- [ ] Allow declarative bridge configuration in `goframe.yaml`

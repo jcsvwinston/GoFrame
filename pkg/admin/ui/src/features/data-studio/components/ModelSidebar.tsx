@@ -2,7 +2,7 @@ import { useState, useMemo } from 'react'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import type { ModelSummary, RuntimeInfo } from '@/types'
-import { Search, ChevronDown, ChevronRight, Table2, Box } from 'lucide-react'
+import { Search, ChevronDown, ChevronRight, Table2, Box, Database, Filter } from 'lucide-react'
 
 interface Props {
   models: ModelSummary[]
@@ -19,6 +19,7 @@ export default function ModelSidebar({ models, runtime, selectedModel, selectedD
   const [viewMode, setViewMode] = useState<ViewMode>('all')
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set())
   const [dbFilter, setDbFilter] = useState<string | null>(null)
+  const [engineFilter, setEngineFilter] = useState<string | null>(null)
 
   const multiEngine = (runtime?.engines?.length ?? 0) > 1
   const multiDb = (runtime?.databases?.length ?? 0) > 1
@@ -35,26 +36,43 @@ export default function ModelSidebar({ models, runtime, selectedModel, selectedD
       )
     }
     if (dbFilter) {
-      list = list.filter((m) => m.databases?.includes(dbFilter))
+      list = list.filter((m) => m.database === dbFilter)
+    }
+    if (engineFilter) {
+      list = list.filter((m) => m.engine === engineFilter)
     }
     return list
-  }, [models, search, dbFilter])
+  }, [models, search, dbFilter, engineFilter])
 
   const engineGroups = useMemo(() => {
     if (!runtime?.engine_groups) return []
+    const groups = new Map<string, ModelSummary[]>()
+    
+    filtered.forEach(m => {
+      const group = groups.get(m.engine) || []
+      group.push(m)
+      groups.set(m.engine, group)
+    })
+
     return runtime.engine_groups.map((eg) => ({
       ...eg,
-      models: filtered.filter((m) =>
-        eg.databases.some((db) => m.databases?.includes(db.alias)),
-      ),
+      models: groups.get(eg.name) || [],
     })).filter((eg) => eg.models.length > 0)
   }, [runtime, filtered])
 
   const databaseGroups = useMemo(() => {
     if (!runtime?.databases) return []
+    const groups = new Map<string, ModelSummary[]>()
+    
+    filtered.forEach(m => {
+      const group = groups.get(m.database) || []
+      group.push(m)
+      groups.set(m.database, group)
+    })
+
     return runtime.databases.map((db) => ({
       ...db,
-      models: filtered.filter((m) => m.databases?.includes(db.alias)),
+      models: groups.get(db.alias) || [],
     })).filter((g) => g.models.length > 0)
   }, [runtime, filtered])
 
@@ -83,19 +101,30 @@ export default function ModelSidebar({ models, runtime, selectedModel, selectedD
       <button
         key={`${m.name}-${contextDbAlias ?? 'all'}`}
         onClick={() => onSelectModel(m.name, contextDbAlias)}
-        className={`w-full text-left px-3 py-2 rounded-md text-sm transition-colors ${
+        className={`w-full text-left px-3 py-2 rounded-md text-sm transition-all duration-200 ${
           isActive
-            ? 'bg-primary text-primary-foreground'
-            : 'hover:bg-muted text-foreground'
+            ? 'bg-primary text-primary-foreground shadow-md transform scale-[1.02]'
+            : 'hover:bg-muted text-foreground hover:translate-x-1'
         }`}
       >
-        <span className="flex items-center gap-2 min-w-0">
-          <Table2 className={`h-3.5 w-3.5 flex-shrink-0 ${isActive ? 'opacity-80' : 'opacity-40'}`} />
-          <span className="truncate font-medium">{m.plural || m.name}</span>
-        </span>
-        <span className={`block text-[10px] ml-5.5 mt-0.5 ${isActive ? 'text-primary-foreground/70' : 'text-muted-foreground'}`}>
+        <div className="flex items-center justify-between gap-2 min-w-0">
+          <div className="flex items-center gap-2 truncate">
+            <Table2 className={`h-3.5 w-3.5 flex-shrink-0 ${isActive ? 'opacity-80' : 'opacity-40'}`} />
+            <span className="truncate font-medium">{m.plural || m.name}</span>
+          </div>
+          {m.count_known && (
+            <Badge 
+              variant={isActive ? 'secondary' : 'outline'} 
+              className={`text-[10px] px-1 h-4 flex-shrink-0 font-normal ${isActive ? 'bg-primary-foreground/20 border-none text-primary-foreground' : 'text-muted-foreground'}`}
+            >
+              {m.count === -1 ? '?' : m.count.toLocaleString()}
+              {m.is_estimated && <span className="ml-0.5 opacity-60">~</span>}
+            </Badge>
+          )}
+        </div>
+        <div className={`block text-[10px] ml-5.5 mt-0.5 ${isActive ? 'text-primary-foreground/70' : 'text-muted-foreground'}`}>
           {m.table}
-        </span>
+        </div>
       </button>
     )
   }
@@ -145,59 +174,98 @@ export default function ModelSidebar({ models, runtime, selectedModel, selectedD
         </div>
 
         {(multiEngine || multiDb) && (
-          <div className="flex gap-1 flex-wrap">
-            <button
-              onClick={() => switchViewMode('all')}
-              className={`px-2 py-0.5 rounded text-xs transition-colors ${
-                viewMode === 'all' ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground hover:text-foreground'
-              }`}
-            >
-              All
-            </button>
-            {multiEngine && (
-              <button
-                onClick={() => switchViewMode('engine')}
-                className={`px-2 py-0.5 rounded text-xs transition-colors ${
-                  viewMode === 'engine' ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground hover:text-foreground'
-                }`}
-              >
-                By Engine
-              </button>
-            )}
-            {multiDb && (
-              <button
-                onClick={() => switchViewMode('database')}
-                className={`px-2 py-0.5 rounded text-xs transition-colors ${
-                  viewMode === 'database' ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground hover:text-foreground'
-                }`}
-              >
-                By Database
-              </button>
-            )}
-          </div>
-        )}
+          <div className="space-y-3 pt-1">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground flex items-center gap-1.5">
+                <Filter className="h-3 w-3" />
+                View & Filter
+              </span>
+              <div className="flex bg-muted/50 p-0.5 rounded-lg border">
+                <button
+                  onClick={() => switchViewMode('all')}
+                  className={`px-2 py-0.5 rounded-md text-[10px] font-medium transition-all ${
+                    viewMode === 'all' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  All
+                </button>
+                {multiEngine && (
+                  <button
+                    onClick={() => switchViewMode('engine')}
+                    className={`px-2 py-0.5 rounded-md text-[10px] font-medium transition-all ${
+                      viewMode === 'engine' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
+                    }`}
+                  >
+                    Engine
+                  </button>
+                )}
+                {multiDb && (
+                  <button
+                    onClick={() => switchViewMode('database')}
+                    className={`px-2 py-0.5 rounded-md text-[10px] font-medium transition-all ${
+                      viewMode === 'database' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
+                    }`}
+                  >
+                    DB
+                  </button>
+                )}
+              </div>
+            </div>
 
-        {viewMode === 'all' && multiDb && runtime?.databases && (
-          <div className="flex flex-wrap gap-1">
-            <button
-              onClick={() => setDbFilter(null)}
-              className={`px-1.5 py-0 rounded text-[10px] leading-5 transition-colors ${
-                !dbFilter ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground hover:text-foreground'
-              }`}
-            >
-              All DBs
-            </button>
-            {runtime.databases.map((db) => (
-              <button
-                key={db.alias}
-                onClick={() => setDbFilter(dbFilter === db.alias ? null : db.alias)}
-                className={`px-1.5 py-0 rounded text-[10px] leading-5 transition-colors ${
-                  dbFilter === db.alias ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground hover:text-foreground'
-                }`}
-              >
-                {db.alias}
-              </button>
-            ))}
+            <div className="grid grid-cols-1 gap-2">
+              {multiEngine && runtime?.engines && (
+                <div className="space-y-1">
+                  <label className="text-[9px] font-semibold text-muted-foreground flex items-center gap-1">
+                    <Database className="h-2.5 w-2.5" />
+                    ENGINE FILTER
+                  </label>
+                  <div className="flex flex-wrap gap-1">
+                    <button
+                      onClick={() => setEngineFilter(null)}
+                      className={`px-2 py-0.5 rounded-full text-[10px] border transition-all ${
+                        !engineFilter ? 'bg-primary border-primary text-primary-foreground font-semibold' : 'bg-background hover:border-muted-foreground text-muted-foreground'
+                      }`}
+                    >
+                      All
+                    </button>
+                    {runtime.engines.map((eng) => (
+                      <button
+                        key={eng}
+                        onClick={() => setEngineFilter(engineFilter === eng ? null : eng)}
+                        className={`px-2 py-0.5 rounded-full text-[10px] border transition-all ${
+                          engineFilter === eng ? 'bg-primary border-primary text-primary-foreground font-semibold' : 'bg-background hover:border-muted-foreground text-muted-foreground'
+                        }`}
+                      >
+                        {eng.toUpperCase()}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {multiDb && runtime?.databases && (
+                <div className="space-y-1">
+                  <label className="text-[9px] font-semibold text-muted-foreground flex items-center gap-1">
+                    <Box className="h-2.5 w-2.5" />
+                    DATABASE FILTER
+                  </label>
+                  <select
+                    value={dbFilter ?? ''}
+                    onChange={(e) => setDbFilter(e.target.value || null)}
+                    className="w-full h-8 bg-muted/30 border rounded-md px-2 text-[10px] font-medium focus:outline-none focus:ring-1 focus:ring-primary appearance-none cursor-pointer hover:bg-muted/50 transition-colors"
+                  >
+                    <option value="">All Databases</option>
+                    {runtime.databases
+                      .filter(db => !engineFilter || (db.dialect || db.engine) === engineFilter)
+                      .map((db) => (
+                        <option key={db.alias} value={db.alias}>
+                          {db.alias} ({db.dialect || db.engine})
+                        </option>
+                      ))}
+                  </select>
+                </div>
+              )}
+            </div>
           </div>
         )}
       </div>

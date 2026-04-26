@@ -18,6 +18,9 @@ type ModelConfig struct {
 	ExcludeFields []string          // Fields excluded from admin
 	FieldLabels   map[string]string // Custom labels: field name -> label
 
+	// Database affinity
+	DatabaseAlias string // Optional database alias for this model (default "default")
+
 	// Lifecycle hooks
 	BeforeCreate HookFunc
 	AfterCreate  HookFunc
@@ -60,6 +63,10 @@ func (r *Registry) Register(model interface{}, cfg ...ModelConfig) error {
 	// Apply defaults
 	if meta.Config.PageSize == 0 {
 		meta.Config.PageSize = 25
+	}
+	meta.DatabaseAlias = meta.Config.DatabaseAlias
+	if meta.DatabaseAlias == "" {
+		meta.DatabaseAlias = "default"
 	}
 
 	r.mu.Lock()

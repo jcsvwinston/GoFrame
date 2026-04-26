@@ -26,21 +26,25 @@ func (p *Panel) handleListModels(c *router.Context) error {
 	includeCounts := includeModelCounts(r)
 
 	type modelInfo struct {
-		Name       string           `json:"name"`
-		Plural     string           `json:"plural"`
-		Table      string           `json:"table"`
-		Icon       string           `json:"icon"`
-		Count      int64            `json:"count"`
-		CountKnown bool             `json:"count_known"`
-		Counts     map[string]int64 `json:"counts,omitempty"`
-		Databases  []string         `json:"databases,omitempty"`
+		Name        string           `json:"name"`
+		Plural      string           `json:"plural"`
+		Table       string           `json:"table"`
+		Icon        string           `json:"icon"`
+		Count       int64            `json:"count"`
+		CountKnown  bool             `json:"count_known"`
+		IsEstimated bool             `json:"is_estimated"`
+		Counts      map[string]int64 `json:"counts,omitempty"`
+		Databases   []string         `json:"databases,omitempty"`
+		Database    string           `json:"database"`
+		Engine      string           `json:"engine"`
 	}
 	type runtimeModelInfo struct {
-		Name       string `json:"name"`
-		Plural     string `json:"plural"`
-		Table      string `json:"table"`
-		Count      int64  `json:"count"`
-		CountKnown bool   `json:"count_known"`
+		Name        string `json:"name"`
+		Plural      string `json:"plural"`
+		Table       string `json:"table"`
+		Count       int64  `json:"count"`
+		CountKnown  bool   `json:"count_known"`
+		IsEstimated bool   `json:"is_estimated"`
 	}
 	type runtimeDatabaseInfo struct {
 		Alias        string             `json:"alias"`
@@ -88,7 +92,17 @@ func (p *Panel) handleListModels(c *router.Context) error {
 			Count:      0,
 			CountKnown: false,
 			Counts:     map[string]int64{},
-			Databases:  []string{},
+			Databases:  []string{m.DatabaseAlias},
+			Database:   m.DatabaseAlias,
+		}
+		if info.Database == "" {
+			info.Database = "default"
+		}
+		if dbInfo, ok := p.databaseRuntimeInfoByAlias(info.Database); ok {
+			info.Engine = dbInfo.Dialect
+			if info.Engine == "" {
+				info.Engine = dbInfo.Engine
+			}
 		}
 		result = append(result, info)
 		modelByName[m.Name] = &result[len(result)-1]
@@ -102,6 +116,7 @@ func (p *Panel) handleListModels(c *router.Context) error {
 	engineGroups := map[string][]runtimeDatabaseInfo{}
 	enginesSeen := map[string]struct{}{}
 	modelRecordsByAlias := map[string]map[string]int64{}
+	defaultAlias := p.defaultDBAlias
 
 	for _, alias := range aliases {
 		cfg, ok := p.databaseRuntimeInfoByAlias(alias)
@@ -125,7 +140,7 @@ func (p *Panel) handleListModels(c *router.Context) error {
 		if includeCounts {
 			if queryable {
 				for _, m := range models {
-					count, present, err := p.modelCount(r.Context(), m, alias)
+					count, estimated, present, err := p.modelCount(r.Context(), m, alias)
 					if err != nil {
 						return fmt.Errorf("admin.ListModels count alias=%s model=%s: %w", alias, m.Name, err)
 					}
@@ -135,12 +150,34 @@ func (p *Panel) handleListModels(c *router.Context) error {
 					records[m.Name] = count
 					modelNames = append(modelNames, m.Name)
 					modelEntries = append(modelEntries, runtimeModelInfo{
-						Name:       m.Name,
-						Plural:     m.Plural,
-						Table:      m.Table,
-						Count:      count,
-						CountKnown: true,
+						Name:        m.Name,
+						Plural:      m.Plural,
+						Table:       m.Table,
+						Count:       count,
+						CountKnown:  true,
+						IsEstimated: estimated,
 					})
+
+					if mi, ok := modelByName[m.Name]; ok {
+						if alias == defaultAlias || (mi.Count == 0 && !mi.CountKnown) {
+							mi.Count = count
+							mi.CountKnown = true
+							mi.IsEstimated = estimated
+						}
+						mi.Counts[alias] = count
+						
+						// Add database alias if not already present
+						found := false
+						for _, dbName := range mi.Databases {
+							if dbName == alias {
+								found = true
+								break
+							}
+						}
+						if !found {
+							mi.Databases = append(mi.Databases, alias)
+						}
+					}
 				}
 			}
 		} else {
@@ -186,47 +223,16 @@ func (p *Panel) handleListModels(c *router.Context) error {
 		engineGroups[engineLabel] = append(engineGroups[engineLabel], dbInfo)
 	}
 
-	defaultAlias := p.defaultDBAlias
 	var recordsTotal int64
 	for _, m := range models {
 		row := modelByName[m.Name]
 		if row == nil {
 			continue
 		}
-		for alias, byModel := range modelRecordsByAlias {
-			count, ok := byModel[m.Name]
-			if !ok {
-				continue
-			}
-			row.Databases = append(row.Databases, alias)
-			if count >= 0 {
-				row.Counts[alias] = count
-			}
+		if includeCounts {
+			recordsTotal += row.Count
 		}
 		sort.Strings(row.Databases)
-		if includeCounts {
-			if count, ok := row.Counts[defaultAlias]; ok {
-				row.Count = count
-				row.CountKnown = true
-				recordsTotal += count
-			} else if len(row.Databases) > 0 {
-				firstAlias := row.Databases[0]
-				if firstCount, ok := row.Counts[firstAlias]; ok {
-					row.Count = firstCount
-					row.CountKnown = true
-					recordsTotal += row.Count
-				}
-			}
-		} else {
-			row.Count = -1
-			row.CountKnown = false
-		}
-		if len(row.Counts) == 0 {
-			row.Counts = nil
-		}
-		if len(row.Databases) == 0 {
-			row.Databases = nil
-		}
 	}
 
 	engines := make([]string, 0, len(enginesSeen))
@@ -263,6 +269,11 @@ func (p *Panel) handleListModels(c *router.Context) error {
 		recordsTotal = -1
 	}
 
+	totalModelsAcrossDBs := 0
+	for _, dbInfo := range dbRuntime {
+		totalModelsAcrossDBs += dbInfo.ModelCount
+	}
+
 	return c.JSON(http.StatusOK, map[string]interface{}{
 		"models": result,
 		"title":  p.config.Title,
@@ -272,7 +283,7 @@ func (p *Panel) handleListModels(c *router.Context) error {
 			Engines:            engines,
 			EngineGroups:       engineRuntime,
 			TraceURLTemplate:   strings.TrimSpace(p.config.TraceURLTemplate),
-			ModelsTotal:        len(result),
+			ModelsTotal:        totalModelsAcrossDBs,
 			RecordsTotal:       recordsTotal,
 			CountsMode:         countsMode,
 			CountsAvailable:    includeCounts,
@@ -396,6 +407,12 @@ func (p *Panel) handleListRecords(c *router.Context) error {
 	if err != nil {
 		return gferrors.BadRequest(err.Error())
 	}
+	// Fallback to model's declared database if no explicit override provided in query
+	if r.URL.Query().Get("db") == "" && r.URL.Query().Get("database") == "" {
+		if meta.DatabaseAlias != "" {
+			databaseAlias = meta.DatabaseAlias
+		}
+	}
 
 	crud, err := p.getCRUD(meta, databaseAlias)
 	if err != nil {
@@ -480,6 +497,12 @@ func (p *Panel) handleGetRecord(c *router.Context) error {
 	if err != nil {
 		return gferrors.BadRequest(err.Error())
 	}
+	// Fallback to model's declared database if no explicit override provided in query
+	if r.URL.Query().Get("db") == "" && r.URL.Query().Get("database") == "" {
+		if meta.DatabaseAlias != "" {
+			databaseAlias = meta.DatabaseAlias
+		}
+	}
 
 	crud, err := p.getCRUD(meta, databaseAlias)
 	if err != nil {
@@ -511,6 +534,12 @@ func (p *Panel) handleCreateRecord(c *router.Context) error {
 	databaseAlias, err := p.requestDatabaseAlias(r)
 	if err != nil {
 		return gferrors.BadRequest(err.Error())
+	}
+	// Fallback to model's declared database if no explicit override provided in query
+	if r.URL.Query().Get("db") == "" && r.URL.Query().Get("database") == "" {
+		if meta.DatabaseAlias != "" {
+			databaseAlias = meta.DatabaseAlias
+		}
 	}
 
 	crud, err := p.getCRUD(meta, databaseAlias)
@@ -585,6 +614,12 @@ func (p *Panel) handleUpdateRecord(c *router.Context) error {
 	if err != nil {
 		return gferrors.BadRequest(err.Error())
 	}
+	// Fallback to model's declared database if no explicit override provided in query
+	if r.URL.Query().Get("db") == "" && r.URL.Query().Get("database") == "" {
+		if meta.DatabaseAlias != "" {
+			databaseAlias = meta.DatabaseAlias
+		}
+	}
 
 	crud, err := p.getCRUD(meta, databaseAlias)
 	if err != nil {
@@ -623,6 +658,12 @@ func (p *Panel) handleDeleteRecord(c *router.Context) error {
 	if err != nil {
 		return gferrors.BadRequest(err.Error())
 	}
+	// Fallback to model's declared database if no explicit override provided in query
+	if r.URL.Query().Get("db") == "" && r.URL.Query().Get("database") == "" {
+		if meta.DatabaseAlias != "" {
+			databaseAlias = meta.DatabaseAlias
+		}
+	}
 
 	crud, err := p.getCRUD(meta, databaseAlias)
 	if err != nil {
@@ -655,6 +696,12 @@ func (p *Panel) handleBulkAction(c *router.Context) error {
 	databaseAlias, err := p.requestDatabaseAlias(r)
 	if err != nil {
 		return gferrors.BadRequest(err.Error())
+	}
+	// Fallback to model's declared database if no explicit override provided in query
+	if r.URL.Query().Get("db") == "" && r.URL.Query().Get("database") == "" {
+		if meta.DatabaseAlias != "" {
+			databaseAlias = meta.DatabaseAlias
+		}
 	}
 
 	action := strings.ToLower(strings.TrimSpace(req.Action))
@@ -768,31 +815,71 @@ func includeModelCounts(r *http.Request) bool {
 	return true
 }
 
-func (p *Panel) modelCount(ctx context.Context, meta *model.ModelMeta, databaseAlias string) (int64, bool, error) {
+func (p *Panel) modelCount(ctx context.Context, meta *model.ModelMeta, databaseAlias string) (count int64, isEstimated bool, present bool, err error) {
 	handle, err := p.databaseHandle(databaseAlias)
 	if err != nil {
-		return 0, false, err
+		return 0, false, false, err
 	}
 	sqlDB, err := handle.SqlDB()
 	if err != nil {
-		return 0, false, err
+		return 0, false, false, err
 	}
 
 	table := meta.Table
 	if table == "" {
-		// Try to get table name from model's TableName method or default
 		table = strings.ToLower(meta.Name) + "s"
 	}
 
-	query := fmt.Sprintf("SELECT COUNT(*) FROM %s", table)
-	var total int64
-	if err := sqlDB.QueryRowContext(ctx, query).Scan(&total); err != nil {
-		if isTableMissingErr(err) {
-			return 0, false, nil // Table doesn't exist yet; not an error, just unavailable
-		}
-		return 0, false, fmt.Errorf("admin.modelCount table=%s: %w", table, err)
+	info, _ := p.databaseRuntimeInfoByAlias(databaseAlias)
+	dialect := strings.ToLower(info.Dialect)
+	if dialect == "" {
+		dialect = strings.ToLower(info.Engine)
 	}
-	return total, true, nil
+
+	var total int64
+	var query string
+	estimated := false
+
+	switch dialect {
+	case "postgres":
+		query = "SELECT reltuples::bigint FROM pg_class WHERE relname = ?"
+		estimated = true
+	case "mysql":
+		query = "SELECT TABLE_ROWS FROM information_schema.tables WHERE table_name = ? AND table_schema = DATABASE()"
+		estimated = true
+	case "sqlite", "sqlite3":
+		query = "SELECT n FROM sqlite_stat1 WHERE tbl = ? LIMIT 1"
+		estimated = true
+	case "sqlserver", "mssql":
+		query = "SELECT SUM(rows) FROM sys.partitions WHERE object_id = OBJECT_ID(?) AND index_id IN (0, 1)"
+		estimated = true
+	case "oracle":
+		query = "SELECT NUM_ROWS FROM ALL_TABLES WHERE TABLE_NAME = UPPER(?)"
+		estimated = true
+	default:
+		query = fmt.Sprintf("SELECT COUNT(*) FROM %s", table)
+	}
+
+	var errQuery error
+	if estimated {
+		errQuery = sqlDB.QueryRowContext(ctx, query, table).Scan(&total)
+		if errQuery != nil {
+			// Fallback to real count if estimate fails or table not analyzed
+			query = fmt.Sprintf("SELECT COUNT(*) FROM %s", table)
+			errQuery = sqlDB.QueryRowContext(ctx, query).Scan(&total)
+			estimated = false
+		}
+	} else {
+		errQuery = sqlDB.QueryRowContext(ctx, query).Scan(&total)
+	}
+
+	if errQuery != nil {
+		if isTableMissingErr(errQuery) {
+			return 0, false, false, nil
+		}
+		return 0, false, false, fmt.Errorf("admin.modelCount table=%s: %w", table, errQuery)
+	}
+	return total, estimated, true, nil
 }
 
 func isTableMissingErr(err error) bool {

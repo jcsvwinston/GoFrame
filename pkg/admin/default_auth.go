@@ -146,12 +146,16 @@ func (a *DatabaseAdminAuth) handleLoginPOST(w http.ResponseWriter, r *http.Reque
 
 	record, found, err := a.findUserByLogin(r.Context(), username)
 	if err != nil {
-		fmt.Printf("DEBUG: Admin login query error: %v\n", err)
 		http.Error(w, "admin login query failed", http.StatusInternalServerError)
 		return
 	}
-	if !found || !auth.CheckPassword(password, record.PasswordHash) {
-		fmt.Printf("DEBUG: Admin login failed for user %q. Found: %v\n", username, found)
+
+	if found {
+		if !auth.CheckPassword(password, record.PasswordHash) {
+			a.renderLoginPage(w, http.StatusUnauthorized, next, "Invalid credentials.", "")
+			return
+		}
+	} else {
 		a.renderLoginPage(w, http.StatusUnauthorized, next, "Invalid credentials.", "")
 		return
 	}

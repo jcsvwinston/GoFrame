@@ -323,6 +323,15 @@ func (p *Panel) getCRUD(meta *model.ModelMeta, databaseAlias string) (model.CRUD
 	c := model.NewCRUD(sqlDB, meta, p.bus)
 	c.SetSQLQueryObserver(p.onModelSQLQuery)
 
+	// Set dialect for estimation strategies
+	if info, ok := p.databaseRuntimeInfoByAlias(alias); ok {
+		dialect := info.Dialect
+		if dialect == "" {
+			dialect = info.Engine
+		}
+		c.SetDialect(dialect)
+	}
+
 	p.cruds[cacheKey] = c
 	return c, nil
 }
@@ -708,6 +717,9 @@ func (p *Panel) requestDatabaseAlias(r *http.Request) (string, error) {
 	alias := strings.TrimSpace(r.URL.Query().Get("db"))
 	if alias == "" {
 		alias = strings.TrimSpace(r.URL.Query().Get("database"))
+	}
+	if alias == "" {
+		alias = strings.TrimSpace(r.URL.Query().Get("db_alias"))
 	}
 	return p.resolveDatabaseAlias(alias)
 }

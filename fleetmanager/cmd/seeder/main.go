@@ -10,10 +10,10 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 )
 
-func main() {
-	db, err := sql.Open("sqlite3", "app.db")
+func seedDB(path string) {
+	db, err := sql.Open("sqlite3", path)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatalf("failed to open %s: %v", path, err)
 	}
 	defer db.Close()
 
@@ -30,13 +30,13 @@ func main() {
 		_, _ = db.Exec("DELETE FROM sqlite_sequence WHERE name='" + t + "'")
 	}
 
-	fmt.Println("Seeding database with hundreds of records...")
+	fmt.Printf("Seeding %s with hundreds of records...\n", path)
 
 	// 1. Organizations (10)
 	orgs := []int64{}
 	for i := 1; i <= 10; i++ {
-		name := fmt.Sprintf("Organization %02d", i)
-		slug := fmt.Sprintf("org-%02d", i)
+		name := fmt.Sprintf("Organization %02d (%s)", i, path)
+		slug := fmt.Sprintf("org-%02d-%s", i, path)
 		res, err := db.Exec("INSERT INTO organizations (name, slug, created_at, updated_at) VALUES (?, ?, ?, ?)",
 			name, slug, time.Now(), time.Now())
 		if err != nil {
@@ -50,7 +50,7 @@ func main() {
 	fleets := []int64{}
 	for i := 1; i <= 50; i++ {
 		orgID := orgs[rand.Intn(len(orgs))]
-		name := fmt.Sprintf("Fleet %02d", i)
+		name := fmt.Sprintf("Fleet %02d (%s)", i, path)
 		res, err := db.Exec("INSERT INTO fleets (organization_id, name, created_at, updated_at) VALUES (?, ?, ?, ?)",
 			orgID, name, time.Now(), time.Now())
 		if err != nil {
@@ -64,8 +64,8 @@ func main() {
 	devices := []int64{}
 	for i := 1; i <= 200; i++ {
 		fleetID := fleets[rand.Intn(len(fleets))]
-		name := fmt.Sprintf("Device %03d", i)
-		serial := fmt.Sprintf("SN-%08d", rand.Intn(100000000))
+		name := fmt.Sprintf("Device %03d (%s)", i, path)
+		serial := fmt.Sprintf("SN-%08d-%s", rand.Intn(100000000), path)
 		res, err := db.Exec("INSERT INTO devices (fleet_id, name, serial, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
 			fleetID, name, serial, time.Now(), time.Now())
 		if err != nil {
@@ -80,7 +80,7 @@ func main() {
 	sensorTypes := []string{"gps", "temp", "fuel", "engine", "humidity"}
 	for i := 1; i <= 500; i++ {
 		deviceID := devices[rand.Intn(len(devices))]
-		name := fmt.Sprintf("Sensor %03d", i)
+		name := fmt.Sprintf("Sensor %03d (%s)", i, path)
 		sType := sensorTypes[rand.Intn(len(sensorTypes))]
 		res, err := db.Exec("INSERT INTO sensors (device_id, name, type, unit, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
 			deviceID, name, sType, "unit", "online", time.Now(), time.Now())
@@ -96,8 +96,8 @@ func main() {
 	assetTypes := []string{"truck", "van", "car", "trailer"}
 	for i := 1; i <= 150; i++ {
 		fleetID := fleets[rand.Intn(len(fleets))]
-		name := fmt.Sprintf("Asset %03d", i)
-		vin := fmt.Sprintf("VIN-%012d", rand.Intn(1000000000000))
+		name := fmt.Sprintf("Asset %03d (%s)", i, path)
+		vin := fmt.Sprintf("VIN-%012d-%s", rand.Intn(1000000000000), path)
 		res, err := db.Exec("INSERT INTO assets (fleet_id, name, type, vin, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
 			fleetID, name, assetTypes[rand.Intn(len(assetTypes))], vin, time.Now(), time.Now())
 		if err != nil {
@@ -110,8 +110,8 @@ func main() {
 	// 6. Drivers (100)
 	drivers := []int64{}
 	for i := 1; i <= 100; i++ {
-		name := fmt.Sprintf("Driver %03d", i)
-		license := fmt.Sprintf("LIC-%06d", rand.Intn(1000000))
+		name := fmt.Sprintf("Driver %03d (%s)", i, path)
+		license := fmt.Sprintf("LIC-%06d-%s", rand.Intn(1000000), path)
 		res, err := db.Exec("INSERT INTO drivers (name, license_no, phone, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
 			name, license, fmt.Sprintf("555-%04d", i), "active", time.Now(), time.Now())
 		if err != nil {
@@ -125,8 +125,8 @@ func main() {
 	for i := 1; i <= 2000; i++ {
 		sensorID := sensors[rand.Intn(len(sensors))]
 		value := rand.Float64() * 100
-		_, err := db.Exec("INSERT INTO telemetries (sensor_id, value, timestamp) VALUES (?, ?, ?)",
-			sensorID, value, time.Now().Add(time.Duration(-rand.Intn(10000))*time.Minute))
+		_, err := db.Exec("INSERT INTO telemetries (sensor_id, value, timestamp, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
+			sensorID, value, time.Now().Add(time.Duration(-rand.Intn(10000))*time.Minute), time.Now(), time.Now())
 		if err != nil {
 			log.Fatalf("telemetries %d: %v", i, err)
 		}
@@ -135,7 +135,7 @@ func main() {
 	// 8. MaintenanceTasks (300)
 	for i := 1; i <= 300; i++ {
 		deviceID := devices[rand.Intn(len(devices))]
-		desc := fmt.Sprintf("Maintenance task %d", i)
+		desc := fmt.Sprintf("Maintenance task %d (%s)", i, path)
 		status := "pending"
 		if rand.Float64() > 0.5 {
 			status = "completed"
@@ -154,7 +154,7 @@ func main() {
 		fleetID := fleets[rand.Intn(len(fleets))]
 		severity := severities[rand.Intn(len(severities))]
 		aType := alertTypes[rand.Intn(len(alertTypes))]
-		msg := fmt.Sprintf("Alert %04d: %s issue", i, aType)
+		msg := fmt.Sprintf("Alert %04d: %s issue (%s)", i, aType, path)
 		resolved := 0
 		if rand.Float64() > 0.7 {
 			resolved = 1
@@ -169,7 +169,7 @@ func main() {
 	// 10. Geofences (50)
 	for i := 1; i <= 50; i++ {
 		fleetID := fleets[rand.Intn(len(fleets))]
-		name := fmt.Sprintf("Geofence %02d", i)
+		name := fmt.Sprintf("Geofence %02d (%s)", i, path)
 		area := "POLYGON((...))"
 		_, err := db.Exec("INSERT INTO geofences (fleet_id, name, area, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
 			fleetID, name, area, time.Now(), time.Now())
@@ -192,5 +192,11 @@ func main() {
 		}
 	}
 
-	fmt.Println("Successfully seeded database with 11 entities!")
+	fmt.Printf("Successfully seeded %s with 11 entities!\n", path)
 }
+
+func main() {
+	seedDB("app.db")
+	seedDB("secondary.db")
+}
+

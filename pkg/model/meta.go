@@ -17,6 +17,7 @@ type ModelMeta struct {
 	ForeignKeys []ForeignKey // Detected foreign key relationships
 	Indexes     []IndexMeta  // Declared simple/composite indexes
 	Config      ModelConfig  // User-provided configuration
+	DatabaseAlias string       // Database alias affinity
 	Type        reflect.Type // The reflect.Type of the struct
 }
 

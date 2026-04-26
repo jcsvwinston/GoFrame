@@ -70,6 +70,17 @@ pkg/db/sql_matrix_test.go       # enterprise tests movidos
 2. **(Opcional)** Actualizar `README.md` con positioning de modularidad
 3. **(Post-v1)** Phase 4: multi-module split cuando haya infraestructura de release
 
+## Próxima Sesión — Plan para Módulo Outbox
+
+**Objetivo:** Convertir el Outbox en un ciudadano de primera clase integrado en el ciclo de vida de `app.App` y con soporte para sistemas externos.
+
+**Tareas planificadas:**
+
+1.  **Configuración Nativa**: Añadir `OutboxConfig` a `pkg/app/config.go` para permitir habilitar/deshabilitar el Outbox desde `goframe.yaml`.
+2.  **Arquitectura de Bridges**: Implementar una interfaz `Bridge` en `pkg/outbox` para permitir el envío de mensajes a sistemas externos (Kafka, Webhooks, RabbitMQ).
+3.  **Registro de Drivers**: Crear un registro global de puentes para que las empresas puedan acoplar sus infraestructuras sin cambiar el código de aplicación.
+4.  **Dispatcher Multidireccional**: Evolucionar el `Dispatcher` actual para que pueda rutear mensajes a uno o varios Bridges basados en patrones de tópicos.
+
 ## Arquitectura actual del scaffold
 
 ```

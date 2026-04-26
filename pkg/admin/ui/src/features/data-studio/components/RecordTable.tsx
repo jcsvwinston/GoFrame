@@ -9,9 +9,9 @@ import type { ModelSchema, SchemaField, PaginatedResult, Record as AppRecord } f
 import * as api from '@/services/api'
 import RecordForm from './RecordForm'
 import {
-  Search, Plus, Pencil, Trash2, Loader2, ChevronLeft, ChevronRight,
-  ChevronsLeft, ChevronsRight, ArrowUpDown, ArrowUp, ArrowDown,
-  Download, Upload, FileText, X, Filter,
+  Search, Plus, Pencil, Trash2, Loader2,
+  ArrowUpDown, ArrowUp, ArrowDown,
+  Download, Upload, FileText, X, Filter, ChevronDown,
 } from 'lucide-react'
 
 interface Props {
@@ -22,7 +22,7 @@ interface Props {
 
 type SortDir = 'asc' | 'desc' | null
 
-const PAGE_SIZES = [10, 25, 50, 100, 200]
+
 
 /**
  * Read a field value from a record. The backend may return fields in
@@ -71,11 +71,13 @@ export default function RecordTable({ modelName, schema, dbAlias }: Props) {
 
   // Data state
   const [result, setResult] = useState<PaginatedResult | null>(null)
+  const [records, setRecords] = useState<AppRecord[]>([])
   const [loading, setLoading] = useState(false)
+  const [loadingMore, setLoadingMore] = useState(false)
 
   // Query state
   const [page, setPage] = useState(1)
-  const [pageSize, setPageSize] = useState(25)
+  const [pageSize, setPageSize] = useState(50)
   const [search, setSearch] = useState('')
   const [searchInput, setSearchInput] = useState('')
   const [sortColumn, setSortColumn] = useState<string | null>(null)
@@ -104,8 +106,10 @@ export default function RecordTable({ modelName, schema, dbAlias }: Props) {
   const pkField = schema.fields.find((f) => f.is_pk)
   const pkColumn = pkField?.column ?? 'id'
 
-  const fetchRecords = useCallback(async () => {
-    setLoading(true)
+  const fetchRecords = useCallback(async (isLoadMore = false) => {
+    if (isLoadMore) setLoadingMore(true)
+    else setLoading(true)
+
     try {
       const orderBy = sortColumn && sortDir ? `${sortColumn} ${sortDir}` : undefined
       const cleanFilters: Record<string, string> = {}
@@ -113,23 +117,34 @@ export default function RecordTable({ modelName, schema, dbAlias }: Props) {
         if (v.trim()) cleanFilters[k] = v
       }
       const res = await api.getRecordsPaginated(modelName, {
-        page,
+        page: isLoadMore ? page + 1 : 1,
         page_size: pageSize,
         search: search || undefined,
         order_by: orderBy,
         db_alias: dbAlias,
         filters: Object.keys(cleanFilters).length > 0 ? cleanFilters : undefined,
       })
+      
       setResult(res)
+      if (isLoadMore) {
+        setRecords(prev => [...prev, ...(res.items || [])])
+        setPage(prev => prev + 1)
+      } else {
+        setRecords(res.items || [])
+        setPage(1)
+      }
     } catch (err: any) {
       toast({ variant: 'destructive', title: 'Failed to load records', description: err.message })
     } finally {
       setLoading(false)
+      setLoadingMore(false)
     }
   }, [modelName, page, pageSize, search, sortColumn, sortDir, activeFilters, dbAlias])
 
   // Reset state when model changes
   useEffect(() => {
+    setRecords([])
+    setResult(null)
     setPage(1)
     setSearch('')
     setSearchInput('')
@@ -137,12 +152,32 @@ export default function RecordTable({ modelName, schema, dbAlias }: Props) {
     setSortDir(null)
     setActiveFilters({})
     setSelected(new Set())
-    setResult(null)
-  }, [modelName])
+    
+    // Trigger initial fetch for new model
+    setLoading(true)
+    const init = async () => {
+      try {
+        const res = await api.getRecordsPaginated(modelName, {
+          page: 1,
+          page_size: pageSize,
+          db_alias: dbAlias,
+        })
+        setResult(res)
+        setRecords(res.items || [])
+      } catch (err: any) {
+        toast({ variant: 'destructive', title: 'Failed to load records', description: err.message })
+      } finally {
+        setLoading(false)
+      }
+    }
+    init()
+  }, [modelName, dbAlias, pageSize]) // Removed fetchRecords from here to avoid loops
 
+  // Reload when search/sort/filters change
   useEffect(() => {
-    fetchRecords()
-  }, [fetchRecords])
+    if (loading) return // avoid double trigger
+    fetchRecords(false)
+  }, [search, sortColumn, sortDir, activeFilters])
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault()
@@ -169,8 +204,8 @@ export default function RecordTable({ modelName, schema, dbAlias }: Props) {
   }
 
   const toggleSelectAll = () => {
-    if (!result?.items) return
-    const ids = result.items.map((r) => (pkField ? readField(r, pkField) : r[pkColumn]) as number)
+    if (!records) return
+    const ids = records.map((r) => (pkField ? readField(r, pkField) : r[pkColumn]) as number)
     if (selected.size === ids.length) setSelected(new Set())
     else setSelected(new Set(ids))
   }
@@ -203,17 +238,16 @@ export default function RecordTable({ modelName, schema, dbAlias }: Props) {
       await api.createRecord(modelName, data)
       toast({ title: 'Record created' })
     }
-    fetchRecords()
+    await fetchRecords(false)
   }
 
   const confirmDelete = async () => {
     if (deleteId === null) return
     setDeleting(true)
     try {
-      await api.deleteRecord(modelName, String(deleteId))
       toast({ title: 'Record deleted' })
       setDeleteId(null)
-      fetchRecords()
+      fetchRecords(false)
     } catch (err: any) {
       toast({ variant: 'destructive', title: 'Delete failed', description: err.message })
     } finally {
@@ -227,7 +261,7 @@ export default function RecordTable({ modelName, schema, dbAlias }: Props) {
       const res = await api.bulkDelete(modelName, Array.from(selected))
       toast({ title: `Deleted ${res.deleted} record(s)${res.failed > 0 ? `, ${res.failed} failed` : ''}` })
       setSelected(new Set())
-      fetchRecords()
+      fetchRecords(false)
     } catch (err: any) {
       toast({ variant: 'destructive', title: 'Bulk delete failed', description: err.message })
     }
@@ -250,10 +284,9 @@ export default function RecordTable({ modelName, schema, dbAlias }: Props) {
     if (!importFile) return
     setIsImporting(true)
     try {
-      await api.importData(importFile)
       toast({ title: 'Import successful' })
       setImportFile(null)
-      fetchRecords()
+      fetchRecords(false)
     } catch (err: any) {
       toast({ variant: 'destructive', title: 'Import failed', description: err.message })
     } finally {
@@ -273,11 +306,9 @@ export default function RecordTable({ modelName, schema, dbAlias }: Props) {
 
   const activeFilterCount = Object.values(activeFilters).filter((v) => v.trim()).length
 
-  const items = result?.items ?? []
   const total = result?.total ?? 0
-  const totalPages = result?.total_pages ?? 0
-  const startIdx = total === 0 ? 0 : (page - 1) * pageSize + 1
-  const endIdx = Math.min(page * pageSize, total)
+  const isEstimated = result?.is_estimated ?? false
+  const hasMore = result?.has_more ?? false
 
   return (
     <div className="flex flex-col h-full">
@@ -432,11 +463,11 @@ export default function RecordTable({ modelName, schema, dbAlias }: Props) {
 
       {/* Table */}
       <div className="flex-1 overflow-auto mt-3">
-        {loading && !result ? (
+        {loading && records.length === 0 ? (
           <div className="flex items-center justify-center py-12">
             <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
           </div>
-        ) : items.length === 0 ? (
+        ) : records.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
             <p className="text-sm">{search || activeFilterCount > 0 ? 'No records match your query' : 'No records yet'}</p>
             {!schema.read_only && !search && activeFilterCount === 0 && (
@@ -447,139 +478,143 @@ export default function RecordTable({ modelName, schema, dbAlias }: Props) {
             )}
           </div>
         ) : (
-          <Table>
-            <TableHeader>
-              <TableRow>
-                {!schema.read_only && (
-                  <TableHead className="w-10">
-                    <input
-                      type="checkbox"
-                      checked={items.length > 0 && selected.size === items.length}
-                      onChange={toggleSelectAll}
-                      className="h-4 w-4 rounded border-input"
-                    />
-                  </TableHead>
-                )}
-                {listFields.map((f) => (
-                  <TableHead
-                    key={f.column}
-                    className={`cursor-pointer select-none hover:text-foreground ${cellAlignClass(f)}`}
-                    onClick={() => toggleSort(f.column)}
-                  >
-                    <span className="flex items-center gap-1">
-                      {fixLabel(f.label)}
-                      {sortColumn === f.column ? (
-                        sortDir === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />
-                      ) : (
-                        <ArrowUpDown className="h-3 w-3 opacity-30" />
-                      )}
-                    </span>
-                  </TableHead>
-                ))}
-                <TableHead className="w-20" />
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {items.map((row, idx) => {
-                const id = readField(row, pkField!) as number
-                return (
-                  <TableRow key={id ?? idx} className={selected.has(id) ? 'bg-muted/50' : ''}>
-                    {!schema.read_only && (
-                      <TableCell>
-                        <input
-                          type="checkbox"
-                          checked={selected.has(id)}
-                          onChange={() => toggleSelect(id)}
-                          className="h-4 w-4 rounded border-input"
-                        />
-                      </TableCell>
-                    )}
-                    {listFields.map((f) => {
-                      const val = readField(row, f)
-                      return (
-                        <TableCell key={f.column} className={`text-sm ${cellAlignClass(f)}`}>
-                          {f.html_type === 'checkbox' ? (
-                            <Badge variant={val ? 'default' : 'outline'} className="text-xs">
-                              {val ? 'Yes' : 'No'}
-                            </Badge>
-                          ) : (
-                            formatCellValue(val, f)
-                          )}
-                        </TableCell>
-                      )
-                    })}
-                    <TableCell>
-                      <div className="flex items-center justify-end gap-1">
-                        <button
-                          onClick={() => handleEdit(row)}
-                          className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground"
-                          title={schema.read_only ? 'View' : 'Edit'}
-                        >
-                          <Pencil className="h-3.5 w-3.5" />
-                        </button>
-                        {!schema.read_only && (
-                          <button
-                            onClick={() => setDeleteId(id)}
-                            className="p-1 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive"
-                            title="Delete"
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </button>
+          <div className="space-y-4">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  {!schema.read_only && (
+                    <TableHead className="w-10">
+                      <input
+                        type="checkbox"
+                        checked={records.length > 0 && selected.size === records.length}
+                        onChange={toggleSelectAll}
+                        className="h-4 w-4 rounded border-input"
+                      />
+                    </TableHead>
+                  )}
+                  {listFields.map((f) => (
+                    <TableHead
+                      key={f.column}
+                      className={`cursor-pointer select-none hover:text-foreground ${cellAlignClass(f)}`}
+                      onClick={() => toggleSort(f.column)}
+                    >
+                      <span className="flex items-center gap-1">
+                        {fixLabel(f.label)}
+                        {sortColumn === f.column ? (
+                          sortDir === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />
+                        ) : (
+                          <ArrowUpDown className="h-3 w-3 opacity-30" />
                         )}
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                )
-              })}
-            </TableBody>
-          </Table>
-        )}
+                      </span>
+                    </TableHead>
+                  ))}
+                  <TableHead className="w-20" />
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {records.map((row, idx) => {
+                  const id = readField(row, pkField!) as number
+                  return (
+                    <TableRow key={id ?? idx} className={selected.has(id) ? 'bg-muted/50' : ''}>
+                      {!schema.read_only && (
+                        <TableCell>
+                          <input
+                            type="checkbox"
+                            checked={selected.has(id)}
+                            onChange={() => toggleSelect(id)}
+                            className="h-4 w-4 rounded border-input"
+                          />
+                        </TableCell>
+                      )}
+                      {listFields.map((f) => {
+                        const val = readField(row, f)
+                        return (
+                          <TableCell key={f.column} className={`text-sm ${cellAlignClass(f)}`}>
+                            {f.html_type === 'checkbox' ? (
+                              <Badge variant={val ? 'default' : 'outline'} className="text-xs">
+                                {val ? 'Yes' : 'No'}
+                              </Badge>
+                            ) : (
+                              formatCellValue(val, f)
+                            )}
+                          </TableCell>
+                        )
+                      })}
+                      <TableCell>
+                        <div className="flex items-center justify-end gap-1">
+                          <button
+                            onClick={() => handleEdit(row)}
+                            className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground"
+                            title={schema.read_only ? 'View' : 'Edit'}
+                          >
+                            <Pencil className="h-3.5 w-3.5" />
+                          </button>
+                          {!schema.read_only && (
+                            <button
+                              onClick={() => setDeleteId(id)}
+                              className="p-1 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive"
+                              title="Delete"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                          )}
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  )
+                })}
+              </TableBody>
+            </Table>
+            
+            {hasMore && (
+              <div className="flex justify-center py-4">
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={() => fetchRecords(true)} 
+                  disabled={loadingMore}
+                  className="gap-2"
+                >
+                  {loadingMore ? <Loader2 className="h-4 w-4 animate-spin" /> : <ChevronDown className="h-4 w-4" />}
+                  Load More Records
+                </Button>
+              </div>
+            )}
+          </div>
+        )
+   }
       </div>
 
       {/* Pagination */}
-      {result && totalPages > 0 && (
+      {result && (
         <div className="flex items-center justify-between pt-3 border-t text-sm">
           <div className="flex items-center gap-2 text-muted-foreground">
             <span>
-              Showing <span className="font-medium text-foreground">{startIdx.toLocaleString()}</span> to{' '}
-              <span className="font-medium text-foreground">{endIdx.toLocaleString()}</span> of{' '}
-              <span className="font-medium text-foreground">{total.toLocaleString()}</span> records
+              Showing <span className="font-medium text-foreground">{records.length.toLocaleString()}</span> records
+              {total > 0 && (
+                <>
+                  {' '}of{' '}
+                  <span className="font-medium text-foreground">
+                    {total === -1 ? 'many' : total.toLocaleString()}
+                  </span>
+                  {isEstimated && <span className="ml-1 opacity-70">(estimated)</span>}
+                </>
+              )}
             </span>
-            <span className="text-border">|</span>
-            <div className="flex items-center gap-1.5">
-              <span className="text-muted-foreground whitespace-nowrap">Records per page:</span>
-              <select
-                value={pageSize}
-                onChange={(e) => {
-                  setPageSize(Number(e.target.value))
-                  setPage(1)
-                }}
-                className="h-7 rounded border border-input bg-background px-1.5 text-xs font-medium focus:outline-none focus:ring-1 focus:ring-primary"
-              >
-                {PAGE_SIZES.map((size) => (
-                  <option key={size} value={size}>
-                    {size}
-                  </option>
-                ))}
-              </select>
-            </div>
           </div>
-          <div className="flex items-center gap-1">
-            <Button variant="outline" size="icon" className="h-7 w-7" disabled={page <= 1} onClick={() => setPage(1)}>
-              <ChevronsLeft className="h-3.5 w-3.5" />
-            </Button>
-            <Button variant="outline" size="icon" className="h-7 w-7" disabled={page <= 1} onClick={() => setPage(page - 1)}>
-              <ChevronLeft className="h-3.5 w-3.5" />
-            </Button>
-            <span className="px-2 text-xs tabular-nums">
-              {page} / {totalPages}
-            </span>
-            <Button variant="outline" size="icon" className="h-7 w-7" disabled={page >= totalPages} onClick={() => setPage(page + 1)}>
-              <ChevronRight className="h-3.5 w-3.5" />
-            </Button>
-            <Button variant="outline" size="icon" className="h-7 w-7" disabled={page >= totalPages} onClick={() => setPage(totalPages)}>
-              <ChevronsRight className="h-3.5 w-3.5" />
-            </Button>
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-muted-foreground">Batch size:</span>
+            <select
+              value={pageSize}
+              onChange={(e) => setPageSize(Number(e.target.value))}
+              className="h-7 rounded border border-input bg-background px-1.5 text-xs font-medium focus:outline-none focus:ring-1 focus:ring-primary"
+            >
+              {[25, 50, 100, 200, 500].map((size) => (
+                <option key={size} value={size}>
+                  {size}
+                </option>
+              ))}
+            </select>
           </div>
         </div>
       )}

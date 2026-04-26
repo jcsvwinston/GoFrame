@@ -24,6 +24,9 @@ export interface ModelSummary {
   icon: string
   count: number
   count_known: boolean
+  is_estimated?: boolean
+  database: string
+  engine: string
   counts?: { [alias: string]: number }
   databases?: string[]
 }
@@ -78,6 +81,8 @@ export interface PaginatedResult {
   page: number
   page_size: number
   total_pages: number
+  is_estimated?: boolean
+  has_more?: boolean
 }
 
 export interface RuntimeDatabaseInfo {

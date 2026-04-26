@@ -27,11 +27,13 @@ type QueryOpts struct {
 
 // PaginatedResult wraps a paginated query response.
 type PaginatedResult struct {
-	Items      interface{} `json:"items"`
-	Total      int64       `json:"total"`
-	Page       int         `json:"page"`
-	PageSize   int         `json:"page_size"`
-	TotalPages int         `json:"total_pages"`
+	Items       interface{} `json:"items"`
+	Total       int64       `json:"total"`
+	Page        int         `json:"page"`
+	PageSize    int         `json:"page_size"`
+	TotalPages  int         `json:"total_pages"`
+	IsEstimated bool        `json:"is_estimated"` // Whether the Total count is an estimate
+	HasMore     bool        `json:"has_more"`     // Whether there are more pages (useful for infinite scroll)
 }
 
 // CRUD provides generic create/read/update/delete operations for a registered model.
@@ -42,6 +44,7 @@ type CRUD struct {
 	meta        *ModelMeta
 	bus         *signals.Bus
 	sqlObserver SQLQueryObserver
+	dialect     string // Database dialect (sqlite, postgres, mysql)
 }
 
 // SQLQueryEvent represents one SQL operation executed by CRUD.
@@ -65,6 +68,11 @@ func NewCRUD(db *sql.DB, meta *ModelMeta, bus *signals.Bus) *CRUD {
 	return &CRUD{db: db, meta: meta, bus: bus}
 }
 
+// SetDialect sets the database dialect for this CRUD instance.
+func (c *CRUD) SetDialect(dialect string) {
+	c.dialect = strings.ToLower(strings.TrimSpace(dialect))
+}
+
 // SetSQLQueryObserver registers a SQL observer for this CRUD instance.
 // Passing nil disables SQL observation.
 func (c *CRUD) SetSQLQueryObserver(observer SQLQueryObserver) {
@@ -72,6 +80,8 @@ func (c *CRUD) SetSQLQueryObserver(observer SQLQueryObserver) {
 }
 
 // FindAll retrieves a paginated, searchable, filterable list of records.
+// It uses an "estimate first" strategy for performance and supports infinite scroll
+// by fetching one extra record to detect if more data exists.
 func (c *CRUD) FindAll(ctx context.Context, opts QueryOpts) (*PaginatedResult, error) {
 	if opts.Page < 1 {
 		opts.Page = 1
@@ -86,28 +96,24 @@ func (c *CRUD) FindAll(ctx context.Context, opts QueryOpts) (*PaginatedResult, e
 	whereExpr, whereArgs := c.buildWhere(opts)
 
 	var total int64
+	var estimated bool
+
+	// Get estimated count if no filters are applied, otherwise we might need a real count
+	// depending on how much we care about the "total" indicator.
+	// The user requested to avoid COUNT(*) for performance.
+	if whereExpr == "" {
+		total, estimated = c.getEstimate(ctx)
+	} else {
+		// With filters, we could still estimate or just return -1 (unknown)
+		// For now, let's return -1 to signal that total is unknown/expensive
+		total = -1
+		estimated = true
+	}
 
 	columns := c.selectedColumns(opts.Fields)
 	if len(columns) == 0 {
 		return nil, fmt.Errorf("model.CRUD.FindAll model=%s: no valid columns selected", c.meta.Name)
 	}
-
-	// Execute COUNT query
-	countQuery := fmt.Sprintf("SELECT COUNT(*) FROM %s", c.meta.Table)
-	if whereExpr != "" {
-		countQuery += " WHERE " + whereExpr
-	}
-	countRows, err := c.queryContext(ctx, "select.count", countQuery, whereArgs...)
-	if err != nil {
-		return nil, fmt.Errorf("model.CRUD.FindAll model=%s count: %w", c.meta.Name, err)
-	}
-	if countRows.Next() {
-		if err := countRows.Scan(&total); err != nil {
-			_ = countRows.Close()
-			return nil, fmt.Errorf("model.CRUD.FindAll model=%s count scan: %w", c.meta.Name, err)
-		}
-	}
-	_ = countRows.Close()
 
 	orderBy := strings.TrimSpace(opts.OrderBy)
 	if orderBy == "" {
@@ -122,11 +128,12 @@ func (c *CRUD) FindAll(ctx context.Context, opts QueryOpts) (*PaginatedResult, e
 	if whereExpr != "" {
 		querySQL += " WHERE " + whereExpr
 	}
+	// Fetch PageSize + 1 to detect HasMore for infinite scroll
 	querySQL += " ORDER BY " + orderBy + " LIMIT ? OFFSET ?"
 
 	args := make([]interface{}, 0, len(whereArgs)+2)
 	args = append(args, whereArgs...)
-	args = append(args, opts.PageSize, offset)
+	args = append(args, opts.PageSize+1, offset)
 
 	rows, err := c.queryContext(ctx, "select.list", querySQL, args...)
 	if err != nil {
@@ -134,29 +141,68 @@ func (c *CRUD) FindAll(ctx context.Context, opts QueryOpts) (*PaginatedResult, e
 	}
 	defer rows.Close()
 
-	items := reflect.MakeSlice(reflect.SliceOf(c.meta.Type), 0, opts.PageSize)
+	items := reflect.MakeSlice(reflect.SliceOf(c.meta.Type), 0, opts.PageSize+1)
+	count := 0
 	for rows.Next() {
 		entityPtr := reflect.New(c.meta.Type)
 		if err := c.scanRowIntoEntity(rows, columns, entityPtr.Elem()); err != nil {
 			return nil, fmt.Errorf("model.CRUD.FindAll model=%s scan: %w", c.meta.Name, err)
 		}
 		items = reflect.Append(items, entityPtr.Elem())
+		count++
 	}
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("model.CRUD.FindAll model=%s rows: %w", c.meta.Name, err)
 	}
 
-	totalPages := int(math.Ceil(float64(total) / float64(opts.PageSize)))
-	if totalPages < 1 {
-		totalPages = 1
+	hasMore := count > opts.PageSize
+	finalItems := items
+	if hasMore {
+		finalItems = items.Slice(0, opts.PageSize)
 	}
+
+	totalPages := 0
+	if total > 0 {
+		totalPages = int(math.Ceil(float64(total) / float64(opts.PageSize)))
+	} else if hasMore {
+		// If total is unknown but we have more, we at least have 2 pages
+		totalPages = opts.Page + 1
+	} else {
+		totalPages = opts.Page
+	}
+
 	return &PaginatedResult{
-		Items:      items.Interface(),
-		Total:      total,
-		Page:       opts.Page,
-		PageSize:   opts.PageSize,
-		TotalPages: totalPages,
+		Items:       finalItems.Interface(),
+		Total:       total,
+		Page:        opts.Page,
+		PageSize:    opts.PageSize,
+		TotalPages:  totalPages,
+		IsEstimated: estimated,
+		HasMore:     hasMore,
 	}, nil
+}
+
+func (c *CRUD) getEstimate(ctx context.Context) (int64, bool) {
+	var total int64
+	var err error
+
+	switch c.dialect {
+	case "postgres":
+		err = c.db.QueryRowContext(ctx, "SELECT reltuples::bigint FROM pg_class WHERE relname = ?", c.meta.Table).Scan(&total)
+	case "mysql":
+		err = c.db.QueryRowContext(ctx, "SELECT TABLE_ROWS FROM information_schema.tables WHERE table_name = ? AND table_schema = DATABASE()", c.meta.Table).Scan(&total)
+	case "sqlite", "sqlite3":
+		err = c.db.QueryRowContext(ctx, "SELECT n FROM sqlite_stat1 WHERE tbl = ? LIMIT 1", c.meta.Table).Scan(&total)
+	case "sqlserver", "mssql":
+		err = c.db.QueryRowContext(ctx, "SELECT SUM(rows) FROM sys.partitions WHERE object_id = OBJECT_ID(?) AND index_id IN (0, 1)", c.meta.Table).Scan(&total)
+	case "oracle":
+		err = c.db.QueryRowContext(ctx, "SELECT NUM_ROWS FROM ALL_TABLES WHERE TABLE_NAME = UPPER(?)", c.meta.Table).Scan(&total)
+	}
+
+	if err != nil || total < 0 {
+		return -1, true
+	}
+	return total, true
 }
 
 // FindByID retrieves a single record by primary key.

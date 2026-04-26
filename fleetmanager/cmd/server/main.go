@@ -13,6 +13,7 @@ import (
 	"github.com/jcsvwinston/fleetmanager/internal/models"
 	"github.com/jcsvwinston/fleetmanager/internal/repositories"
 	"github.com/jcsvwinston/fleetmanager/internal/services"
+	"github.com/jcsvwinston/GoFrame/pkg/admin"
 	"github.com/jcsvwinston/GoFrame/pkg/app"
 	"github.com/jcsvwinston/GoFrame/pkg/model"
 )
@@ -36,6 +37,27 @@ func main() {
 		log.Fatal(err)
 	}
 
+	// Bootstrap Admin User
+	res, err := admin.EnsureBootstrapAdminUser(context.Background(), sqlDB, admin.BootstrapAdminConfig{
+		Username: cfg.AdminBootstrapUsername,
+		Email:    cfg.AdminBootstrapEmail,
+		Password: cfg.AdminBootstrapPassword,
+	})
+	if err != nil {
+		log.Printf("Warning: admin bootstrap failed: %v", err)
+	} else if res.Created {
+		log.Printf("Admin user %q created successfully", res.Username)
+	}
+
+	// Initialize secondary database schema
+	secondaryDB, ok := a.DBs["secondary"]
+	if ok && secondaryDB != nil {
+		secSQL, err := secondaryDB.SqlDB()
+		if err == nil {
+			_ = ensureSchema(secSQL)
+		}
+	}
+
 	// Register Admin Models
 	a.RegisterModel(&models.Organization{}, model.ModelConfig{Icon: "office-building"})
 	a.RegisterModel(&models.Fleet{}, model.ModelConfig{Icon: "collection"})
@@ -45,9 +67,9 @@ func main() {
 	a.RegisterModel(&models.MaintenanceTask{}, model.ModelConfig{Icon: "clipboard-list"})
 	a.RegisterModel(&models.Driver{}, model.ModelConfig{Icon: "user-group"})
 	a.RegisterModel(&models.Asset{}, model.ModelConfig{Icon: "truck"})
-	a.RegisterModel(&models.Trip{}, model.ModelConfig{Icon: "map"})
-	a.RegisterModel(&models.Geofence{}, model.ModelConfig{Icon: "view-grid"})
-	a.RegisterModel(&models.Alert{}, model.ModelConfig{Icon: "bell"})
+	a.RegisterModel(&models.Trip{}, model.ModelConfig{Icon: "map", DatabaseAlias: "secondary"})
+	a.RegisterModel(&models.Geofence{}, model.ModelConfig{Icon: "view-grid", DatabaseAlias: "secondary"})
+	a.RegisterModel(&models.Alert{}, model.ModelConfig{Icon: "bell", DatabaseAlias: "secondary"})
 
 	// Wire All 11 API Handlers
 	registerAPI(a, sqlDB)
@@ -155,6 +177,7 @@ func ensureSchema(sqlDB *sql.DB) error {
 		)`,
 		`CREATE TABLE IF NOT EXISTS telemetries (
 			id INTEGER PRIMARY KEY AUTOINCREMENT, 
+			created_at DATETIME, updated_at DATETIME, deleted_at DATETIME,
 			sensor_id INTEGER NOT NULL, value REAL NOT NULL, 
 			timestamp DATETIME NOT NULL
 		)`,
