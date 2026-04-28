@@ -40,8 +40,9 @@ export default function InfraManagerPage() {
     fetchSessions()
   }, [])
 
-  const handleDeleteSession = async (_sessionId: string) => {
+  const handleDeleteSession = async (sessionId: string) => {
     try {
+      await api.deleteSession(sessionId)
       toast({
         title: 'Session terminated',
         description: 'The session has been destroyed',

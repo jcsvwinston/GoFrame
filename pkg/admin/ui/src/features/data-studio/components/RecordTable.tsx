@@ -284,6 +284,7 @@ export default function RecordTable({ modelName, schema, dbAlias }: Props) {
     if (!importFile) return
     setIsImporting(true)
     try {
+      await api.importData(importFile)
       toast({ title: 'Import successful' })
       setImportFile(null)
       fetchRecords(false)

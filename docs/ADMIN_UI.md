@@ -1,14 +1,14 @@
 # Admin UI Documentation
 
-Reference date: 2026-04-13.
+Reference date: 2026-04-28.
 Status: Current (pre-v1 - React-based UI).
 
 ## Overview
 
-The GoFrame admin panel (`/admin`) is an embedded **React + TypeScript** application with Tailwind CSS and shadcn/ui components. It provides:
+The GoFrame admin panel (`/admin`) is an embedded **React + TypeScript** application with Tailwind CSS and Base UI components. It provides:
 
 - Modern authentication UI with dark/light theme support
-- Data management (CRUD) for registered models
+- Data management (CRUD) for registered models with AG Grid
 - Real-time runtime inspection (traffic, SQL, sessions)
 - System health monitoring
 - Multi-tenant and multi-site management
@@ -25,7 +25,8 @@ The GoFrame admin panel (`/admin`) is an embedded **React + TypeScript** applica
 | **Framework** | React 19 (TypeScript) |
 | **Bundler** | Vite 6 |
 | **Styling** | Tailwind CSS 3 |
-| **UI Components** | shadcn/ui (local) |
+| **UI Components** | Base UI (headless) + Tailwind CSS |
+| **Data Grid** | AG Grid Community (free tier) |
 | **State Management** | Zustand 5 |
 | **Routing** | React Router 7 |
 | **Charts** | Recharts 2 |
@@ -205,10 +206,15 @@ g, carol, viewer
 - Database connection status
 
 ### 2. Data Studio (`/data-studio`)
+- AG Grid Community for advanced data table
+- Multi-column sorting and filtering
+- Column resizing and reordering
+- Row selection with checkboxes
+- Inline cell editing
 - Export data (CSV, JSON, SQL formats)
 - Import data with file upload
-- Format selector
-- Progress indicators
+- Bulk actions (delete, export)
+- Server-side pagination
 
 ### 3. System Pulse (`/system`)
 - Go runtime metrics (goroutines, memory, GC)
@@ -267,10 +273,17 @@ theme: {
 
 ### Add New UI Components
 
-```bash
-cd pkg/admin/ui
-npx shadcn@latest add tooltip
-# Installs to src/components/ui/tooltip.tsx
+For Base UI components not available, use HTML with Tailwind CSS:
+
+```tsx
+// Example: custom select component
+import { cn } from "@/lib/utils"
+
+export function Select({ className, ...props }: React.ComponentProps<"select">) {
+  return (
+    <select className={cn("custom-select-styles", className)} {...props} />
+  )
+}
 ```
 
 ### Create New Feature Pages

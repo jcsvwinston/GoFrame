@@ -217,6 +217,10 @@ export async function getSessions(): Promise<Session[]> {
   }))
 }
 
+export async function deleteSession(sessionId: string): Promise<void> {
+  await fetchAPI(`/api/sessions/${sessionId}`, { method: 'DELETE' })
+}
+
 export async function getAuditLogs(params?: Record<string, string>): Promise<AuditLog[]> {
   const searchParams = new URLSearchParams(params)
   const response = await fetchAPI<{

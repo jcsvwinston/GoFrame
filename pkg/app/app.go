@@ -23,6 +23,7 @@ import (
 	"github.com/jcsvwinston/GoFrame/pkg/model"
 	"github.com/jcsvwinston/GoFrame/pkg/observe"
 	"github.com/jcsvwinston/GoFrame/pkg/openapi"
+	"github.com/jcsvwinston/GoFrame/pkg/outbox"
 	"github.com/jcsvwinston/GoFrame/pkg/router"
 	"github.com/jcsvwinston/GoFrame/pkg/storage"
 )
@@ -43,10 +44,11 @@ type App struct {
 	Models  *model.Registry
 	Admin   *admin.Panel
 	Storage storage.Store
+	Outbox  *outbox.ManagedOutbox
 
 	databaseDefaultAlias string
 	scopeResolver        *requestScopeResolver
-	extensions            []Extension
+	extensions           []Extension
 
 	mu             sync.Mutex
 	server         *http.Server
@@ -231,6 +233,14 @@ func New(cfg *Config, opts ...Option) (*App, error) {
 		}
 	}
 
+	// Initialize outbox if enabled in configuration
+	if effective.Outbox.Enabled {
+		if err := attachOutbox(a, effective, dbConn); err != nil {
+			_ = a.Shutdown(context.Background())
+			return nil, wrapOp("New outbox", err)
+		}
+	}
+
 	// Attach user-provided extensions.
 	for _, ext := range o.extensions {
 		if err := ext.Attach(a); err != nil {
@@ -242,6 +252,149 @@ func New(cfg *Config, opts ...Option) (*App, error) {
 	}
 
 	return a, nil
+}
+
+// attachOutbox initializes the outbox when enabled in configuration.
+func attachOutbox(a *App, cfg *Config, dbConn *db.DB) error {
+	sqlDB, err := dbConn.SqlDB()
+	if err != nil {
+		return fmt.Errorf("outbox: get sql db: %w", err)
+	}
+
+	managedOutbox, err := outbox.NewManagedOutbox(outbox.ManagedConfig{
+		DB:            sqlDB,
+		TableName:     cfg.Outbox.TableName,
+		Flavor:        outbox.FlavorSQLite, // TODO: detect from database URL
+		LeaseOwner:    "goframe-app",
+		LeaseDuration: cfg.Outbox.LeaseDuration,
+		PollInterval:  time.Second,
+		BatchSize:     10,
+		MaxAttempts:   cfg.Outbox.MaxRetries,
+		BaseDelay:     cfg.Outbox.RetryBackoff,
+		MaxDelay:      time.Minute,
+		Logger:        a.Logger,
+	})
+	if err != nil {
+		return fmt.Errorf("outbox: create managed outbox: %w", err)
+	}
+
+	// Configure bridges from configuration
+	for _, bridgeCfg := range cfg.Outbox.Bridges {
+		switch strings.ToLower(bridgeCfg.Type) {
+		case "webhook":
+			webhookCfg := outbox.WebhookConfig{
+				Name:    bridgeCfg.Name,
+				URL:     getConfigString(bridgeCfg.Config, "url"),
+				Headers: getConfigStringMap(bridgeCfg.Config, "headers"),
+			}
+			bridge, err := outbox.NewWebhookBridge(webhookCfg)
+			if err != nil {
+				return fmt.Errorf("outbox: create webhook bridge %q: %w", bridgeCfg.Name, err)
+			}
+			if err := managedOutbox.RegisterBridge(bridge); err != nil {
+				return fmt.Errorf("outbox: register webhook bridge %q: %w", bridgeCfg.Name, err)
+			}
+			// Add default route for all topics if no pattern specified
+			pattern := getConfigString(bridgeCfg.Config, "pattern")
+			if pattern == "" {
+				pattern = "*"
+			}
+			managedOutbox.AddRoute(pattern, bridgeCfg.Name)
+		case "kafka":
+			kafkaCfg := outbox.KafkaConfig{
+				Name:    bridgeCfg.Name,
+				Brokers: getConfigStringSlice(bridgeCfg.Config, "brokers"),
+				Topic:   getConfigString(bridgeCfg.Config, "topic"),
+			}
+			bridge, err := outbox.NewKafkaBridge(kafkaCfg)
+			if err != nil {
+				return fmt.Errorf("outbox: create kafka bridge %q: %w", bridgeCfg.Name, err)
+			}
+			if err := managedOutbox.RegisterBridge(bridge); err != nil {
+				return fmt.Errorf("outbox: register kafka bridge %q: %w", bridgeCfg.Name, err)
+			}
+			pattern := getConfigString(bridgeCfg.Config, "pattern")
+			if pattern == "" {
+				pattern = "*"
+			}
+			managedOutbox.AddRoute(pattern, bridgeCfg.Name)
+		default:
+			a.Logger.Warn("outbox: unknown bridge type", "type", bridgeCfg.Type, "name", bridgeCfg.Name)
+		}
+	}
+
+	a.Outbox = managedOutbox
+
+	// Start the dispatcher in background
+	if err := a.Outbox.Start(context.Background()); err != nil {
+		return fmt.Errorf("outbox: start dispatcher: %w", err)
+	}
+
+	// Register shutdown hook
+	a.OnShutdown(func(ctx context.Context) error {
+		return a.Outbox.Stop(ctx)
+	})
+
+	a.Logger.Info("outbox initialized", "table", cfg.Outbox.TableName, "bridges", len(cfg.Outbox.Bridges))
+	return nil
+}
+
+func getConfigString(cfg map[string]interface{}, key string) string {
+	if cfg == nil {
+		return ""
+	}
+	val, ok := cfg[key]
+	if !ok {
+		return ""
+	}
+	if str, ok := val.(string); ok {
+		return str
+	}
+	return fmt.Sprintf("%v", val)
+}
+
+func getConfigStringMap(cfg map[string]interface{}, key string) map[string]string {
+	if cfg == nil {
+		return nil
+	}
+	val, ok := cfg[key]
+	if !ok {
+		return nil
+	}
+	if m, ok := val.(map[string]interface{}); ok {
+		result := make(map[string]string)
+		for k, v := range m {
+			if str, ok := v.(string); ok {
+				result[k] = str
+			} else {
+				result[k] = fmt.Sprintf("%v", v)
+			}
+		}
+		return result
+	}
+	return nil
+}
+
+func getConfigStringSlice(cfg map[string]interface{}, key string) []string {
+	if cfg == nil {
+		return nil
+	}
+	val, ok := cfg[key]
+	if !ok {
+		return nil
+	}
+	if slice, ok := val.([]interface{}); ok {
+		result := make([]string, 0, len(slice))
+		for _, v := range slice {
+			if str, ok := v.(string); ok {
+				result = append(result, str)
+			} else {
+				result = append(result, fmt.Sprintf("%v", v))
+			}
+		}
+		return result
+	}
+	return nil
 }
 
 // attachDefaultSubsystems initializes mail, storage, authz, and admin when

@@ -110,7 +110,7 @@ export default function RBACPage() {
           <p className="text-muted-foreground">RBAC policy management</p>
         </div>
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-          <DialogTrigger asChild>
+          <DialogTrigger>
             <Button>
               <Plus className="mr-2 h-4 w-4" />
               Add Policy

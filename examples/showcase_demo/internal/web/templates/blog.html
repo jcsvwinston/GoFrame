@@ -1,0 +1,44 @@
+{{define "blog.html"}}
+{{template "layout" .}}
+{{define "content"}}
+  <section class="page-header">
+    <div class="container">
+      <h1>Blog</h1>
+      <p>Artículos sobre Go, DevOps, y desarrollo de software</p>
+    </div>
+  </section>
+
+  <section class="blog-section">
+    <div class="container">
+      {{if .Articles}}
+        <div class="blog-grid">
+          {{range .Articles}}
+          <article class="blog-card">
+            <div class="blog-card-meta">
+              <span class="category-tag" style="background: {{.CategoryColor}}20; color: {{.CategoryColor}};">
+                {{.CategoryName}}
+              </span>
+              <span class="date">{{.PublishedAt}}</span>
+            </div>
+            <h2><a href="/blog/{{.Slug}}">{{.Title}}</a></h2>
+            <p class="excerpt">{{.Summary}}</p>
+            <div class="blog-card-footer">
+              <div class="author">
+                <img src="{{.AvatarURL}}" alt="{{.AuthorName}}" class="author-avatar">
+                <span>{{.AuthorName}}</span>
+              </div>
+              <span class="views">👁 {{.ViewCount}} vistas</span>
+            </div>
+            <a href="/blog/{{.Slug}}" class="read-more">Leer artículo →</a>
+          </article>
+          {{end}}
+        </div>
+      {{else}}
+        <div class="empty-state">
+          <p>No hay artículos publicados aún.</p>
+        </div>
+      {{end}}
+    </div>
+  </section>
+{{end}}
+{{end}}

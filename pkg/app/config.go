@@ -111,6 +111,11 @@ type Config struct {
 	// Storage (new unified config)
 	Storage StorageConfig `koanf:"storage"`
 
+	// Outbox (transactional outbox pattern)
+	// When enabled, the outbox provides reliable message delivery through
+	// a SQL-backed table with support for external bridges (Kafka, webhooks, etc.)
+	Outbox OutboxConfig `koanf:"outbox"`
+
 	// Environment
 	Env   string `koanf:"env"`
 	Debug bool   `koanf:"debug"`
@@ -190,6 +195,23 @@ type StorageConfig struct {
 		Prefix   string `koanf:"prefix"`
 		MaxAge   string `koanf:"max_age"`
 	} `koanf:"cleanup"`
+}
+
+// OutboxConfig configures the transactional outbox pattern for reliable message delivery.
+type OutboxConfig struct {
+	Enabled       bool           `koanf:"enabled"`
+	TableName     string         `koanf:"table_name"`
+	LeaseDuration time.Duration  `koanf:"lease_duration"`
+	MaxRetries    int            `koanf:"max_retries"`
+	RetryBackoff  time.Duration  `koanf:"retry_backoff"`
+	Bridges       []BridgeConfig `koanf:"bridges"`
+}
+
+// BridgeConfig configures an external message bridge (Kafka, Webhook, RabbitMQ, etc.).
+type BridgeConfig struct {
+	Name   string                 `koanf:"name"`
+	Type   string                 `koanf:"type"` // kafka, webhook, rabbitmq
+	Config map[string]interface{} `koanf:"config"`
 }
 
 // MultiTenantConfig describes tenant resolution and tenant->database mapping.
@@ -332,6 +354,15 @@ func defaults() Config {
 				Prefix:   "_tmp/",
 				MaxAge:   "24h",
 			},
+		},
+
+		Outbox: OutboxConfig{
+			Enabled:       false,
+			TableName:     "goframe_outbox",
+			LeaseDuration: 30 * time.Second,
+			MaxRetries:    5,
+			RetryBackoff:  time.Second,
+			Bridges:       []BridgeConfig{},
 		},
 
 		Env:   "development",

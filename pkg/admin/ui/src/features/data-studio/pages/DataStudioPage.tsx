@@ -5,7 +5,7 @@ import { useToast } from '@/components/ui/use-toast'
 import * as api from '@/services/api'
 import type { ModelSummary, ModelSchema, RuntimeInfo } from '@/types'
 import ModelSidebar from '../components/ModelSidebar'
-import RecordTable from '../components/RecordTable'
+import AGGridTable from '../components/AGGridTable'
 import FieldConfigPanel from '../components/FieldConfigPanel'
 import { Database, Loader2, Server, Settings2 } from 'lucide-react'
 
@@ -205,7 +205,7 @@ export default function DataStudioPage() {
                 </div>
               </div>
 
-              <RecordTable
+              <AGGridTable
                 modelName={selectedModel}
                 schema={schema}
                 dbAlias={dbAlias}

@@ -1,6 +1,6 @@
 # Status and Next Steps
 
-Last updated: 2026-04-23
+Last updated: 2026-04-28
 
 ## Current baseline
 
@@ -214,13 +214,28 @@ All modularization work is complete. Possible next steps:
 
 ### Point 9: Outbox as a first-class module
 
-**Status: Planning.**
+**Status: Completed.**
 
 Goal: Integrate `pkg/outbox` into the `app.App` lifecycle and add support for external "Bridges" (Kafka, Webhooks, etc.) via configuration.
 
-Pending tasks:
+Completed tasks:
 
-- [ ] Add `OutboxConfig` to `pkg/app/config.go`
-- [ ] Implement `Bridge` interface and registry in `pkg/outbox`
-- [ ] Update `app.App` to manage the Outbox lifecycle automatically
-- [ ] Allow declarative bridge configuration in `goframe.yaml`
+- [x] Add `OutboxConfig` to `pkg/app/config.go`
+- [x] Implement `Bridge` interface and registry in `pkg/outbox`
+- [x] Update `app.App` to manage the Outbox lifecycle automatically
+- [x] Allow declarative bridge configuration in `goframe.yaml`
+
+Implementation details:
+
+- Added `OutboxConfig` struct with enabled flag, table name, lease duration, max retries, retry backoff, and bridges list
+- Added `BridgeConfig` struct for configuring individual bridges (name, type, config map)
+- Implemented `Bridge` interface with `Name()`, `Send()`, `Healthy()`, and `Close()` methods
+- Implemented `BridgeRegistry` for managing multiple bridges
+- Implemented `Router` for topic-based routing with wildcard pattern support
+- Created `WebhookBridge` implementation (fully functional)
+- Created `KafkaBridge` implementation (placeholder for future Kafka client integration)
+- Updated `Dispatcher` to support bridge-based routing alongside traditional handlers
+- Created `ManagedOutbox` wrapper for lifecycle management
+- Integrated outbox initialization in `app.New()` when `Outbox.Enabled` is true
+- Added helper functions for parsing bridge configuration from YAML
+- Added comprehensive tests for bridges, registry, and router

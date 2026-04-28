@@ -172,21 +172,18 @@ export default function RecordForm({ open, onClose, schema, record, onSave }: Pr
     }
   }
 
+  if (!open) return null
+
   return (
-    <Dialog open={open} onOpenChange={(val) => !val && onClose()}>
-      <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
+    <Dialog open={true} onOpenChange={(val: boolean) => !val && onClose()}>
+      <DialogContent className="max-w-xl max-h-[80vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>
-            {isEdit ? 'Edit' : 'Create'} {schema.name}
-          </DialogTitle>
+          <DialogTitle>{isEdit ? 'Edit' : 'Create'} {schema.name}</DialogTitle>
           <DialogDescription>
-            {isEdit
-              ? `Update the fields below for this ${schema.name} record.`
-              : `Fill in the fields below to create a new ${schema.name} record.`}
+            {isEdit ? 'Update the record details below.' : 'Fill in the details to create a new record.'}
           </DialogDescription>
         </DialogHeader>
-
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-4 py-2">
           {isEdit && readonlyFields.length > 0 && (
             <div className="space-y-2 pb-3 border-b">
               {readonlyFields.map((f) => (

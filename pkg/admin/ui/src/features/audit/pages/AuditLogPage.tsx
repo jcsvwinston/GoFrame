@@ -46,6 +46,16 @@ export default function AuditLogPage() {
     fetchLogs()
   }, [])
 
+  // Debounced search
+  useEffect(() => {
+    const timeout = setTimeout(() => {
+      if (searchTerm !== undefined) {
+        fetchLogs()
+      }
+    }, 300)
+    return () => clearTimeout(timeout)
+  }, [searchTerm])
+
   const getActionColor = (action: string): string => {
     switch (action.toLowerCase()) {
       case 'create':
