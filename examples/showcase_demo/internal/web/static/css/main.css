@@ -605,6 +605,17 @@ img, svg {
   line-height: 1.8;
 }
 
+.markdown-content img {
+  max-width: 100%;
+  height: auto;
+  max-height: 500px;
+  object-fit: cover;
+  border-radius: var(--radius);
+  margin: 2rem 0;
+  display: block;
+  box-shadow: var(--shadow-md);
+}
+
 .markdown-content h2 {
   font-size: 1.5rem;
   margin: 2rem 0 1rem;

@@ -57,13 +57,19 @@ func setupRoutes(a *app.App) {
 	// Public Web Pages
 	a.Router.Get("/", controllers.HomePage(tpl, db))
 	a.Router.Get("/blog", controllers.BlogPage(tpl, db))
-	a.Router.Get("/articles/{id}", controllers.ArticlePage(tpl, db))
+	a.Router.Get("/blog/{id}", controllers.ArticlePage(tpl, db))
+	a.Router.Get("/categories", controllers.CategoriesPage(tpl, db))
+	a.Router.Get("/about", controllers.AboutPage(tpl, db))
+	a.Router.Get("/contact", controllers.ContactPage(tpl))
+	a.Router.Post("/contact", controllers.ContactSubmit(db))
 	
 	// API Endpoints
 	a.Router.Get("/api/health", controllers.Health)
 	a.Router.Get("/api/stats", controllers.GetStatsAPI(db))
 	a.Router.Get("/api/categories", controllers.ListCategoriesAPI(db))
 	a.Router.Get("/api/authors", controllers.ListAuthorsAPI(db))
+	a.Router.Get("/api/articles", controllers.GetArticleBySlug(db)) // This actually returns one if slug provided, wait.
+	a.Router.Get("/api/articles/{slug}", controllers.GetArticleBySlug(db))
 
-	a.Logger.Info("Routes registered", "count", 7)
+	a.Logger.Info("Routes registered", "count", 14)
 }
