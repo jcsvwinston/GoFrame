@@ -5,9 +5,9 @@
 [![Release Asset Smoke](https://github.com/jcsvwinston/GoFrame/actions/workflows/release_asset_smoke.yml/badge.svg)](https://github.com/jcsvwinston/GoFrame/actions/workflows/release_asset_smoke.yml)
 [![Go Reference](https://pkg.go.dev/badge/github.com/jcsvwinston/GoFrame.svg)](https://pkg.go.dev/github.com/jcsvwinston/GoFrame)
 
-Enterprise-oriented web framework for Go, built for long-lived systems.
+**Enterprise web framework for Go** — Simple like Gin/Fiber, powerful like Django/Encore.
 
-GoFrame combines a native router stack, SQL-first data access over `database/sql`, auto-generated admin, background jobs with Asynq, and an operations-first CLI for real production workflows.
+GoFrame combines a developer-friendly API with enterprise capabilities: auto-generated admin, multi-tenancy, multi-database, background jobs, transactional outbox, and complete observability.
 
 Strategically, GoFrame aims to fuse two strengths into one Go framework:
 
@@ -51,7 +51,71 @@ See GitHub Releases:
 
 - https://github.com/jcsvwinston/GoFrame/releases
 
-## Quick Start
+## Quick Start (New Simplified API)
+
+GoFrame now offers a **Gin/Fiber-like API** while keeping all enterprise features:
+
+```go
+package main
+
+import "github.com/jcsvwinston/GoFrame/pkg/goframe"
+
+type Article struct {
+    ID    int64  `json:"id" db:"id"`
+    Title string `json:"title" db:"title" validate:"required"`
+}
+
+func main() {
+    goframe.New().
+        Port(8080).
+        SQLite("app.db").
+        Model(&Article{}).
+        AutoMigrate().
+        Get("/api/articles", func(c *goframe.Context) error {
+            return c.JSON(200, []Article{
+                {ID: 1, Title: "Hello GoFrame!"},
+            })
+        }).
+        Post("/api/articles", func(c *goframe.Context) error {
+            var article Article
+            if err := c.BindJSON(&article); err != nil {
+                return err
+            }
+            return c.JSON(201, article)
+        }).
+        Run()
+}
+```
+
+### Multi-Database Setup
+
+```go
+goframe.New().
+    Port(8080).
+    Database("default", goframe.Postgres("postgres://localhost/main")).
+    Database("analytics", goframe.Postgres("postgres://localhost/analytics")).
+    Database("cache", goframe.Redis("redis://localhost:6379")).
+    WithMultiTenant(goframe.MultiTenant{
+        Resolver: "subdomain",
+        Template: "tenant_{tenant}_db",
+    }).
+    Run()
+```
+
+### React SPA + GoFrame API
+
+```go
+// Backend serves API and React build
+goframe.New().
+    Port(8080).
+    Resource("/api/articles", ArticleResource{}).
+    SPA("web/dist", goframe.SPAConfig{
+        APIPrefix: "/api",
+    }).
+    Run()
+```
+
+## Quick Start (Original API)
 
 ### 1. Create a new project
 

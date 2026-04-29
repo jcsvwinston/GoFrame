@@ -8,6 +8,6 @@ dist/
 *.log
 nginx.conf
 clean.py
-goframe
-goframe.exe
+/goframe
+/goframe.exe
 examples/mvc_api/storage/_tmp/*
