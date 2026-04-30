@@ -878,7 +878,7 @@ go run ./cmd/worker
 
 ## 23. Suggested Next Reading
 
-- documentation map: `docs/INDEX.md`
+- documentation: `docs/README.md`
 - quick onboarding: `docs/QUICKSTART.md`
 - step-by-step tutorial: `docs/DETAILED_TUTORIAL.md`
 - recommended layout: `docs/reference/PROJECT_LAYOUT.md`

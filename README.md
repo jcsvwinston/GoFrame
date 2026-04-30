@@ -1,64 +1,48 @@
 # GoFrame
 
 [![CI](https://github.com/jcsvwinston/GoFrame/actions/workflows/ci.yml/badge.svg)](https://github.com/jcsvwinston/GoFrame/actions/workflows/ci.yml)
-[![Rehearsal](https://github.com/jcsvwinston/GoFrame/actions/workflows/rehearsal.yml/badge.svg)](https://github.com/jcsvwinston/GoFrame/actions/workflows/rehearsal.yml)
-[![Release Asset Smoke](https://github.com/jcsvwinston/GoFrame/actions/workflows/release_asset_smoke.yml/badge.svg)](https://github.com/jcsvwinston/GoFrame/actions/workflows/release_asset_smoke.yml)
 [![Go Reference](https://pkg.go.dev/badge/github.com/jcsvwinston/GoFrame.svg)](https://pkg.go.dev/github.com/jcsvwinston/GoFrame)
 
-**Enterprise web framework for Go** — Simple like Gin/Fiber, powerful like Django/Encore.
-
-GoFrame combines a developer-friendly API with enterprise capabilities: auto-generated admin, multi-tenancy, multi-database, background jobs, transactional outbox, and complete observability.
-
-Strategically, GoFrame aims to fuse two strengths into one Go framework:
-
-- Django's application and operations ergonomics
-- Encore's platform-oriented developer experience for production systems
+**Enterprise web framework for Go** — Simple like Gin, powerful like Django.
 
 ## Why GoFrame
 
-- Strategic goal: bring Django + Encore together in one Go-native framework without giving up stdlib-first runtime design.
-- Long-term upgrade safety: explicit compatibility policy and release gates for stable contracts.
-- SQL-first by design: runtime and tooling aligned to `database/sql` with practical migration/fixture/introspection commands.
-- Built for operations: deploy checks, health diagnostics, observability baseline, and release rehearsal baked in.
-- Extensible platform: capability-based provider plugins and external CLI extensions.
+- **MVC + REST API**: Build web apps and APIs with the same framework
+- **Auto-generated Admin**: CRUD interface from your models
+- **SQL-first**: Direct `database/sql` with migrations, no ORM magic
+- **Production-ready**: Multi-tenancy, background jobs, observability built-in
+- **Go-idiomatic**: stdlib-first design with minimal dependencies
 
-## What You Get Today
+## Quick Start
 
-- App container (`pkg/app`) with lifecycle, config, logger, router, DB, admin, session, and mail wiring.
-- Multi-DB runtime wiring with named aliases (`database_default` + `databases.<alias>.url`).
-- MultiSite/MultiTenant request scope resolution (`host`/subdomain/header) with tenant-aware DB alias routing helpers.
-- HTTP stack (`pkg/router`) with security middleware, CSRF, advanced rate-limit dimensions, and OTel HTTP telemetry.
-- Auth/Authz (`pkg/auth`, `pkg/authz`) with JWT, server-side sessions (`memory|sql|redis`), and Casbin integration points.
-- Model system (`pkg/model`) with metadata extraction, registry, and generic CRUD.
-- Embedded admin UI (`pkg/admin`) for CRUD, schema inspection, filters, CSV export, bulk operations, session observability, task runtime visibility, outbox state, and distributed topology.
-- Task runtime (`pkg/tasks`) with Asynq manager, explicit enqueue/scheduler helpers, runtime ops, and worker scaffold.
-- Transactional outbox runtime (`pkg/outbox`) with SQL-backed enqueue, delivery dispatcher, and admin-visible runtime inspection.
-- Mail layer (`pkg/mail`) with `noop`, `smtp`, `sendgrid`, and external plugin runtime (`goframe-plugin-<driver>` with legacy fallback `goframe-mail-<driver>`), plus capability discovery via `pkg/plugins`.
-- Rich CLI (`cmd/goframe`) with scaffolding, operations, data lifecycle, plugin diagnostics, and testing workflows.
-
-## Install
-
-### CLI from source
+### Install CLI
 
 ```bash
 go install github.com/jcsvwinston/GoFrame/cmd/goframe@latest
-goframe version
 ```
 
-### CLI from releases
+### Create Project
 
-See GitHub Releases:
+```bash
+goframe new myapp
+cd myapp
+go mod tidy
+go run ./cmd/server
+```
 
-- https://github.com/jcsvwinston/GoFrame/releases
+Open:
+- `http://localhost:8080/` — Web app
+- `http://localhost:8080/api/articles` — API
+- `http://localhost:8080/admin` — Admin panel
 
-## Quick Start (New Simplified API)
-
-GoFrame now offers a **Gin/Fiber-like API** while keeping all enterprise features:
+## Simple API Example
 
 ```go
 package main
 
-import "github.com/jcsvwinston/GoFrame/pkg/goframe"
+import (
+    "github.com/jcsvwinston/GoFrame/pkg/goframe"
+)
 
 type Article struct {
     ID    int64  `json:"id" db:"id"`
@@ -72,228 +56,67 @@ func main() {
         Model(&Article{}).
         AutoMigrate().
         Get("/api/articles", func(c *goframe.Context) error {
-            return c.JSON(200, []Article{
-                {ID: 1, Title: "Hello GoFrame!"},
-            })
-        }).
-        Post("/api/articles", func(c *goframe.Context) error {
-            var article Article
-            if err := c.BindJSON(&article); err != nil {
-                return err
-            }
-            return c.JSON(201, article)
+            return c.JSON(200, []Article{{ID: 1, Title: "Hello"}})
         }).
         Run()
 }
 ```
 
-### Multi-Database Setup
+## Project Structure
 
-```go
-goframe.New().
-    Port(8080).
-    Database("default", goframe.Postgres("postgres://localhost/main")).
-    Database("analytics", goframe.Postgres("postgres://localhost/analytics")).
-    Database("cache", goframe.Redis("redis://localhost:6379")).
-    WithMultiTenant(goframe.MultiTenant{
-        Resolver: "subdomain",
-        Template: "tenant_{tenant}_db",
-    }).
-    Run()
+Generated projects follow standard layout:
+
 ```
-
-### React SPA + GoFrame API
-
-```go
-// Backend serves API and React build
-goframe.New().
-    Port(8080).
-    Resource("/api/articles", ArticleResource{}).
-    SPA("web/dist", goframe.SPAConfig{
-        APIPrefix: "/api",
-    }).
-    Run()
-```
-
-## Quick Start (Original API)
-
-### 1. Create a new project
-
-For a full-stack project (admin, storage, auth):
-```bash
-goframe new myapp --module github.com/acme/myapp --template mvc
-cd myapp
-go mod tidy
-```
-
-For a lightweight API (core router and db only):
-```bash
-goframe new myapi --module github.com/acme/myapi --template api
-cd myapi
-go mod tidy
-```
-
-> **Note:** Generated projects are completely **self-contained**. They pull `GoFrame` via standard Go modules (`go.mod`) and compile without needing the framework's source tree or binary.
-
-### 2. Run server and worker
-
-```bash
-go run ./cmd/server
-go run ./cmd/worker
-```
-
-If you do not need background jobs yet, run only the server.
-
-### 3. Open the app
-
-- Web: `http://localhost:8080/`
-- API: `http://localhost:8080/api/health`
-- Admin: `http://localhost:8080/admin`
-
-Admin access defaults:
-
-- Bootstrap mode: if there are no rows in `goframe_admin_users`, `/admin` is accessible to help initial setup.
-- Protected mode: once at least one admin user exists (`goframe createuser`), `/admin` requires login at `/admin/login`.
-
-## CLI Highlights
-
-GoFrame ships a broad set of framework commands, including:
-
-- Core runtime: `serve`, `routes`, `health`, `check --deploy`
-- Scaffolding: `new`, `startapp`, `generate`
-- Migrations: `migrate`, `sqlmigrate`, `sqlflush`, `sqlsequencereset`, `flush`, `optimizemigration`, `squashmigrations`
-- Data/fixtures/schema: `dumpdata`, `loaddata`, `inspectdb`, `ogrinspect`
-- Auth/admin ops: `createuser`, `changepassword`, `clearsessions`, `remove_stale_contenttypes`
-- i18n/static: `makemessages`, `compilemessages`, `collectstatic`, `findstatic`
-- Mail ops: `sendtestemail`, `mailproviders`
-- Plugin ops: `plugin list`, `plugin doctor`, `plugin test`
-- Dev/test: `shell`, `test`, `testserver`
-
-Compatibility aliases are also available:
-
-- `runserver`, `startproject`, `makemigrations`, `showmigrations`, `createsuperuser`, `dbshell`, `check`
-
-For full usage:
-
-```bash
-goframe help
-```
-
-Global output controls are available for every command:
-
-```bash
-goframe --output plain|pretty|json <command> ...
-goframe --color auto|always|never <command> ...
-goframe --symbols|--no-symbols <command> ...
-```
-
-## Mail Providers and Plugins
-
-GoFrame supports multiple mail delivery strategies:
-
-- Built-in: `noop`, `smtp`, `sendgrid`
-- In-process registration via `mail.RegisterProvider(...)`
-- External plugin binaries via:
-  - `goframe-plugin-<provider>` (capability-based discovery)
-  - `goframe-mail-<driver>` (legacy compatibility bridge)
-
-Useful commands:
-
-```bash
-goframe sendtestemail --config goframe.yaml --to dev@example.com --dry-run
-goframe sendtestemail --config goframe.yaml --driver sendgrid --to dev@example.com --dry-run
-goframe mailproviders --config goframe.yaml
-goframe mailproviders --config goframe.yaml --json
-goframe plugin list --config goframe.yaml
-goframe plugin doctor --config goframe.yaml
-goframe plugin test --provider sendgrid --capability mail.send
-```
-
-## Architecture
-
-Recommended generated project layout:
-
-```text
 myapp/
-  cmd/
-    server/
-    worker/
-  internal/
-    controllers/
-    contracts/
-    models/
-    services/
-    repositories/
-    tasks/
-    web/
-  migrations/
-  seeds/
-  goframe.yaml
+├── cmd/server/main.go      # HTTP server
+├── internal/
+│   ├── models/             # Domain models
+│   ├── controllers/        # HTTP handlers
+│   ├── services/           # Business logic
+│   └── repositories/       # Data access
+├── migrations/             # SQL migrations
+└── goframe.yaml           # Configuration
 ```
-
-Reference: [docs/reference/PROJECT_LAYOUT.md](docs/reference/PROJECT_LAYOUT.md)
-
-Generated module-aware scaffolds now also seed:
-
-- `internal/contracts` for OpenAPI-oriented contract registration
-- `internal/services` for application use cases
-- `internal/repositories` for persistence boundaries
-
-## Strategic Direction
-
-GoFrame is actively developed and stable for pre-1.0 usage (`v0.x`).
-
-Canonical strategy and governance docs:
-
-- [docs/governance/ENTERPRISE_LONG_TERM_ROADMAP.md](docs/governance/ENTERPRISE_LONG_TERM_ROADMAP.md)
-- [docs/governance/COMPATIBILITY_SLO.md](docs/governance/COMPATIBILITY_SLO.md)
 
 ## Documentation
 
-Start here:
+- **[docs/README.md](docs/README.md)** — Documentation index
+- **[docs/QUICKSTART.md](docs/QUICKSTART.md)** — 5-minute quickstart
+- **[docs/guides/DETAILED_TUTORIAL.md](docs/guides/DETAILED_TUTORIAL.md)** — Complete tutorial
+- **[docs/reference/PROJECT_LAYOUT.md](docs/reference/PROJECT_LAYOUT.md)** — Project structure
 
-- [docs/INDEX.md](docs/INDEX.md)
-- [docs/QUICKSTART.md](docs/QUICKSTART.md)
-- [docs/reference/DEVELOPER_MANUAL.md](docs/reference/DEVELOPER_MANUAL.md)
-- [docs/reference/PROJECT_LAYOUT.md](docs/reference/PROJECT_LAYOUT.md)
-- [SPEC.md](SPEC.md)
-- [docs/guides/MODELING_MULTI_DATABASE.md](docs/guides/MODELING_MULTI_DATABASE.md)
-- [docs/reference/API_CONTRACT_INVENTORY.md](docs/reference/API_CONTRACT_INVENTORY.md)
-- [docs/reference/CLI_CONTRACT_MATRIX.md](docs/reference/CLI_CONTRACT_MATRIX.md)
-- [docs/reference/CONFIG_KEY_REGISTRY.md](docs/reference/CONFIG_KEY_REGISTRY.md)
-- [docs/reference/PLUGIN_SDK.md](docs/reference/PLUGIN_SDK.md)
+## Key Features
 
-Operations and release docs:
+| Feature | Description |
+|---------|-------------|
+| **Models** | Struct-based with validation, hooks, admin metadata |
+| **Migrations** | SQL files with up/down, CLI-managed |
+| **Admin Panel** | Auto-generated from registered models |
+| **Auth** | JWT, sessions (memory/SQL/Redis), Casbin RBAC |
+| **Tasks** | Background jobs with Asynq + Redis |
+| **Outbox** | Transactional outbox pattern |
+| **Multi-tenancy** | Subdomain/header based with DB isolation |
+| **Storage** | S3, GCS, Azure, local abstractions |
+| **Observability** | OpenTelemetry, structured logging |
 
-- [docs/governance/CI_MATRIX.md](docs/governance/CI_MATRIX.md)
-- [docs/governance/RELEASE_CHECKLIST.md](docs/governance/RELEASE_CHECKLIST.md)
-- [docs/governance/DEPRECATION_TEMPLATE.md](docs/governance/DEPRECATION_TEMPLATE.md)
-- [docs/governance/MIGRATION_ASSISTANT_CONVENTIONS.md](docs/governance/MIGRATION_ASSISTANT_CONVENTIONS.md)
-- [docs/governance/ENTERPRISE_LONG_TERM_ROADMAP.md](docs/governance/ENTERPRISE_LONG_TERM_ROADMAP.md)
-- [CHANGELOG.md](CHANGELOG.md)
-
-## Compatibility
-
-- Minimum supported Go: `1.25`
-- Recommended for development/release: `1.26.x`
-- Multi-DB config uses `database_default` + `databases.<alias>.url`.
-- MultiTenant defaults to `require_isolated_db: true` to prevent shared-DB tenant routing.
-- Core-supported SQL URLs: `sqlite://`, `postgres://`/`postgresql://`, `mysql://`
-- Enterprise exploratory SQL URLs: `sqlserver://`/`mssql://`, `oracle://`
-
-## Contributing
-
-Contributions are welcome.
-
-- Open issues for bugs, regressions, and feature requests.
-- Keep changes small and test-backed.
-- Run before opening a PR:
+## CLI Commands
 
 ```bash
-go test ./...
-bash scripts/release/rehearse_rc.sh
+goframe new myapp          # Create project
+goframe serve              # Run server
+goframe migrate            # Run migrations
+goframe seed               # Load seed data
+goframe createuser         # Create admin user
+goframe routes             # List routes
+goframe health             # Check health
 ```
+
+## Requirements
+
+- Go 1.25+
+- SQLite/PostgreSQL/MySQL
+- Optional: Redis (for tasks/sessions)
 
 ## License
 
-MIT
+MIT — See [LICENSE](LICENSE)

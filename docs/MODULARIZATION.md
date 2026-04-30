@@ -197,13 +197,9 @@ All documents have been updated to reflect the current state (Phases 1-3 complet
 | `SPEC.md` | 3 | ✅ Extension pattern for `app.New()` |
 | `docs/QUICKSTART.md` | 1 | ✅ Go version, self-contained scaffold |
 | `docs/QUICKSTART.md` | 3 | ✅ Template tiers (`--template api`) |
-| `docs/INDEX.md` | 2 | ✅ Link to this document |
-| `docs/INDEX.md` | — | ✅ Links to BREADCRUMB.md and AGENT_HANDOFF.md |
+| `docs/README.md` | 2 | ✅ Link to this document |
 | `docs/reference/DEPENDENCY_IMPACT_REPORT.md` | 2 | ✅ MSSQL/Oracle now build-tagged |
 | `docs/governance/CI_MATRIX.md` | 2 | ✅ Build tag instructions for enterprise lanes |
-| `docs/reports/exploratory_stability.md` | 2 | ✅ Note about build tags |
-| `docs/STATUS_NEXT_STEPS.md` | all | ✅ Point 8 with Phases 1-3 complete |
+| `*exploratory_stability*` | 2 | ✅ Note about build tags |
 | `CHANGELOG.md` | all | ✅ All phase entries recorded |
-| `docs/BREADCRUMB.md` | — | ✅ Work state tracking document |
-| `docs/AGENT_HANDOFF.md` | — | ✅ Agent resumption guide |
 
