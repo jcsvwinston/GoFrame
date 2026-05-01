@@ -78,7 +78,7 @@ SQLite, PostgreSQL, and MySQL are included by default.
 
 ## Next Reading
 
-- [INDEX.md](INDEX.md)
-- [reference/DEVELOPER_MANUAL.md](reference/DEVELOPER_MANUAL.md)
-- [guides/DETAILED_TUTORIAL.md](guides/DETAILED_TUTORIAL.md)
-- [MODULARIZATION.md](MODULARIZATION.md)
+- [README.md](README.md) - Documentation overview and navigation
+- [reference/DEVELOPER_MANUAL.md](reference/DEVELOPER_MANUAL.md) - Core concepts reference
+- [guides/DETAILED_TUTORIAL.md](guides/DETAILED_TUTORIAL.md) - Step-by-step tutorial
+- [MODULARIZATION.md](../MODULARIZATION.md) - Extension and modularization patterns

@@ -32,7 +32,7 @@ Current GoFrame scope includes:
 Related documents:
 
 - `docs/QUICKSTART.md`
-- `docs/DETAILED_TUTORIAL.md`
+- `docs/guides/DETAILED_TUTORIAL.md`
 - `docs/reference/PROJECT_LAYOUT.md`
 - `docs/guides/MODELING_MULTI_DATABASE.md`
 - `docs/governance/RELEASE_CHECKLIST.md`

@@ -30,14 +30,12 @@ Ensure deprecations are explicit, test-backed, and migration-ready before any re
 
 ## Required Artifacts For Any Active Deprecation
 
-1. a deprecation notice file under `docs/deprecations/` based on `docs/templates/deprecation_notice.md`
-2. a migration assistant specification based on `docs/templates/migration_assistant.md`
+1. a deprecation notice file under `docs/deprecations/`
+2. a migration assistant specification under `docs/migration_assistants/`
 3. changelog entry in `CHANGELOG.md` (`Unreleased`)
 4. compatibility review note in release validation
 
 ## Deprecation Notice Template
-
-Copy from `docs/templates/deprecation_notice.md`:
 
 ```markdown
 # Deprecation Notice: <title>

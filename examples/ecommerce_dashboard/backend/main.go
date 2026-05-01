@@ -6,11 +6,11 @@ import (
 	"github.com/jcsvwinston/GoFrame/examples/ecommerce_dashboard/backend/handlers"
 	"github.com/jcsvwinston/GoFrame/examples/ecommerce_dashboard/backend/models"
 	"github.com/jcsvwinston/GoFrame/examples/ecommerce_dashboard/backend/seed"
-	"github.com/jcsvwinston/GoFrame/pkg/goframe"
+	"github.com/jcsvwinston/GoFrame/pkg/fluent"
 )
 
 func main() {
-	app := goframe.New().
+	app := fluent.New().
 		Port(8080).
 		SQLite("ecommerce.db").
 		Model(&models.Product{}).
@@ -33,7 +33,7 @@ func main() {
 	api.Get("/customers/:id", handlers.GetCustomer)
 	api.Get("/categories", handlers.ListCategories)
 
-	app.SPA("../frontend/dist", goframe.SPAConfig{
+	app.SPA("../frontend/dist", fluent.SPAConfig{
 		IndexFile: "index.html",
 		APIPrefix: "/api",
 	})

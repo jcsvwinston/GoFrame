@@ -2,14 +2,10 @@
 
 Store active and historical deprecation notices here.
 
-Naming recommendation:
+Naming:
 
 - `DEP-YYYY-NNN-<slug>.md`
 
-Use template:
-
-- `docs/templates/deprecation_notice.md`
-
-Policy reference:
+Policy:
 
 - `docs/governance/DEPRECATION_TEMPLATE.md`

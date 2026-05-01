@@ -2,14 +2,10 @@
 
 Store migration assistant specifications here.
 
-Naming recommendation:
+Naming:
 
 - `MA-YYYY-NNN-<slug>.md`
 
-Use template:
-
-- `docs/templates/migration_assistant.md`
-
-Conventions reference:
+Conventions:
 
 - `docs/governance/MIGRATION_ASSISTANT_CONVENTIONS.md`

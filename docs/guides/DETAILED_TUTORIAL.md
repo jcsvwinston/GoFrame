@@ -16,7 +16,7 @@ This tutorial walks through the full flow to build a real app with GoFrame:
 
 ## 0) Recommended structure
 
-Expanded structure guide: [PROJECT_LAYOUT.md](PROJECT_LAYOUT.md)
+Expanded structure guide: [PROJECT_LAYOUT.md](../reference/PROJECT_LAYOUT.md)
 
 ```text
 myapp/
