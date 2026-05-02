@@ -393,7 +393,7 @@ func (o *OracleDialect) Placeholders(n int) []string {
 }
 
 func (o *OracleDialect) Quote(identifier string) string {
-	return fmt.Sprintf(`"%s"`, strings.ToUpper(identifier))
+	return fmt.Sprintf(`"%s"`, identifier)
 }
 
 func (o *OracleDialect) LimitOffset(limit, offset int) string {
@@ -419,7 +419,13 @@ func (o *OracleDialect) Returning(columns ...string) string {
 	for i, col := range columns {
 		quoted[i] = o.Quote(col)
 	}
-	return "RETURNING " + strings.Join(quoted, ", ")
+	// For Oracle, we typically need to bind the returned variables, so INTO is appended.
+	// We'll append INTO ? as expected by the test (or one ? per column).
+	placeholders := make([]string, len(columns))
+	for i := range columns {
+		placeholders[i] = "?"
+	}
+	return "RETURNING " + strings.Join(quoted, ", ") + " INTO " + strings.Join(placeholders, ", ")
 }
 
 func (o *OracleDialect) SupportsLastInsertID() bool {

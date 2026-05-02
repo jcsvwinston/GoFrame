@@ -34,6 +34,20 @@ Demonstrates transactional operations and memory-efficient result streaming usin
 go run pkg/quark/examples/mysql/main.go
 ```
 
+### 4. MSSQL (Pagination & Builders)
+Demonstrates pagination using the OFFSET/FETCH syntax required by SQL Server.
+
+```bash
+go run pkg/quark/examples/mssql/main.go
+```
+
+### 5. Oracle (Godror Support)
+Demonstrates Godror setup. Note that the Godror driver requires CGO enabled for Oracle compilation.
+
+```bash
+go run pkg/quark/examples/oracle/main.go
+```
+
 ## Cleaning Up
 
 ```bash
