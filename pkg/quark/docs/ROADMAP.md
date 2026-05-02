@@ -12,18 +12,21 @@ This document outlines the current state and future development goals for the Qu
 - [x] **Model Validation**: Tag-based and programmatic struct validation via `validator/v10`.
 - [x] **Schema Migrations**: Automatic table creation based on struct fields via `client.Migrate()`.
 - [x] **Multi-Tenant Routing**: `TenantRouter` supporting Database-per-tenant, Schema-per-tenant, and Row-level strategies.
+- [x] **Data Streaming**: Efficient iteration over large datasets via `.Iter()`.
+
+## Completed Features (v0.2)
+
+- [x] **Quark CLI**: Standalone tool for project initialization and code generation.
+- [x] **Advanced Migrations**: Version-controlled migration files (Up/Down) via CLI.
+- [x] **Model Introspection**: Automated generation of Go models from existing DB schemas.
 
 ## In Progress / Short-Term Goals
 
 - [ ] **Observability**: Add native OpenTelemetry tracing (Spans) and metrics.
-- [ ] **Data Streaming**: Implement an `.Iter()` or `.Stream()` method for loading huge datasets efficiently without memory exhaustion.
 - [ ] **Level 2 Query Caching**: Integrate a fast in-memory or Redis-backed cache layer for complex, read-heavy query patterns.
-
-## Mid-Term Goals
 
 - [ ] **Extended Dialects**: Enhance Dialect implementations to natively support Microsoft SQL Server and Oracle databases.
 - [ ] **JSON Fields**: Add robust support for querying and mutating JSON/JSONB fields in structs.
-- [ ] **Advanced Migrations**: Schema diffing, ALTER TABLE execution, and version-controlled migration files.
 
 ## Long-Term Goals
 

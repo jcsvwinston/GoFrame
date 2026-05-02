@@ -325,6 +325,26 @@ err := quark.Notify(ctx, client, "user_updates", "user_id_1_changed")
 
 ---
 
+---
+
+## 🛠 Quark CLI
+
+Quark incluye una potente herramienta de línea de comandos para agilizar el desarrollo:
+
+*   **`init`**: Inicializa un proyecto Quark con estructura recomendada.
+*   **`model generate`**: Genera modelos Go automáticamente introspectando tu base de datos.
+*   **`migrate`**: Gestión completa de migraciones versionadas (Up, Down, Status, Version).
+*   **`tenant`**: Herramientas de provisión y migración para arquitecturas multi-tenant.
+*   **`inspect`**: Visualización de esquemas y tablas directamente en la terminal.
+
+Para instalarlo:
+```bash
+go build -o quark ./cmd/quark/main.go
+./quark --help
+```
+
+---
+
 ## 🏢 Multi-Tenant (TenantRouter)
 
 Quark incorpora un motor nativo y transparente de Multi-Tenant, soportando:
