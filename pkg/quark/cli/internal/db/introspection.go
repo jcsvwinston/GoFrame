@@ -28,6 +28,10 @@ func GetTableInfo(db *sql.DB, dialect, tableName string) (*TableInfo, error) {
 		return getMySQLTableInfo(db, tableName)
 	case "sqlite":
 		return getSQLiteTableInfo(db, tableName)
+	case "mssql", "sqlserver":
+		return getMSSQLTableInfo(db, tableName)
+	case "oracle":
+		return getOracleTableInfo(db, tableName)
 	default:
 		return nil, fmt.Errorf("unsupported dialect for introspection: %s", dialect)
 	}
@@ -121,6 +125,83 @@ func getSQLiteTableInfo(db *sql.DB, tableName string) (*TableInfo, error) {
 			IsAuto:     pk > 0 && strings.Contains(strings.ToUpper(typ), "INTEGER"), // Simple heuristic for SQLite
 			Default:    dfltValue,
 		})
+	}
+	return info, nil
+}
+
+func getMSSQLTableInfo(db *sql.DB, tableName string) (*TableInfo, error) {
+	query := `
+		SELECT 
+			COLUMN_NAME, 
+			DATA_TYPE, 
+			IS_NULLABLE,
+			COLUMN_DEFAULT,
+			(SELECT count(*) FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE k
+			 JOIN INFORMATION_SCHEMA.TABLE_CONSTRAINTS c ON k.CONSTRAINT_NAME = c.CONSTRAINT_NAME
+			 WHERE c.TABLE_NAME = @p1 AND k.COLUMN_NAME = cols.COLUMN_NAME AND c.CONSTRAINT_TYPE = 'PRIMARY KEY') as IS_PK
+		FROM INFORMATION_SCHEMA.COLUMNS cols
+		WHERE TABLE_NAME = @p1
+		ORDER BY ORDINAL_POSITION
+	`
+	// MSSQL driver might expect @p1 or ? depending on the driver, 
+	// but since this is for the CLI we assume the standard sqlserver driver.
+	rows, err := db.Query(query, tableName)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	info := &TableInfo{Name: tableName}
+	for rows.Next() {
+		var col ColumnInfo
+		var isNullable string
+		var isPK int
+		if err := rows.Scan(&col.Name, &col.Type, &isNullable, &col.Default, &isPK); err != nil {
+			return nil, err
+		}
+		col.IsNullable = isNullable == "YES"
+		col.IsPK = isPK > 0
+		col.IsAuto = col.IsPK // Heuristic for MSSQL identity columns
+		info.Columns = append(info.Columns, col)
+	}
+	return info, nil
+}
+
+func getOracleTableInfo(db *sql.DB, tableName string) (*TableInfo, error) {
+	// Oracle names are typically uppercase
+	tableName = strings.ToUpper(tableName)
+	query := `
+		SELECT 
+			column_name, 
+			data_type, 
+			nullable,
+			data_default,
+			(SELECT count(*) FROM user_cons_columns ucc
+			 JOIN user_constraints uc ON ucc.constraint_name = uc.constraint_name
+			 WHERE uc.table_name = :1 AND ucc.column_name = utc.column_name AND uc.constraint_type = 'P') as is_pk
+		FROM user_tab_columns utc
+		WHERE table_name = :1
+		ORDER BY column_id
+	`
+	rows, err := db.Query(query, tableName)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	info := &TableInfo{Name: tableName}
+	for rows.Next() {
+		var col ColumnInfo
+		var isNullable string
+		var isPK int
+		// Oracle data_default can be long, so we use NullString
+		if err := rows.Scan(&col.Name, &col.Type, &isNullable, &col.Default, &isPK); err != nil {
+			return nil, err
+		}
+		col.IsNullable = isNullable == "Y"
+		col.IsPK = isPK > 0
+		col.IsAuto = col.IsPK // Heuristic for Oracle identity columns
+		info.Columns = append(info.Columns, col)
 	}
 	return info, nil
 }

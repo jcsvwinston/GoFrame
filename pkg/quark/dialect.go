@@ -296,6 +296,154 @@ func (s *SQLiteDialect) BuildProcedureCall(procedure string, argCount int) strin
 	return fmt.Sprintf("SELECT %s(%s)", s.Quote(procedure), placeholders)
 }
 
+// MSSQLDialect implements the Microsoft SQL Server dialect.
+type MSSQLDialect struct {
+	baseDialect
+}
+
+// MSSQL returns the Microsoft SQL Server dialect instance.
+func MSSQL() Dialect {
+	return &MSSQLDialect{
+		baseDialect{name: "mssql"},
+	}
+}
+
+func (m *MSSQLDialect) Placeholder(index int) string {
+	return fmt.Sprintf("@p%d", index)
+}
+
+func (m *MSSQLDialect) Placeholders(n int) []string {
+	placeholders := make([]string, n)
+	for i := 0; i < n; i++ {
+		placeholders[i] = m.Placeholder(i + 1)
+	}
+	return placeholders
+}
+
+func (m *MSSQLDialect) Quote(identifier string) string {
+	return fmt.Sprintf("[%s]", identifier)
+}
+
+func (m *MSSQLDialect) LimitOffset(limit, offset int) string {
+	// MSSQL 2012+ uses OFFSET x ROWS FETCH NEXT y ROWS ONLY
+	// Note: This REQUIRES an ORDER BY clause in the query.
+	if limit > 0 && offset >= 0 {
+		return fmt.Sprintf("OFFSET %d ROWS FETCH NEXT %d ROWS ONLY", offset, limit)
+	}
+	if offset > 0 {
+		return fmt.Sprintf("OFFSET %d ROWS", offset)
+	}
+	return ""
+}
+
+func (m *MSSQLDialect) SupportsReturning() bool {
+	// MSSQL supports OUTPUT clause, but it has different syntax (middle of query)
+	// We'll use LastInsertId() which is supported by most drivers via SCOPE_IDENTITY()
+	return false
+}
+
+func (m *MSSQLDialect) Returning(columns ...string) string {
+	return ""
+}
+
+func (m *MSSQLDialect) SupportsLastInsertID() bool {
+	return true
+}
+
+func (m *MSSQLDialect) LastInsertIDQuery(table, pkColumn string) string {
+	return "SELECT SCOPE_IDENTITY()"
+}
+
+func (m *MSSQLDialect) CurrentTimestamp() string {
+	return "GETDATE()"
+}
+
+func (m *MSSQLDialect) BuildRoutineQuery(routine string, argCount int) string {
+	placeholders := strings.Join(m.Placeholders(argCount), ", ")
+	return fmt.Sprintf("SELECT * FROM %s(%s)", m.Quote(routine), placeholders)
+}
+
+func (m *MSSQLDialect) BuildProcedureCall(procedure string, argCount int) string {
+	placeholders := strings.Join(m.Placeholders(argCount), ", ")
+	return fmt.Sprintf("EXEC %s %s", m.Quote(procedure), placeholders)
+}
+
+// OracleDialect implements the Oracle Database dialect.
+type OracleDialect struct {
+	baseDialect
+}
+
+// Oracle returns the Oracle Database dialect instance.
+func Oracle() Dialect {
+	return &OracleDialect{
+		baseDialect{name: "oracle"},
+	}
+}
+
+func (o *OracleDialect) Placeholder(index int) string {
+	return fmt.Sprintf(":%d", index)
+}
+
+func (o *OracleDialect) Placeholders(n int) []string {
+	placeholders := make([]string, n)
+	for i := 0; i < n; i++ {
+		placeholders[i] = o.Placeholder(i + 1)
+	}
+	return placeholders
+}
+
+func (o *OracleDialect) Quote(identifier string) string {
+	return fmt.Sprintf(`"%s"`, strings.ToUpper(identifier))
+}
+
+func (o *OracleDialect) LimitOffset(limit, offset int) string {
+	// Oracle 12c+ supports OFFSET/FETCH
+	if limit > 0 && offset >= 0 {
+		return fmt.Sprintf("OFFSET %d ROWS FETCH NEXT %d ROWS ONLY", offset, limit)
+	}
+	if offset > 0 {
+		return fmt.Sprintf("OFFSET %d ROWS", offset)
+	}
+	return ""
+}
+
+func (o *OracleDialect) SupportsReturning() bool {
+	return true
+}
+
+func (o *OracleDialect) Returning(columns ...string) string {
+	if len(columns) == 0 {
+		return ""
+	}
+	quoted := make([]string, len(columns))
+	for i, col := range columns {
+		quoted[i] = o.Quote(col)
+	}
+	return "RETURNING " + strings.Join(quoted, ", ")
+}
+
+func (o *OracleDialect) SupportsLastInsertID() bool {
+	return false
+}
+
+func (o *OracleDialect) LastInsertIDQuery(table, pkColumn string) string {
+	return ""
+}
+
+func (o *OracleDialect) CurrentTimestamp() string {
+	return "SYSDATE"
+}
+
+func (o *OracleDialect) BuildRoutineQuery(routine string, argCount int) string {
+	placeholders := strings.Join(o.Placeholders(argCount), ", ")
+	return fmt.Sprintf("SELECT * FROM TABLE(%s(%s))", o.Quote(routine), placeholders)
+}
+
+func (o *OracleDialect) BuildProcedureCall(procedure string, argCount int) string {
+	placeholders := strings.Join(o.Placeholders(argCount), ", ")
+	return fmt.Sprintf("BEGIN %s(%s); END;", o.Quote(procedure), placeholders)
+}
+
 // DetectDialect attempts to auto-detect the dialect from a driver name.
 func DetectDialect(driverName string) (Dialect, error) {
 	switch driverName {
@@ -305,6 +453,10 @@ func DetectDialect(driverName string) (Dialect, error) {
 		return MySQL(), nil
 	case "sqlite", "sqlite3", "modernc":
 		return SQLite(), nil
+	case "mssql", "sqlserver", "azuresql":
+		return MSSQL(), nil
+	case "oracle", "godror", "oci8":
+		return Oracle(), nil
 	default:
 		return nil, fmt.Errorf("%w: %s", ErrDialectNotSupported, driverName)
 	}

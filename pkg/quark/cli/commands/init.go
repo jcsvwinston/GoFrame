@@ -17,7 +17,7 @@ var (
 
 func init() {
 	initCmd.Flags().StringVar(&initDir, "dir", ".", "Base directory for initialization")
-	initCmd.Flags().StringVar(&initDialect, "dialect", "postgresql", "Default database dialect (postgresql|mysql|sqlite)")
+	initCmd.Flags().StringVar(&initDialect, "dialect", "postgresql", "Default database dialect (postgresql|mysql|sqlite|mssql|oracle)")
 	rootCmd.AddCommand(initCmd)
 }
 
@@ -109,6 +109,10 @@ func getDSNPlaceholder(dialect string) string {
 		return "user:pass@tcp(localhost:3306)/myapp?parseTime=true"
 	case "sqlite":
 		return "myapp.db"
+	case "mssql", "sqlserver":
+		return "sqlserver://user:pass@localhost:1433?database=myapp"
+	case "oracle":
+		return "user/pass@localhost:1521/xe"
 	default:
 		return ""
 	}

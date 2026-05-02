@@ -98,7 +98,7 @@ func (q *Query[T]) Create(entity *T) error {
 	}
 
 	// Build INSERT
-	sql, args, err := q.buildInsert(entity)
+	sqlStr, args, err := q.buildInsert(entity)
 	if err != nil {
 		return err
 	}
@@ -109,42 +109,86 @@ func (q *Query[T]) Create(entity *T) error {
 
 	start := time.Now()
 
-	if q.dialect.SupportsReturning() {
-		// Use RETURNING clause
-		row := q.executeQueryRow(ctx, sql, args)
-		duration := time.Since(start)
+	var lastID int64
+	var duration time.Duration
 
-		// Scan returned values (id, timestamps, etc.)
-		if err := q.scanReturning(row, entity); err != nil {
-			return err
+	if q.dialect.SupportsReturning() {
+		if q.dialect.Name() == "oracle" {
+			// Oracle go-ora driver requires PL/SQL block for RETURNING ... INTO with Exec
+			var id int64
+			sqlWithOut := "BEGIN " + sqlStr + " INTO :ret_id; END;"
+			_, err = q.executeExec(ctx, sqlWithOut, append(args, sql.Named("ret_id", sql.Out{Dest: &id})))
+			duration = time.Since(start)
+			if err != nil {
+				return fmt.Errorf("oracle insert failed: %w", err)
+			}
+			v := reflect.ValueOf(entity).Elem()
+			setPKValue(v, q.pk, id)
+		} else {
+			// Use RETURNING clause (PostgreSQL/SQLite)
+			row := q.executeQueryRow(ctx, sqlStr, args)
+			duration = time.Since(start)
+
+			// Scan returned values (id, timestamps, etc.)
+			if err = q.scanReturning(row, entity); err != nil {
+				return err
+			}
 		}
 
 		q.notifyObservers(QueryEvent{
-			SQL:       sql,
+			SQL:       sqlStr,
 			Args:      args,
 			Duration:  duration,
 			Table:     q.table,
 			Operation: "INSERT",
 		})
 	} else {
-		// Use LastInsertId
-		result, err := q.executeExec(ctx, sql, args)
-		duration := time.Since(start)
+		if q.dialect.Name() == "mssql" {
+			// MSSQL requires the identity query to be in the same batch as the INSERT
+			sqlBatch := sqlStr + "; " + q.dialect.LastInsertIDQuery(q.table, q.pk.Column)
+			err = q.executeQueryRow(ctx, sqlBatch, args).Scan(&lastID)
+			duration = time.Since(start)
 
-		q.notifyObservers(QueryEvent{
-			SQL:       sql,
-			Args:      args,
-			Duration:  duration,
-			Error:     err,
-			Table:     q.table,
-			Operation: "INSERT",
-		})
+			q.notifyObservers(QueryEvent{
+				SQL:       sqlBatch,
+				Args:      args,
+				Duration:  duration,
+				Error:     err,
+				Table:     q.table,
+				Operation: "INSERT",
+			})
 
-		if err != nil {
-			return fmt.Errorf("insert failed: %w", err)
+			if err != nil {
+				return fmt.Errorf("insert failed: %w", err)
+			}
+		} else {
+			var result sql.Result
+			result, err = q.executeExec(ctx, sqlStr, args)
+			duration = time.Since(start)
+
+			q.notifyObservers(QueryEvent{
+				SQL:       sqlStr,
+				Args:      args,
+				Duration:  duration,
+				Error:     err,
+				Table:     q.table,
+				Operation: "INSERT",
+			})
+
+			if err != nil {
+				return fmt.Errorf("insert failed: %w", err)
+			}
+
+			if q.dialect.SupportsLastInsertID() && q.dialect.LastInsertIDQuery("", "") != "" {
+				err = q.executeQueryRow(ctx, q.dialect.LastInsertIDQuery(q.table, q.pk.Column), nil).Scan(&lastID)
+				if err != nil {
+					return fmt.Errorf("failed to get last insert ID: %w", err)
+				}
+			} else {
+				lastID, _ = result.LastInsertId()
+			}
 		}
 
-		lastID, _ := result.LastInsertId()
 		v := reflect.ValueOf(entity).Elem()
 		setPKValue(v, q.pk, lastID)
 	}
@@ -190,22 +234,22 @@ func (q *Query[T]) buildInsert(entity *T) (string, []any, error) {
 		argIndex++
 	}
 
-	var sql strings.Builder
-	sql.WriteString("INSERT INTO ")
-	sql.WriteString(q.fullTableName())
-	sql.WriteString(" (")
-	sql.WriteString(strings.Join(columns, ", "))
-	sql.WriteString(") VALUES (")
-	sql.WriteString(strings.Join(placeholders, ", "))
-	sql.WriteString(")")
+	var sqlStr strings.Builder
+	sqlStr.WriteString("INSERT INTO ")
+	sqlStr.WriteString(q.fullTableName())
+	sqlStr.WriteString(" (")
+	sqlStr.WriteString(strings.Join(columns, ", "))
+	sqlStr.WriteString(") VALUES (")
+	sqlStr.WriteString(strings.Join(placeholders, ", "))
+	sqlStr.WriteString(")")
 
 	// Add RETURNING if supported — use detected PK column
 	if q.dialect.SupportsReturning() && q.pk.Column != "" {
-		sql.WriteString(" ")
-		sql.WriteString(q.dialect.Returning(q.pk.Column))
+		sqlStr.WriteString(" ")
+		sqlStr.WriteString(q.dialect.Returning(q.pk.Column))
 	}
 
-	return sql.String(), args, nil
+	return sqlStr.String(), args, nil
 }
 
 // scanReturning scans RETURNING clause results into the entity's PK field.

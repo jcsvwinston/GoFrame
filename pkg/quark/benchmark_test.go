@@ -11,6 +11,8 @@ import (
 
 	_ "github.com/go-sql-driver/mysql"
 	_ "github.com/jackc/pgx/v5/stdlib"
+	_ "github.com/microsoft/go-mssqldb"
+	_ "github.com/sijms/go-ora/v2"
 	_ "modernc.org/sqlite"
 )
 
@@ -32,6 +34,12 @@ func (o *metricsObserver) ObserveQuery(e QueryEvent) {
 		o.results = make(map[string][]time.Duration)
 	}
 	o.results[e.Operation] = append(o.results[e.Operation], e.Duration)
+
+	// Visual log for progress every 1000 operations
+	count := len(o.results[e.Operation])
+	if count%1000 == 0 {
+		fmt.Printf("  [VISUAL LOG] %s: processed %d records (last duration: %v)\n", e.Operation, count, e.Duration)
+	}
 }
 
 func (o *metricsObserver) Summary() {
@@ -60,6 +68,8 @@ func TestBenchmarkEngines(t *testing.T) {
 		{"SQLite", ":memory:", "sqlite", SQLite()},
 		{"Postgres", os.Getenv("QUARK_TEST_POSTGRES_DSN"), "pgx", PostgreSQL()},
 		{"MySQL", os.Getenv("QUARK_TEST_MYSQL_DSN"), "mysql", MySQL()},
+		{"MSSQL", os.Getenv("QUARK_TEST_MSSQL_DSN"), "sqlserver", MSSQL()},
+		{"Oracle", os.Getenv("QUARK_TEST_ORACLE_DSN"), "oracle", Oracle()},
 	}
 
 	for _, eng := range engines {

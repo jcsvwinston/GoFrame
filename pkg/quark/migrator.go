@@ -51,13 +51,39 @@ func (c *Client) createTable(ctx context.Context, model any) error {
 		return fmt.Errorf("no database columns found for model %s", t.Name())
 	}
 
-	query := fmt.Sprintf("CREATE TABLE IF NOT EXISTS %s (\n  %s\n);", 
-		c.dialect.Quote(tableName), 
-		strings.Join(columns, ",\n  "),
-	)
+	var query string
+	switch c.dialect.Name() {
+	case "mysql", "postgres", "sqlite":
+		query = fmt.Sprintf("CREATE TABLE IF NOT EXISTS %s (\n  %s\n);",
+			c.dialect.Quote(tableName),
+			strings.Join(columns, ",\n  "),
+		)
+	case "mssql":
+		// MSSQL doesn't support IF NOT EXISTS for CREATE TABLE
+		query = fmt.Sprintf(`IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = '%s') 
+		CREATE TABLE %s (
+			%s
+		);`, tableName, c.dialect.Quote(tableName), strings.Join(columns, ",\n  "))
+	case "oracle":
+		// Oracle doesn't support IF NOT EXISTS, and it's hard to do in a single statement without a PL/SQL block.
+		// For simplicity in this dev migrator, we just try to create it.
+		query = fmt.Sprintf("CREATE TABLE %s (\n  %s\n)",
+			c.dialect.Quote(tableName),
+			strings.Join(columns, ",\n  "),
+		)
+	default:
+		query = fmt.Sprintf("CREATE TABLE %s (\n  %s\n)",
+			c.dialect.Quote(tableName),
+			strings.Join(columns, ",\n  "),
+		)
+	}
 
 	_, err := c.db.ExecContext(ctx, query)
 	if err != nil {
+		// For Oracle, ignore "table already exists" error (ORA-00955)
+		if c.dialect.Name() == "oracle" && strings.Contains(err.Error(), "ORA-00955") {
+			return nil
+		}
 		return fmt.Errorf("failed to create table %s: %w", tableName, err)
 	}
 

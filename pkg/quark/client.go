@@ -240,6 +240,10 @@ func detectDialectFromDriver(driverType string, db *sql.DB) (Dialect, error) {
 		return MySQL(), nil
 	case containsAny(driverType, "sqlite", "modernc"):
 		return SQLite(), nil
+	case containsAny(driverType, "sqlserver", "mssql", "azure"):
+		return MSSQL(), nil
+	case containsAny(driverType, "oracle", "godror", "oci8"):
+		return Oracle(), nil
 	default:
 		return nil, fmt.Errorf("could not detect dialect from driver: %s", driverType)
 	}

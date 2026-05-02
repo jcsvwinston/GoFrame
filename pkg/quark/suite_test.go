@@ -71,8 +71,18 @@ func SharedSuite(t *testing.T, client *Client) {
 	})
 }
 
+func dropTable(client *Client, tableName string) {
+	switch client.Dialect().Name() {
+	case "oracle":
+		// Oracle doesn't support DROP TABLE IF EXISTS
+		client.Raw().Exec(fmt.Sprintf("DROP TABLE %s", client.Dialect().Quote(tableName)))
+	default:
+		client.Raw().Exec(fmt.Sprintf("DROP TABLE IF EXISTS %s", client.Dialect().Quote(tableName)))
+	}
+}
+
 func testCRUD(ctx context.Context, t *testing.T, client *Client) {
-	client.Raw().Exec("DROP TABLE IF EXISTS suite_users")
+	dropTable(client, "suite_users")
 	type SuiteUser struct {
 		ID    int64  `db:"id" pk:"true"`
 		Name  string `db:"name"`
@@ -128,7 +138,7 @@ func testCRUD(ctx context.Context, t *testing.T, client *Client) {
 }
 
 func testQueryBuilder(ctx context.Context, t *testing.T, client *Client) {
-	client.Raw().Exec("DROP TABLE IF EXISTS q_b_users")
+	dropTable(client, "q_b_users")
 	type QBUser struct {
 		ID   int64  `db:"id" pk:"true"`
 		Name string `db:"name"`
@@ -144,11 +154,16 @@ func testQueryBuilder(ctx context.Context, t *testing.T, client *Client) {
 		{Name: "Bob", Age: 40, City: "Barcelona"},
 	}
 	for i := range users {
-		For[QBUser](ctx, client).Create(&users[i])
+		if err := For[QBUser](ctx, client).Create(&users[i]); err != nil {
+			t.Fatalf("create failed: %v", err)
+		}
 	}
 
 	// Test Simple Where
-	madrid, _ := For[QBUser](ctx, client).Where("city", "=", "Madrid").List()
+	madrid, err := For[QBUser](ctx, client).Where("city", "=", "Madrid").List()
+	if err != nil {
+		t.Fatalf("list failed: %v", err)
+	}
 	if len(madrid) != 2 {
 		t.Errorf("expected 2 users in Madrid, got %d", len(madrid))
 	}
@@ -192,7 +207,7 @@ func testQueryBuilder(ctx context.Context, t *testing.T, client *Client) {
 }
 
 func testTransactions(ctx context.Context, t *testing.T, client *Client) {
-	client.Raw().Exec("DROP TABLE IF EXISTS tx_users")
+	dropTable(client, "tx_users")
 	type TxUser struct {
 		ID   int64  `db:"id" pk:"true"`
 		Name string `db:"name"`
@@ -229,7 +244,7 @@ func testRelationships(ctx context.Context, t *testing.T, client *Client) {
 }
 
 func testHooks(ctx context.Context, t *testing.T, client *Client) {
-	client.Raw().Exec("DROP TABLE IF EXISTS hook_users")
+	dropTable(client, "hook_users")
 	type HookUser struct {
 		ID        int64      `db:"id" pk:"true"`
 		Title     string     `db:"title"`
@@ -239,7 +254,9 @@ func testHooks(ctx context.Context, t *testing.T, client *Client) {
 	client.Migrate(ctx, &HookUser{})
 	// Basic test for hooks could be more complex, but we mainly want to ensure they run across dialects
 	u := HookUser{Title: "Hook Test"}
-	For[HookUser](ctx, client).Create(&u)
+	if err := For[HookUser](ctx, client).Create(&u); err != nil {
+		t.Fatalf("create failed: %v", err)
+	}
 	
 	// Just verify creation worked
 	if u.ID == 0 {
@@ -248,7 +265,7 @@ func testHooks(ctx context.Context, t *testing.T, client *Client) {
 }
 
 func testValidation(ctx context.Context, t *testing.T, client *Client) {
-	client.Raw().Exec("DROP TABLE IF EXISTS validateds")
+	dropTable(client, "validateds")
 	type Validated struct {
 		ID    int64  `db:"id" pk:"true"`
 		Email string `db:"email" validate:"required,email"`
@@ -259,11 +276,11 @@ func testValidation(ctx context.Context, t *testing.T, client *Client) {
 	if err == nil {
 		t.Error("expected validation error, got nil")
 	}
-	client.Raw().Exec("DROP TABLE IF EXISTS validateds")
+	dropTable(client, "validateds")
 }
 
 func testSoftDelete(ctx context.Context, t *testing.T, client *Client) {
-	client.Raw().Exec("DROP TABLE IF EXISTS posts")
+	dropTable(client, "posts")
 	type Post struct {
 		ID        int64      `db:"id" pk:"true"`
 		Title     string     `db:"title"`
@@ -272,12 +289,14 @@ func testSoftDelete(ctx context.Context, t *testing.T, client *Client) {
 
 	client.Migrate(ctx, &Post{})
 	p := Post{Title: "Soft Delete Post"}
-	For[Post](ctx, client).Create(&p)
+	if err := For[Post](ctx, client).Create(&p); err != nil {
+		t.Fatalf("create failed: %v", err)
+	}
 
 	// Soft delete
 	rows, err := For[Post](ctx, client).Delete(&p)
 	if err != nil || rows != 1 {
-		t.Fatalf("soft delete failed: %v", err)
+		t.Fatalf("soft delete failed: %v, rows: %d", err, rows)
 	}
 
 	// Should not find by default
@@ -297,7 +316,7 @@ func testSoftDelete(ctx context.Context, t *testing.T, client *Client) {
 }
 
 func testPagination(ctx context.Context, t *testing.T, client *Client) {
-	client.Raw().Exec("DROP TABLE IF EXISTS logs")
+	dropTable(client, "logs")
 	type Log struct {
 		ID  int64  `db:"id" pk:"true"`
 		Msg string `db:"msg"`
@@ -322,7 +341,7 @@ func testPagination(ctx context.Context, t *testing.T, client *Client) {
 }
 
 func testMultiTenant(ctx context.Context, t *testing.T, client *Client) {
-	client.Raw().Exec("DROP TABLE IF EXISTS tenant_data")
+	dropTable(client, "tenant_data")
 	type TenantData struct {
 		ID       int64  `db:"id" pk:"true"`
 		TenantID string `db:"tenant_id"`
@@ -343,7 +362,7 @@ func testMultiTenant(ctx context.Context, t *testing.T, client *Client) {
 	
 	router := NewTenantRouter(cfg, resolver, nil)
 
-	client.Raw().Exec("DROP TABLE IF EXISTS tenant_datas")
+	dropTable(client, "tenant_datas")
 	client.Migrate(ctx, &TenantData{})
 
 	ctx1 := context.WithValue(context.Background(), "tenant_id", "t1")
@@ -376,7 +395,7 @@ func (o *mockObserver) ObserveQuery(e QueryEvent) {
 }
 
 func testEvents(ctx context.Context, t *testing.T, client *Client) {
-	client.Raw().Exec("DROP TABLE IF EXISTS events_users")
+	dropTable(client, "events_users")
 	obs := &mockObserver{}
 	// Since client options are applied at New(), we can't easily add an observer to an existing client 
 	// unless we use a middleware or the client supports it.
@@ -426,7 +445,7 @@ func (m *suiteMockMiddleware) WrapExec(next ExecFunc) ExecFunc {
 }
 
 func testMiddleware(ctx context.Context, t *testing.T, client *Client) {
-	client.Raw().Exec("DROP TABLE IF EXISTS mid_users")
+	dropTable(client, "mid_users")
 	mid := &suiteMockMiddleware{}
 	c2, _ := New(client.Raw(), WithDialect(client.Dialect()), WithMiddleware(mid))
 	
@@ -442,11 +461,22 @@ func testMiddleware(ctx context.Context, t *testing.T, client *Client) {
 }
 
 func testRaw(ctx context.Context, t *testing.T, client *Client) {
-	client.Raw().Exec("DROP TABLE IF EXISTS raw_test")
+	dropTable(client, "raw_test")
 	// Enable raw queries for this test
 	c2, _ := New(client.Raw(), WithDialect(client.Dialect()), WithLimits(Limits{AllowRawQueries: true, MaxResults: 1000, QueryTimeout: time.Second}))
 	
-	if err := c2.Exec(ctx, "CREATE TABLE raw_test (id INTEGER, name TEXT)"); err != nil {
+	sqlType := "TEXT"
+	switch client.Dialect().Name() {
+	case "mysql":
+		sqlType = "VARCHAR(255)"
+	case "oracle":
+		sqlType = "VARCHAR2(255)"
+	case "mssql":
+		sqlType = "NVARCHAR(MAX)"
+	}
+
+	createSQL := fmt.Sprintf("CREATE TABLE raw_test (id INTEGER, name %s)", sqlType)
+	if err := c2.Exec(ctx, createSQL); err != nil {
 		t.Fatalf("exec failed: %v", err)
 	}
 

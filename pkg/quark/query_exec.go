@@ -83,16 +83,6 @@ func (q *Query[T]) List() ([]T, error) {
 	rows, err := q.executeQuery(ctx, sqlStr, args)
 	duration := time.Since(start)
 
-	// Notify observers
-	q.notifyObservers(QueryEvent{
-		SQL:       sqlStr,
-		Args:      args,
-		Duration:  duration,
-		Error:     err,
-		Table:     q.table,
-		Operation: "SELECT",
-	})
-
 	if err != nil {
 		return nil, fmt.Errorf("query failed: %w", err)
 	}
@@ -117,6 +107,17 @@ func (q *Query[T]) List() ([]T, error) {
 			return nil, err
 		}
 	}
+
+	// Notify observers
+	q.notifyObservers(QueryEvent{
+		SQL:       sqlStr,
+		Args:      args,
+		Duration:  duration,
+		Error:     err,
+		Table:     q.table,
+		Operation: "SELECT",
+		Rows:      int64(len(results)),
+	})
 
 	return results, nil
 }
@@ -398,6 +399,15 @@ func (q *Query[T]) buildSelect() (string, []any, error) {
 				sqlBuf.WriteString(" ASC")
 			}
 		}
+	} else if (q.limit > 0 || q.offset > 0) && (q.dialect.Name() == "mssql" || q.dialect.Name() == "oracle") {
+		// MSSQL REQUIRES ORDER BY for OFFSET/FETCH. Use PK as default.
+		sqlBuf.WriteString(" ORDER BY ")
+		if q.pk.Column != "" {
+			sqlBuf.WriteString(q.dialect.Quote(q.pk.Column))
+		} else {
+			sqlBuf.WriteString("(SELECT NULL)") // Hack if no PK
+		}
+		sqlBuf.WriteString(" ASC")
 	}
 
 	// LIMIT/OFFSET
@@ -507,24 +517,29 @@ func (q *Query[T]) scanRow(rows *sql.Rows, dest *T) error {
 
 	scanDest := make([]any, len(columns))
 	for i, col := range columns {
+		matched := false
 		// Fast path: use cached metadata
 		if q.meta != nil {
 			if fm, ok := q.meta.FieldByCol[col]; ok {
 				scanDest[i] = elem.Field(fm.Index).Addr().Interface()
-				continue
+				matched = true
 			}
 		}
-		// Slow path: reflection lookup
-		field := q.findField(elem, col)
-		if field.IsValid() && field.CanAddr() {
-			scanDest[i] = field.Addr().Interface()
-		} else {
-			var discard any
-			scanDest[i] = &discard
+		if !matched {
+			// Slow path: reflection lookup
+			field := q.findField(elem, col)
+			if field.IsValid() && field.CanAddr() {
+				scanDest[i] = field.Addr().Interface()
+				matched = true
+			} else {
+				var discard any
+				scanDest[i] = &discard
+			}
 		}
 	}
 
-	return rows.Scan(scanDest...)
+	err = rows.Scan(scanDest...)
+	return err
 }
 
 // findField finds a struct field matching the column name (fallback for uncached lookups).
@@ -534,11 +549,11 @@ func (q *Query[T]) findField(elem reflect.Value, column string) reflect.Value {
 		field := t.Field(i)
 
 		dbTag := field.Tag.Get("db")
-		if dbTag == column {
+		if strings.EqualFold(dbTag, column) {
 			return elem.Field(i)
 		}
 
-		if strings.EqualFold(field.Name, column) {
+		if strings.EqualFold(toSnakeCase(field.Name), column) || strings.EqualFold(field.Name, column) {
 			return elem.Field(i)
 		}
 	}
