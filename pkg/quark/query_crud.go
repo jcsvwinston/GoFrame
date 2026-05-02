@@ -53,7 +53,6 @@ func (q *BaseQuery) executeExec(ctx context.Context, sqlStr string, args []any) 
 	return handler(ctx, q.exec, sqlStr, args)
 }
 
-
 // isZeroPKValue checks if a primary key value is its zero value.
 func isZeroPKValue(v reflect.Value) bool {
 	switch v.Kind() {
@@ -120,7 +119,7 @@ func (q *BaseQuery) saveAny(ctx context.Context, exec Executor, entity any, isUp
 	if actualUpdate && isZeroPKValue(elem.Field(meta.PK.Index)) {
 		actualUpdate = false
 	}
-	
+
 	// 1. Save BelongsTo associations FIRST (so we have their PKs)
 	for _, rel := range meta.Relations {
 		if rel.Type == "belongs_to" {
@@ -131,7 +130,7 @@ func (q *BaseQuery) saveAny(ctx context.Context, exec Executor, entity any, isUp
 				if relatedVal.Kind() != reflect.Ptr {
 					relatedVal = field.Addr()
 				}
-				
+
 				// Create a sub-query context for the related model, inheriting tenant info
 				sq := &BaseQuery{
 					client:    q.client,
@@ -152,7 +151,7 @@ func (q *BaseQuery) saveAny(ctx context.Context, exec Executor, entity any, isUp
 				// Set foreign key on parent
 				relMeta := GetModelMetaByType(rel.RefType)
 				relPKVal := reflect.Indirect(field).Field(relMeta.PK.Index).Interface()
-				
+
 				if fm, ok := meta.FieldByCol[rel.JoinCol]; ok {
 					parentFKField := elem.Field(fm.Index)
 					if parentFKField.CanSet() {
@@ -316,8 +315,8 @@ func (q *BaseQuery) buildInsert(v reflect.Value) (string, []any, error) {
 		// Check if it's already in the columns
 		found := false
 		for _, col := range columns {
-			// Compare lowercase and unquoted to avoid duplicates across dialects (especially Oracle)
-			cleanCol := strings.Trim(strings.ToLower(col), `"'[]`)
+			// Compare lowercase and unquoted to avoid duplicates across dialects (MySQL, Oracle, etc)
+			cleanCol := strings.Trim(strings.ToLower(col), "`'\"[]")
 			if cleanCol == strings.ToLower(q.tenantCol) {
 				found = true
 				break
@@ -825,7 +824,7 @@ func (q *BaseQuery) saveAssociations(v reflect.Value, isUpdate bool) error {
 			if relatedVal.Kind() != reflect.Ptr {
 				relatedVal = field.Addr()
 			}
-			
+
 			// Set foreign key on related
 			relMeta := GetModelMetaByType(rel.RefType)
 			if fm, ok := relMeta.FieldByCol[rel.JoinCol]; ok {
@@ -891,8 +890,7 @@ func (q *BaseQuery) linkM2M(rel RelationMeta, parentPK, childPK any) error {
 	_, err := q.executeExec(q.ctx, sqlStr, []any{parentPK, childPK})
 	if err != nil {
 		// Ignore duplicate key errors - already linked
-		return nil 
+		return nil
 	}
 	return nil
 }
-

@@ -1,5 +1,5 @@
 package quark_test
- 
+
 import (
 	"context"
 	"database/sql"
@@ -252,7 +252,7 @@ func testQueryBuilder(ctx context.Context, t *testing.T, client *quark.Client) {
 	}
 
 	client.Migrate(ctx, &QBUser{})
-	
+
 	users := []QBUser{
 		{Name: "Alice", Age: 20, City: "Madrid"},
 		{Name: "Charlie", Age: 30, City: "Madrid"},
@@ -280,11 +280,11 @@ func testQueryBuilder(ctx context.Context, t *testing.T, client *quark.Client) {
 	}
 
 	// Test Or
-	orResult, _ := quark.For[QBUser](ctx, client).Where("city", "=", "Barcelona").Or(func(q *Query[QBUser]) *Query[QBUser] {
+	orResult, _ := quark.For[QBUser](ctx, client).Where("city", "=", "Barcelona").Or(func(q *quark.Query[QBUser]) *quark.Query[QBUser] {
 		return q.Where("age", "<", 25)
 	}).List()
 	if len(orResult) != 2 {
-		t.Errorf("expected 2 users for OR condition, got %d", len(orResult) )
+		t.Errorf("expected 2 users for OR condition, got %d", len(orResult))
 	}
 
 	// Test In
@@ -362,7 +362,7 @@ func testHooks(ctx context.Context, t *testing.T, client *quark.Client) {
 	if err := quark.For[HookUser](ctx, client).Create(&u); err != nil {
 		t.Fatalf("create failed: %v", err)
 	}
-	
+
 	// Just verify creation worked
 	if u.ID == 0 {
 		t.Error("hook user ID not set")
@@ -454,18 +454,18 @@ func testMultiTenant(ctx context.Context, t *testing.T, client *quark.Client) {
 	}
 	client.Migrate(ctx, &TenantData{})
 
-	cfg := DefaultTenantConfig()
-	cfg.Strategy = RowLevelSecurity
-	cfg.Basequark.Client = client
-	
+	cfg := quark.DefaultTenantConfig()
+	cfg.Strategy = quark.RowLevelSecurity
+	cfg.BaseClient = client
+
 	resolver := func(ctx context.Context) string {
 		if tid, ok := ctx.Value("tenant_id").(string); ok {
 			return tid
 		}
 		return ""
 	}
-	
-	router := NewTenantRouter(cfg, resolver, nil)
+
+	router := quark.NewTenantRouter(cfg, resolver, nil)
 
 	dropTable(client, "tenant_datas")
 	client.Migrate(ctx, &TenantData{})
@@ -502,13 +502,13 @@ func (o *mockObserver) ObserveQuery(e quark.QueryEvent) {
 func testEvents(ctx context.Context, t *testing.T, client *quark.Client) {
 	dropTable(client, "events_users")
 	obs := &mockObserver{}
-	// Since client options are applied at quark.New(), we can't easily add an observer to an existing client 
+	// Since client options are applied at quark.New(), we can't easily add an observer to an existing client
 	// unless we use a middleware or the client supports it.
 	// Quark quark.Client has an 'observers' slice. Let's see if we can append to it.
 	// Actually, it's unexported. But we can create a NEW client with the SAME DB for this test.
-	
+
 	c2, _ := quark.New(client.Raw(), quark.WithDialect(client.Dialect()), quark.WithQueryObserver(obs))
-	
+
 	type EventUser struct {
 		ID   int64  `db:"id" pk:"true"`
 		Name string `db:"name"`
@@ -553,7 +553,7 @@ func testMiddleware(ctx context.Context, t *testing.T, client *quark.Client) {
 	dropTable(client, "mid_users")
 	mid := &suiteMockMiddleware{}
 	c2, _ := quark.New(client.Raw(), quark.WithDialect(client.Dialect()), quark.WithMiddleware(mid))
-	
+
 	type MidUser struct {
 		ID int64 `db:"id" pk:"true"`
 	}
@@ -568,8 +568,8 @@ func testMiddleware(ctx context.Context, t *testing.T, client *quark.Client) {
 func testRaw(ctx context.Context, t *testing.T, client *quark.Client) {
 	dropTable(client, "raw_test")
 	// Enable raw queries for this test
-	c2, _ := quark.New(client.Raw(), quark.WithDialect(client.Dialect()), quark.WithLimits(Limits{AllowRawQueries: true, MaxResults: 1000, QueryTimeout: time.Second}))
-	
+	c2, _ := quark.New(client.Raw(), quark.WithDialect(client.Dialect()), quark.WithLimits(quark.Limits{AllowRawQueries: true, MaxResults: 1000, QueryTimeout: time.Second}))
+
 	sqlType := "TEXT"
 	switch client.Dialect().Name() {
 	case "mysql":
@@ -600,10 +600,10 @@ func testDatabasePerTenant(ctx context.Context, t *testing.T, client *quark.Clie
 		return quark.New(db, quark.WithDialect(quark.SQLite()))
 	}
 
-	cfg := DefaultTenantConfig()
-	cfg.Strategy = DatabasePerTenant
+	cfg := quark.DefaultTenantConfig()
+	cfg.Strategy = quark.DatabasePerTenant
 	cfg.MaxCachedPools = 2 // Small limit for eviction test
-	
+
 	resolver := func(ctx context.Context) string {
 		if tid, ok := ctx.Value("tenant_id").(string); ok {
 			return tid
@@ -611,24 +611,24 @@ func testDatabasePerTenant(ctx context.Context, t *testing.T, client *quark.Clie
 		return ""
 	}
 
-	router := NewTenantRouter(cfg, resolver, factory)
+	router := quark.NewTenantRouter(cfg, resolver, factory)
 
 	ctx1 := context.WithValue(ctx, "tenant_id", "t1")
 	ctx2 := context.WithValue(ctx, "tenant_id", "t2")
 	ctx3 := context.WithValue(ctx, "tenant_id", "t3")
 
 	// Trigger cache population
-	router.Getquark.Client(ctx1)
-	router.Getquark.Client(ctx2)
-	
+	router.GetClient(ctx1)
+	router.GetClient(ctx2)
+
 	active := router.ActiveTenants()
 	if len(active) != 2 {
 		t.Errorf("expected 2 active tenants, got %d", len(active))
 	}
 
 	// Trigger eviction
-	router.Getquark.Client(ctx3)
-	
+	router.GetClient(ctx3)
+
 	activeAfter := router.ActiveTenants()
 	if len(activeAfter) != 2 {
 		t.Errorf("expected 2 active tenants after eviction, got %d", len(activeAfter))
@@ -730,7 +730,7 @@ func testSync(ctx context.Context, t *testing.T, client *quark.Client) {
 	}
 
 	// Destructive mode
-	cDestructive, _ := quark.New(client.Raw(), quark.WithDialect(client.Dialect()), quark.WithLimits(Limits{SafeMigrations: false}))
+	cDestructive, _ := quark.New(client.Raw(), quark.WithDialect(client.Dialect()), quark.WithLimits(quark.Limits{SafeMigrations: false}))
 	if err := cDestructive.Sync(ctx, quark.SyncOptions{}, &SyncUserV4{}); err != nil {
 		t.Fatalf("destructive sync failed: %v", err)
 	}
@@ -745,7 +745,7 @@ func testRecursiveAssociations(ctx context.Context, t *testing.T, client *quark.
 
 	// Recursive Create
 	author := RAuthor{
-		Name: "Recursive Author",
+		Name:    "Recursive Author",
 		Profile: RProfile{Bio: "Author Bio"},
 		Posts: []RPost{
 			{Title: "Post 1"},

@@ -34,11 +34,11 @@ func TestAssociationSaving(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	if err := client.Migrate(ctx, &UserAssocUser{}, &Post{}); err != nil {
+	if err := client.Migrate(ctx, &AssocUser{}, &Post{}); err != nil {
 		t.Fatal(err)
 	}
 
-	user := &UserAssocUser{
+	user := &AssocUser{
 		Name: "Juan",
 		Posts: []Post{
 			{Title: "Post 1"},
@@ -67,10 +67,10 @@ func TestAssociationSaving(t *testing.T) {
 
 	// Verify BelongsTo
 	type Profile struct {
-		ID     int64  `db:"id" pk:"true"`
-		Bio    string `db:"bio"`
-		UserID int64  `db:"user_id"`
-		User   *User  `rel:"belongs_to" join:"user_id"`
+		ID     int64      `db:"id" pk:"true"`
+		Bio    string     `db:"bio"`
+		UserID int64      `db:"user_id"`
+		User   *AssocUser `rel:"belongs_to" join:"user_id"`
 	}
 
 	if err := client.Migrate(ctx, &Profile{}); err != nil {
@@ -79,7 +79,7 @@ func TestAssociationSaving(t *testing.T) {
 
 	profile := &Profile{
 		Bio:  "Bio 1",
-		User: &UserAssocUser{Name: "Recursive User"},
+		User: &AssocUser{Name: "Recursive User"},
 	}
 
 	err = quark.For[Profile](ctx, client).Create(profile)

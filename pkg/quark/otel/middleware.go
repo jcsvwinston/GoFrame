@@ -3,7 +3,6 @@ package otel
 import (
 	"context"
 	"database/sql"
-	"time"
 
 	"github.com/jcsvwinston/GoFrame/pkg/quark"
 	"go.opentelemetry.io/otel"
@@ -29,7 +28,7 @@ func NewMiddleware() *Middleware {
 
 func (m *Middleware) WrapExec(next quark.ExecFunc) quark.ExecFunc {
 	return func(ctx context.Context, exec quark.Executor, sqlStr string, args []any) (res sql.Result, err error) {
-		ctx, span := m.tracer.Start(ctx, "quark.exec", 
+		ctx, span := m.tracer.Start(ctx, "quark.exec",
 			trace.WithSpanKind(trace.SpanKindClient),
 			trace.WithAttributes(
 				attribute.String("db.statement", sqlStr),
@@ -50,7 +49,7 @@ func (m *Middleware) WrapExec(next quark.ExecFunc) quark.ExecFunc {
 
 func (m *Middleware) WrapQuery(next quark.QueryFunc) quark.QueryFunc {
 	return func(ctx context.Context, exec quark.Executor, sqlStr string, args []any) (rows *sql.Rows, err error) {
-		ctx, span := m.tracer.Start(ctx, "quark.query", 
+		ctx, span := m.tracer.Start(ctx, "quark.query",
 			trace.WithSpanKind(trace.SpanKindClient),
 			trace.WithAttributes(
 				attribute.String("db.statement", sqlStr),
@@ -71,7 +70,7 @@ func (m *Middleware) WrapQuery(next quark.QueryFunc) quark.QueryFunc {
 
 func (m *Middleware) WrapQueryRow(next quark.QueryRowFunc) quark.QueryRowFunc {
 	return func(ctx context.Context, exec quark.Executor, sqlStr string, args []any) *sql.Row {
-		ctx, span := m.tracer.Start(ctx, "quark.query_row", 
+		ctx, span := m.tracer.Start(ctx, "quark.query_row",
 			trace.WithSpanKind(trace.SpanKindClient),
 			trace.WithAttributes(
 				attribute.String("db.statement", sqlStr),
