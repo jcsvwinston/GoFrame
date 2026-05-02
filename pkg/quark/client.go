@@ -188,15 +188,15 @@ func (c *Client) RawQuery(ctx context.Context, query string, args ...any) (*sql.
 	duration := time.Since(start)
 
 	// Notify observers
-	event := QueryEvent{
+	qEvent := QueryEvent{
 		SQL:       query,
 		Args:      args,
 		Duration:  duration,
 		Error:     err,
-		Operation: "RAW",
+		Operation: "RAW_QUERY",
 	}
 	for _, obs := range c.observers {
-		obs.ObserveQuery(event)
+		obs.ObserveQuery(qEvent)
 	}
 
 	return rows, err
@@ -213,7 +213,27 @@ func (c *Client) Exec(ctx context.Context, query string, args ...any) error {
 		return err
 	}
 
-	_, err := c.db.ExecContext(ctx, query, args...)
+	start := time.Now()
+	res, err := c.db.ExecContext(ctx, query, args...)
+	duration := time.Since(start)
+
+	// Notify observers
+	rowsAffected := int64(0)
+	if err == nil {
+		rowsAffected, _ = res.RowsAffected()
+	}
+	qEvent := QueryEvent{
+		SQL:       query,
+		Args:      args,
+		Duration:  duration,
+		Error:     err,
+		Operation: "RAW_EXEC",
+		Rows:      rowsAffected,
+	}
+	for _, obs := range c.observers {
+		obs.ObserveQuery(qEvent)
+	}
+
 	return err
 }
 
@@ -268,121 +288,3 @@ func containsAny(s string, substrs ...string) bool {
 	return false
 }
 
-// saveAny persists an arbitrary struct to the database using its metadata.
-// It handles recursive saving of associations if they are present.
-func (c *Client) saveAny(ctx context.Context, exec Executor, entity any, isUpdate bool) (int64, error) {
-	v := reflect.ValueOf(entity)
-	if v.Kind() != reflect.Ptr || v.IsNil() {
-		return 0, fmt.Errorf("entity must be a non-nil pointer")
-	}
-	elem := v.Elem()
-	if elem.Kind() != reflect.Struct {
-		return 0, fmt.Errorf("entity must be a struct")
-	}
-
-	meta := GetModelMetaByType(elem.Type())
-	
-	// 1. Save BelongsTo associations FIRST (so we have their PKs)
-	for _, rel := range meta.Relations {
-		if rel.Type == "belongs_to" {
-			field := elem.FieldByName(rel.Field)
-			if !field.IsZero() {
-				// Save related record
-				relatedVal := field
-				if relatedVal.Kind() != reflect.Ptr {
-					relatedVal = field.Addr()
-				}
-				if _, err := c.saveAny(ctx, exec, relatedVal.Interface(), false); err != nil {
-					return 0, err
-				}
-				// Set foreign key on parent
-				relMeta := GetModelMetaByType(rel.RefType)
-				relPKVal := reflect.Indirect(field).Field(relMeta.PK.Index).Interface()
-				
-				if fm, ok := meta.FieldByCol[rel.JoinCol]; ok {
-					parentFKField := elem.Field(fm.Index)
-					if parentFKField.CanSet() {
-						parentFKField.Set(reflect.ValueOf(relPKVal))
-					}
-				}
-			}
-		}
-	}
-
-	// 2. Save the main entity using a dynamic query
-	dq := &BaseQuery{
-		client:  c,
-		ctx:     ctx,
-		dialect: c.dialect,
-		guard:   c.guard,
-		table:   meta.Table,
-		pk:      meta.PK,
-		exec:    exec,
-		meta:    meta,
-	}
-
-	rowsAffected := int64(0)
-	if isUpdate {
-		sqlStr, args, err := dq.buildUpdate(elem)
-		if err != nil {
-			return 0, err
-		}
-		res, err := dq.executeExec(ctx, sqlStr, args)
-		if err != nil {
-			return 0, err
-		}
-		rowsAffected, _ = res.RowsAffected()
-	} else {
-		sqlStr, args, err := dq.buildInsert(elem)
-		if err != nil {
-			return 0, err
-		}
-
-		if c.dialect.SupportsReturning() {
-			if c.dialect.Name() == "oracle" {
-				var id int64
-				sqlWithOut := "BEGIN " + sqlStr + " INTO :ret_id; END;"
-				_, err = dq.executeExec(ctx, sqlWithOut, append(args, sql.Named("ret_id", sql.Out{Dest: &id})))
-				if err != nil {
-					return 0, err
-				}
-				setPKValue(elem, meta.PK, id)
-			} else {
-				row := dq.executeQueryRow(ctx, sqlStr, args)
-				if err := dq.scanReturning(row, elem); err != nil {
-					return 0, err
-				}
-			}
-			rowsAffected = 1
-		} else {
-			// Handle MSSQL/MySQL last id
-			if c.dialect.Name() == "mssql" {
-				sqlBatch := sqlStr + "; " + c.dialect.LastInsertIDQuery(meta.Table, meta.PK.Column)
-				var lastID int64
-				err = dq.executeQueryRow(ctx, sqlBatch, args).Scan(&lastID)
-				if err != nil {
-					return 0, err
-				}
-				setPKValue(elem, meta.PK, lastID)
-				rowsAffected = 1
-			} else {
-				res, err := dq.executeExec(ctx, sqlStr, args)
-				if err != nil {
-					return 0, err
-				}
-				if c.dialect.SupportsLastInsertID() {
-					lastID, _ := res.LastInsertId()
-					setPKValue(elem, meta.PK, lastID)
-				}
-				rowsAffected, _ = res.RowsAffected()
-			}
-		}
-	}
-
-	// 3. Save HasOne/HasMany associations AFTER
-	if err := dq.saveAssociations(elem, isUpdate); err != nil {
-		return rowsAffected, err
-	}
-
-	return rowsAffected, nil
-}

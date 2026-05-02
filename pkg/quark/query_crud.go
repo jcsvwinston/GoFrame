@@ -18,7 +18,26 @@ func (q *BaseQuery) executeExec(ctx context.Context, sqlStr string, args []any) 
 	}
 	// Base handler: direct execution
 	handler := ExecFunc(func(ctx context.Context, exec Executor, s string, a []any) (sql.Result, error) {
-		return exec.ExecContext(ctx, s, a...)
+		start := time.Now()
+		res, err := exec.ExecContext(ctx, s, a...)
+		duration := time.Since(start)
+
+		// Notify observers
+		rowsAffected := int64(0)
+		if err == nil {
+			rowsAffected, _ = res.RowsAffected()
+		}
+		q.notifyObservers(QueryEvent{
+			SQL:       s,
+			Args:      a,
+			Duration:  duration,
+			Error:     err,
+			Table:     q.table,
+			Operation: "EXEC",
+			Rows:      rowsAffected,
+		})
+
+		return res, err
 	})
 
 	// Wrap with middleware in reverse order
@@ -69,11 +88,158 @@ func (q *BaseQuery) ensureTenantID(v reflect.Value) {
 	if q.meta != nil {
 		if fm, ok := q.meta.FieldByCol[q.tenantCol]; ok {
 			field := v.Field(fm.Index)
-			if isZeroValue(field) {
+			if field.Kind() == reflect.String && isZeroValue(field) {
 				field.SetString(q.tenantID)
 			}
 		}
 	}
+}
+
+// saveAny persists an arbitrary struct to the database using its metadata.
+// It handles recursive saving of associations if they are present.
+func (q *BaseQuery) saveAny(ctx context.Context, exec Executor, entity any, isUpdate bool) (int64, error) {
+	v := reflect.ValueOf(entity)
+	if v.Kind() != reflect.Ptr || v.IsNil() {
+		return 0, fmt.Errorf("entity must be a non-nil pointer")
+	}
+	elem := v.Elem()
+	if elem.Kind() != reflect.Struct {
+		return 0, fmt.Errorf("entity must be a struct")
+	}
+
+	meta := GetModelMetaByType(elem.Type())
+
+	// Decide if we should Insert or Update.
+	// If it's an update but the PK is zero, it must be an insert (new record in existing association).
+	actualUpdate := isUpdate
+	if actualUpdate && isZeroPKValue(elem.Field(meta.PK.Index)) {
+		actualUpdate = false
+	}
+	
+	// 1. Save BelongsTo associations FIRST (so we have their PKs)
+	for _, rel := range meta.Relations {
+		if rel.Type == "belongs_to" {
+			field := elem.FieldByName(rel.Field)
+			if !field.IsZero() {
+				// Save related record
+				relatedVal := field
+				if relatedVal.Kind() != reflect.Ptr {
+					relatedVal = field.Addr()
+				}
+				
+				// Create a sub-query context for the related model, inheriting tenant info
+				sq := &BaseQuery{
+					client:    q.client,
+					ctx:       ctx,
+					dialect:   q.dialect,
+					guard:     q.guard,
+					table:     relMetaFromType(rel.RefType).Table,
+					pk:        relMetaFromType(rel.RefType).PK,
+					exec:      exec,
+					meta:      relMetaFromType(rel.RefType),
+					tenantID:  q.tenantID,
+					tenantCol: q.tenantCol,
+				}
+
+				if _, err := sq.saveAny(ctx, exec, relatedVal.Interface(), actualUpdate); err != nil {
+					return 0, err
+				}
+				// Set foreign key on parent
+				relMeta := GetModelMetaByType(rel.RefType)
+				relPKVal := reflect.Indirect(field).Field(relMeta.PK.Index).Interface()
+				
+				if fm, ok := meta.FieldByCol[rel.JoinCol]; ok {
+					parentFKField := elem.Field(fm.Index)
+					if parentFKField.CanSet() {
+						parentFKField.Set(reflect.ValueOf(relPKVal))
+					}
+				}
+			}
+		}
+	}
+
+	// 2. Save the main entity using a dynamic query
+	dq := &BaseQuery{
+		client:    q.client,
+		ctx:       ctx,
+		dialect:   q.dialect,
+		guard:     q.guard,
+		table:     meta.Table,
+		pk:        meta.PK,
+		exec:      exec,
+		meta:      meta,
+		tenantID:  q.tenantID,
+		tenantCol: q.tenantCol,
+	}
+
+	rowsAffected := int64(0)
+	if actualUpdate {
+		sqlStr, args, err := dq.buildUpdate(elem)
+		if err != nil {
+			return 0, err
+		}
+		res, err := dq.executeExec(ctx, sqlStr, args)
+		if err != nil {
+			return 0, err
+		}
+		rowsAffected, _ = res.RowsAffected()
+	} else {
+		sqlStr, args, err := dq.buildInsert(elem)
+		if err != nil {
+			return 0, err
+		}
+
+		if q.dialect.SupportsReturning() {
+			if q.dialect.Name() == "oracle" {
+				var id int64
+				sqlWithOut := "BEGIN " + sqlStr + " INTO :ret_id; END;"
+				_, err = dq.executeExec(ctx, sqlWithOut, append(args, sql.Named("ret_id", sql.Out{Dest: &id})))
+				if err != nil {
+					return 0, err
+				}
+				setPKValue(elem, meta.PK, id)
+			} else {
+				row := dq.executeQueryRow(ctx, sqlStr, args)
+				if err := dq.scanReturning(row, elem); err != nil {
+					return 0, err
+				}
+			}
+			rowsAffected = 1
+		} else {
+			// Handle MSSQL/MySQL last id
+			if q.dialect.Name() == "mssql" {
+				sqlBatch := sqlStr + "; " + q.dialect.LastInsertIDQuery(meta.Table, meta.PK.Column)
+				var lastID int64
+				err = dq.executeQueryRow(ctx, sqlBatch, args).Scan(&lastID)
+				if err != nil {
+					return 0, err
+				}
+				setPKValue(elem, meta.PK, lastID)
+				rowsAffected = 1
+			} else {
+				res, err := dq.executeExec(ctx, sqlStr, args)
+				if err != nil {
+					return 0, err
+				}
+				if q.dialect.SupportsLastInsertID() {
+					lastID, _ := res.LastInsertId()
+					setPKValue(elem, meta.PK, lastID)
+				}
+				rowsAffected, _ = res.RowsAffected()
+			}
+		}
+	}
+
+	// 3. Save HasOne/HasMany associations AFTER
+	if err := dq.saveAssociations(elem, actualUpdate); err != nil {
+		return rowsAffected, err
+	}
+
+	return rowsAffected, nil
+}
+
+func relMetaFromType(t reflect.Type) *ModelMeta {
+	return GetModelMetaByType(t)
 }
 
 // Create inserts a new record.
@@ -95,7 +261,7 @@ func (q *Query[T]) Create(entity *T) error {
 		}
 	}
 
-	if _, err := q.client.saveAny(q.ctx, q.exec, entity, false); err != nil {
+	if _, err := q.saveAny(q.ctx, q.exec, entity, false); err != nil {
 		return err
 	}
 
@@ -111,6 +277,7 @@ func (q *Query[T]) Create(entity *T) error {
 // buildInsert constructs the INSERT SQL.
 func (q *BaseQuery) buildInsert(v reflect.Value) (string, []any, error) {
 	t := v.Type()
+	q.ensureTenantID(v) // Inject tenant ID BEFORE processing fields
 
 	var columns []string
 	var placeholders []string
@@ -137,6 +304,26 @@ func (q *BaseQuery) buildInsert(v reflect.Value) (string, []any, error) {
 		placeholders = append(placeholders, q.dialect.Placeholder(argIndex))
 		args = append(args, v.Field(i).Interface())
 		argIndex++
+	}
+
+	// Auto-inject tenant ID if needed (only if not already in columns)
+	if q.tenantCol != "" {
+		// Check if it's already in the columns
+		found := false
+		for _, col := range columns {
+			if strings.Contains(col, q.tenantCol) {
+				found = true
+				break
+			}
+		}
+		if !found {
+			if fm, ok := q.meta.FieldByCol[q.tenantCol]; ok {
+				columns = append(columns, q.dialect.Quote(q.tenantCol))
+				placeholders = append(placeholders, q.dialect.Placeholder(argIndex))
+				args = append(args, v.Field(fm.Index).Interface())
+				argIndex++
+			}
+		}
 	}
 
 	var sqlStr strings.Builder
@@ -190,7 +377,7 @@ func (q *Query[T]) Update(entity *T) (int64, error) {
 		}
 	}
 
-	rowsAffected, err := q.client.saveAny(q.ctx, q.exec, entity, true)
+	rowsAffected, err := q.saveAny(q.ctx, q.exec, entity, true)
 	if err != nil {
 		return rowsAffected, err
 	}
@@ -231,27 +418,15 @@ func (q *Query[T]) UpdateMap(data map[string]any) (int64, error) {
 	ctx, cancel := context.WithTimeout(q.ctx, q.client.limits.QueryTimeout)
 	defer cancel()
 
-	start := time.Now()
 	result, err := q.executeExec(ctx, sql, args)
-	duration := time.Since(start)
-
-	// Notify observers
-	rowsAffected := int64(0)
-	if err == nil {
-		rowsAffected, _ = result.RowsAffected()
-	}
-	q.notifyObservers(QueryEvent{
-		SQL:       sql,
-		Args:      args,
-		Duration:  duration,
-		Error:     err,
-		Table:     q.table,
-		Operation: "UPDATE",
-		Rows:      rowsAffected,
-	})
 
 	if err != nil {
 		return 0, fmt.Errorf("update failed: %w", err)
+	}
+
+	rowsAffected := int64(0)
+	if result != nil {
+		rowsAffected, _ = result.RowsAffected()
 	}
 
 	return rowsAffected, nil
@@ -261,6 +436,7 @@ func (q *Query[T]) UpdateMap(data map[string]any) (int64, error) {
 // Merges PK-based WHERE with any additional Where() conditions from the builder.
 func (q *BaseQuery) buildUpdate(v reflect.Value) (string, []any, error) {
 	t := v.Type()
+	q.ensureTenantID(v) // Inject tenant ID BEFORE processing fields
 
 	var setClauses []string
 	var args []any
@@ -535,27 +711,14 @@ func (q *Query[T]) softDelete(pkValue any) (int64, error) {
 	ctx, cancel := context.WithTimeout(q.ctx, q.client.limits.QueryTimeout)
 	defer cancel()
 
-	start := time.Now()
 	result, err := q.executeExec(ctx, sql.String(), args)
-	duration := time.Since(start)
-
-	rowsAffected := int64(0)
-	if err == nil {
-		rowsAffected, _ = result.RowsAffected()
-	}
-
-	q.notifyObservers(QueryEvent{
-		SQL:       sql.String(),
-		Args:      args,
-		Duration:  duration,
-		Error:     err,
-		Table:     q.table,
-		Operation: "DELETE (soft)",
-		Rows:      rowsAffected,
-	})
-
 	if err != nil {
 		return 0, fmt.Errorf("soft delete failed: %w", err)
+	}
+
+	rowsAffected := int64(0)
+	if result != nil {
+		rowsAffected, _ = result.RowsAffected()
 	}
 
 	return rowsAffected, nil
@@ -577,27 +740,14 @@ func (q *Query[T]) hardDeleteByPK(pkValue any) (int64, error) {
 	ctx, cancel := context.WithTimeout(q.ctx, q.client.limits.QueryTimeout)
 	defer cancel()
 
-	start := time.Now()
 	result, err := q.executeExec(ctx, sql.String(), args)
-	duration := time.Since(start)
-
-	rowsAffected := int64(0)
-	if err == nil {
-		rowsAffected, _ = result.RowsAffected()
-	}
-
-	q.notifyObservers(QueryEvent{
-		SQL:       sql.String(),
-		Args:      args,
-		Duration:  duration,
-		Error:     err,
-		Table:     q.table,
-		Operation: "DELETE (hard)",
-		Rows:      rowsAffected,
-	})
-
 	if err != nil {
 		return 0, fmt.Errorf("delete failed: %w", err)
+	}
+
+	rowsAffected := int64(0)
+	if result != nil {
+		rowsAffected, _ = result.RowsAffected()
 	}
 
 	return rowsAffected, nil
@@ -640,27 +790,14 @@ func (q *Query[T]) hardDeleteWhere() (int64, error) {
 	ctx, cancel := context.WithTimeout(q.ctx, q.client.limits.QueryTimeout)
 	defer cancel()
 
-	start := time.Now()
 	result, err := q.executeExec(ctx, sql.String(), args)
-	duration := time.Since(start)
-
-	rowsAffected := int64(0)
-	if err == nil {
-		rowsAffected, _ = result.RowsAffected()
-	}
-
-	q.notifyObservers(QueryEvent{
-		SQL:       sql.String(),
-		Args:      args,
-		Duration:  duration,
-		Error:     err,
-		Table:     q.table,
-		Operation: "DELETE (hard)",
-		Rows:      rowsAffected,
-	})
-
 	if err != nil {
 		return 0, fmt.Errorf("delete failed: %w", err)
+	}
+
+	rowsAffected := int64(0)
+	if result != nil {
+		rowsAffected, _ = result.RowsAffected()
 	}
 
 	return rowsAffected, nil
@@ -688,7 +825,7 @@ func (q *BaseQuery) saveAssociations(v reflect.Value, isUpdate bool) error {
 				reflect.Indirect(relatedVal).Field(fm.Index).Set(reflect.ValueOf(pkVal))
 			}
 
-			if _, err := q.client.saveAny(q.ctx, q.exec, relatedVal.Interface(), isUpdate); err != nil {
+			if _, err := q.saveAny(q.ctx, q.exec, relatedVal.Interface(), isUpdate); err != nil {
 				return err
 			}
 
@@ -705,7 +842,7 @@ func (q *BaseQuery) saveAssociations(v reflect.Value, isUpdate bool) error {
 					item.Field(fm.Index).Set(reflect.ValueOf(pkVal))
 				}
 
-				if _, err := q.client.saveAny(q.ctx, q.exec, itemPtr.Interface(), isUpdate); err != nil {
+				if _, err := q.saveAny(q.ctx, q.exec, itemPtr.Interface(), isUpdate); err != nil {
 					return err
 				}
 			}
@@ -719,7 +856,7 @@ func (q *BaseQuery) saveAssociations(v reflect.Value, isUpdate bool) error {
 				itemPtr := item.Addr()
 
 				// Save related item first
-				if _, err := q.client.saveAny(q.ctx, q.exec, itemPtr.Interface(), isUpdate); err != nil {
+				if _, err := q.saveAny(q.ctx, q.exec, itemPtr.Interface(), isUpdate); err != nil {
 					return err
 				}
 

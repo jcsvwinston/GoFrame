@@ -34,12 +34,25 @@ func (q *BaseQuery) executeQueryRow(ctx context.Context, sqlStr string, args []a
 	// Note: We cannot return an error here directly since sql.Row doesn't expose error until Scan.
 	// But executing a bad query will cause an error on Scan anyway.
 	if q.err != nil {
-		// Fall through, the error will be caught during query execution since it's invalid
-		// A cleaner approach would be returning an error if possible, but the signature prevents it.
+		// Fall through
 	}
 	// Base handler: direct execution
 	handler := QueryRowFunc(func(ctx context.Context, exec Executor, s string, a []any) *sql.Row {
-		return exec.QueryRowContext(ctx, s, a...)
+		start := time.Now()
+		row := exec.QueryRowContext(ctx, s, a...)
+		duration := time.Since(start)
+
+		// Notify observers (we don't know the rows yet, but it's always 1 for Row)
+		q.notifyObservers(QueryEvent{
+			SQL:       s,
+			Args:      a,
+			Duration:  duration,
+			Table:     q.table,
+			Operation: "QUERY_ROW",
+			Rows:      1,
+		})
+
+		return row
 	})
 
 	// Wrap with middleware in reverse order
@@ -656,15 +669,27 @@ func (q *Query[T]) loadStandardRelation(results []T, relName string, relMeta *Re
 		placeholders[i] = q.dialect.Placeholder(i + 1)
 	}
 
-	query := fmt.Sprintf("SELECT * FROM %s WHERE %s IN (%s)",
+	var whereClauses []string
+	whereClauses = append(whereClauses, fmt.Sprintf("%s IN (%s)", q.dialect.Quote(foreignCol), strings.Join(placeholders, ", ")))
+
+	// Inject tenant filtering if active
+	if q.tenantID != "" && q.tenantCol != "" {
+		// Check if related model has the tenant column
+		if _, ok := relModel.FieldByCol[q.tenantCol]; ok {
+			whereClauses = append(whereClauses, fmt.Sprintf("%s = %s", q.dialect.Quote(q.tenantCol), q.dialect.Placeholder(len(parentKeys)+1)))
+			parentKeys = append(parentKeys, q.tenantID)
+		}
+	}
+
+	query := fmt.Sprintf("SELECT * FROM %s WHERE %s",
 		q.dialect.Quote(relModel.Table),
-		q.dialect.Quote(foreignCol),
-		strings.Join(placeholders, ", "),
+		strings.Join(whereClauses, " AND "),
 	)
 
 	ctx, cancel := context.WithTimeout(q.ctx, q.client.limits.QueryTimeout)
-	rows, err := q.client.Raw().QueryContext(ctx, query, parentKeys...)
-	cancel()
+	defer cancel()
+
+	rows, err := q.executeQuery(ctx, query, parentKeys)
 	if err != nil {
 		return fmt.Errorf("failed to load relation %s: %w", relName, err)
 	}
@@ -715,8 +740,9 @@ func (q *Query[T]) loadM2MRelation(results []T, relName string, relMeta *Relatio
 	)
 
 	ctx, cancel := context.WithTimeout(q.ctx, q.client.limits.QueryTimeout)
-	joinRows, err := q.client.Raw().QueryContext(ctx, joinQuery, parentKeys...)
-	cancel()
+	defer cancel()
+
+	joinRows, err := q.executeQuery(ctx, joinQuery, parentKeys)
 	if err != nil {
 		return fmt.Errorf("failed to load join table for relation %s: %w", relName, err)
 	}
@@ -744,21 +770,31 @@ func (q *Query[T]) loadM2MRelation(results []T, relName string, relMeta *Relatio
 		return nil
 	}
 
-	// Query related table
 	relPlaceholders := make([]string, len(relatedKeys))
 	for i := range relatedKeys {
 		relPlaceholders[i] = q.dialect.Placeholder(i + 1)
 	}
 
-	relQuery := fmt.Sprintf("SELECT * FROM %s WHERE %s IN (%s)",
+	var whereClauses []string
+	whereClauses = append(whereClauses, fmt.Sprintf("%s IN (%s)", q.dialect.Quote(relModel.PK.Column), strings.Join(relPlaceholders, ", ")))
+
+	// Inject tenant filtering if active
+	if q.tenantID != "" && q.tenantCol != "" {
+		if _, ok := relModel.FieldByCol[q.tenantCol]; ok {
+			whereClauses = append(whereClauses, fmt.Sprintf("%s = %s", q.dialect.Quote(q.tenantCol), q.dialect.Placeholder(len(relatedKeys)+1)))
+			relatedKeys = append(relatedKeys, q.tenantID)
+		}
+	}
+
+	relQuery := fmt.Sprintf("SELECT * FROM %s WHERE %s",
 		q.dialect.Quote(relModel.Table),
-		q.dialect.Quote(relModel.PK.Column),
-		strings.Join(relPlaceholders, ", "),
+		strings.Join(whereClauses, " AND "),
 	)
 
 	ctx, cancel = context.WithTimeout(q.ctx, q.client.limits.QueryTimeout)
-	rows, err := q.client.Raw().QueryContext(ctx, relQuery, relatedKeys...)
-	cancel()
+	defer cancel()
+
+	rows, err := q.executeQuery(ctx, relQuery, relatedKeys)
 	if err != nil {
 		return fmt.Errorf("failed to load m2m relation %s: %w", relName, err)
 	}
@@ -836,25 +872,34 @@ func (q *Query[T]) loadPolymorphicRelation(results []T, relName string, relMeta 
 		return nil
 	}
 
-	// Query related table filtering by type column and parent IDs
 	placeholders := make([]string, len(parentKeys))
 	for i := range parentKeys {
 		placeholders[i] = q.dialect.Placeholder(i + 2) // +2 because $1 is the type
 	}
 
-	polyQuery := fmt.Sprintf("SELECT * FROM %s WHERE %s = %s AND %s IN (%s)",
-		q.dialect.Quote(relModel.Table),
-		q.dialect.Quote(relMeta.PolyTypeColumn),
-		q.dialect.Placeholder(1),
-		q.dialect.Quote(relMeta.PolyIDColumn),
-		strings.Join(placeholders, ", "),
-	)
+	var whereClauses []string
+	whereClauses = append(whereClauses, fmt.Sprintf("%s = %s", q.dialect.Quote(relMeta.PolyTypeColumn), q.dialect.Placeholder(1)))
+	whereClauses = append(whereClauses, fmt.Sprintf("%s IN (%s)", q.dialect.Quote(relMeta.PolyIDColumn), strings.Join(placeholders, ", ")))
 
 	args := append([]any{relMeta.PolyType}, parentKeys...)
 
+	// Inject tenant filtering if active
+	if q.tenantID != "" && q.tenantCol != "" {
+		if _, ok := relModel.FieldByCol[q.tenantCol]; ok {
+			whereClauses = append(whereClauses, fmt.Sprintf("%s = %s", q.dialect.Quote(q.tenantCol), q.dialect.Placeholder(len(args)+1)))
+			args = append(args, q.tenantID)
+		}
+	}
+
+	polyQuery := fmt.Sprintf("SELECT * FROM %s WHERE %s",
+		q.dialect.Quote(relModel.Table),
+		strings.Join(whereClauses, " AND "),
+	)
+
 	ctx, cancel := context.WithTimeout(q.ctx, q.client.limits.QueryTimeout)
-	rows, err := q.client.Raw().QueryContext(ctx, polyQuery, args...)
-	cancel()
+	defer cancel()
+
+	rows, err := q.executeQuery(ctx, polyQuery, args)
 	if err != nil {
 		return fmt.Errorf("failed to load polymorphic relation %s: %w", relName, err)
 	}

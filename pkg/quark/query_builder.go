@@ -228,7 +228,10 @@ func (q *Query[T]) RightJoin(table, on string) *Query[T] {
 }
 
 // notifyObservers notifies all registered observers of a query event.
-func (q *Query[T]) notifyObservers(event QueryEvent) {
+func (q *BaseQuery) notifyObservers(event QueryEvent) {
+	if q.client == nil {
+		return
+	}
 	for _, obs := range q.client.observers {
 		obs.ObserveQuery(event)
 	}

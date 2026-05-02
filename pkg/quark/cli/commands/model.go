@@ -7,7 +7,6 @@ import (
 	"strings"
 
 	"github.com/fatih/color"
-	"github.com/jcsvwinston/GoFrame/pkg/quark/cli/internal/db"
 	internaldb "github.com/jcsvwinston/GoFrame/pkg/quark/internal/db"
 	"github.com/jcsvwinston/GoFrame/pkg/quark/cli/internal/gen"
 	"github.com/spf13/cobra"

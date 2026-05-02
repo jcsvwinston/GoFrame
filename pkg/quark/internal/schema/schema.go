@@ -181,6 +181,17 @@ func computeModelMeta(t reflect.Type) *ModelMeta {
 				IsSlice: isSlice,
 			}
 
+			// Infer JoinCol if missing for standard relations
+			if relMeta.JoinCol == "" {
+				if relMeta.Type == "belongs_to" {
+					// For belongs_to, the FK is in THIS model (pointing to related model)
+					relMeta.JoinCol = ToSnakeCase(refType.Name()) + "_id"
+				} else if relMeta.Type == "has_one" || relMeta.Type == "has_many" {
+					// For has_one/has_many, the FK is in the RELATED model (pointing to this model)
+					relMeta.JoinCol = ToSnakeCase(t.Name()) + "_id"
+				}
+			}
+
 			// Parse m2m (many-to-many) tag: m2m:"join_table" or m2m:"join_table:this_fk:ref_fk"
 			if m2mTag := field.Tag.Get("m2m"); m2mTag != "" {
 				parts := strings.Split(m2mTag, ":")

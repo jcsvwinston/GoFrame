@@ -5,7 +5,7 @@ import (
 	"os"
 
 	"github.com/fatih/color"
-	"github.com/jcsvwinston/GoFrame/pkg/quark/cli/internal/db"
+	cli_db "github.com/jcsvwinston/GoFrame/pkg/quark/cli/internal/db"
 	internaldb "github.com/jcsvwinston/GoFrame/pkg/quark/internal/db"
 	"github.com/olekukonko/tablewriter"
 	"github.com/spf13/cobra"
@@ -63,7 +63,7 @@ func runInspectSchema() {
 }
 
 func runInspectTable(name string) {
-	client, err := db.GetQuarkClient()
+	client, err := cli_db.GetQuarkClient()
 	if err != nil {
 		color.Red("Error: %v", err)
 		return

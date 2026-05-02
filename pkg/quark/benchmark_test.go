@@ -85,7 +85,10 @@ func TestBenchmarkEngines(t *testing.T) {
 			defer db.Close()
 
 			obs := &metricsObserver{}
-			client, _ := New(db, WithDialect(eng.dial), WithQueryObserver(obs))
+			client, err := New(db, WithDialect(eng.dial), WithQueryObserver(obs))
+			if err != nil {
+				t.Fatalf("failed to create client for %s: %v", eng.name, err)
+			}
 			ctx := context.Background()
 
 			client.Raw().Exec("DROP TABLE IF EXISTS bench_models")

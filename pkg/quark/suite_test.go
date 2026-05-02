@@ -66,6 +66,14 @@ func SharedSuite(t *testing.T, client *Client) {
 		testDatabasePerTenant(ctx, t, client)
 	})
 
+	t.Run("Sync", func(t *testing.T) {
+		testSync(ctx, t, client)
+	})
+
+	t.Run("RecursiveAssociations", func(t *testing.T) {
+		testRecursiveAssociations(ctx, t, client)
+	})
+
 	t.Run("Stress", func(t *testing.T) {
 		testStress(ctx, t, client)
 	})
@@ -527,5 +535,155 @@ func testDatabasePerTenant(ctx context.Context, t *testing.T, client *Client) {
 	activeAfter := router.ActiveTenants()
 	if len(activeAfter) != 2 {
 		t.Errorf("expected 2 active tenants after eviction, got %d", len(activeAfter))
+	}
+}
+
+type SyncUserV1 struct {
+	ID   int64  `db:"id" pk:"true"`
+	Name string `db:"name"`
+}
+
+func (SyncUserV1) TableName() string { return "sync_users" }
+
+type SyncUserV2 struct {
+	ID    int64  `db:"id" pk:"true"`
+	Name  string `db:"name"`
+	Email string `db:"email"`
+}
+
+func (SyncUserV2) TableName() string { return "sync_users" }
+
+type SyncUserV3 struct {
+	ID       int64  `db:"id" pk:"true"`
+	Name     string `db:"name"`
+	Contacts string `db:"contacts" quark:"rename:email"`
+}
+
+func (SyncUserV3) TableName() string { return "sync_users" }
+
+type SyncUserV4 struct {
+	ID   int64  `db:"id" pk:"true"`
+	Name string `db:"name"`
+}
+
+func (SyncUserV4) TableName() string { return "sync_users" }
+
+type RProfile struct {
+	ID       int64  `db:"id" pk:"true"`
+	Bio      string `db:"bio"`
+	AuthorID int64  `db:"author_id"`
+}
+
+func (RProfile) TableName() string { return "r_profiles" }
+
+type RPost struct {
+	ID       int64  `db:"id" pk:"true"`
+	Title    string `db:"title"`
+	AuthorID int64  `db:"author_id"`
+}
+
+func (RPost) TableName() string { return "r_posts" }
+
+type RAuthor struct {
+	ID      int64    `db:"id" pk:"true"`
+	Name    string   `db:"name"`
+	Profile RProfile `rel:"has_one" join:"author_id"`
+	Posts   []RPost  `rel:"has_many" join:"author_id"`
+}
+
+func (RAuthor) TableName() string { return "r_authors" }
+
+func testSync(ctx context.Context, t *testing.T, client *Client) {
+	dropTable(client, "sync_users")
+
+	// Initial migration
+	if err := client.Migrate(ctx, &SyncUserV1{}); err != nil {
+		t.Fatalf("initial migrate failed: %v", err)
+	}
+
+	// Evolution: Add column
+	if err := client.Sync(ctx, &SyncUserV2{}); err != nil {
+		t.Fatalf("sync v2 failed: %v", err)
+	}
+
+	// Verify addition
+	u2 := SyncUserV2{Name: "Sync", Email: "sync@test.com"}
+	if err := For[SyncUserV2](ctx, client).Create(&u2); err != nil {
+		t.Fatalf("create v2 failed: %v", err)
+	}
+
+	// Evolution: Rename column (email -> contacts)
+	if err := client.Sync(ctx, &SyncUserV3{}); err != nil {
+		t.Fatalf("sync v3 failed: %v", err)
+	}
+
+	// Verify rename
+	u3, err := For[SyncUserV3](ctx, client).Find(u2.ID)
+	if err != nil {
+		t.Fatalf("find v3 failed: %v", err)
+	}
+	if u3.Contacts != "sync@test.com" {
+		t.Errorf("expected contacts to have sync@test.com, got %s", u3.Contacts)
+	}
+
+	// Evolution: Destructive drop (contacts)
+	// Safe mode (default) - should NOT drop
+	if err := client.Sync(ctx, &SyncUserV4{}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Destructive mode
+	cDestructive, _ := New(client.Raw(), WithDialect(client.Dialect()), WithLimits(Limits{SafeMigrations: false}))
+	if err := cDestructive.Sync(ctx, &SyncUserV4{}); err != nil {
+		t.Fatalf("destructive sync failed: %v", err)
+	}
+}
+
+func testRecursiveAssociations(ctx context.Context, t *testing.T, client *Client) {
+	dropTable(client, "r_authors")
+	dropTable(client, "r_profiles")
+	dropTable(client, "r_posts")
+
+	client.Migrate(ctx, &RAuthor{}, &RProfile{}, &RPost{})
+
+	// Recursive Create
+	author := RAuthor{
+		Name: "Recursive Author",
+		Profile: RProfile{Bio: "Author Bio"},
+		Posts: []RPost{
+			{Title: "Post 1"},
+			{Title: "Post 2"},
+		},
+	}
+
+	if err := For[RAuthor](ctx, client).Create(&author); err != nil {
+		t.Fatalf("recursive create failed: %v", err)
+	}
+
+	if author.ID == 0 || author.Profile.ID == 0 || len(author.Posts) != 2 || author.Posts[0].ID == 0 {
+		t.Errorf("recursive IDs not set correctly: %+v", author)
+	}
+
+	// Verify persistence
+	found, err := For[RAuthor](ctx, client).Preload("Profile").Preload("Posts").Find(author.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if found.Profile.Bio != "Author Bio" || len(found.Posts) != 2 {
+		t.Errorf("recursive data not persisted: %+v", found)
+	}
+
+	// Recursive Update (Add a post)
+	found.Posts = append(found.Posts, RPost{Title: "Post 3"})
+	found.Profile.Bio = "Updated Bio"
+
+	if _, err := For[RAuthor](ctx, client).Update(&found); err != nil {
+		t.Fatalf("recursive update failed: %v", err)
+	}
+
+	// Verify Update
+	verify, _ := For[RAuthor](ctx, client).Preload("Profile").Preload("Posts").Find(author.ID)
+	if len(verify.Posts) != 3 || verify.Profile.Bio != "Updated Bio" {
+		t.Errorf("recursive update failed verification: %d posts, bio: %s", len(verify.Posts), verify.Profile.Bio)
 	}
 }

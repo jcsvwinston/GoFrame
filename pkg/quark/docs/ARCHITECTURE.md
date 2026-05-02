@@ -108,6 +108,22 @@ Quark v1.0 introduces the ability to save complex object graphs in a single oper
 
 This orchestration ensures data integrity and reduces boilerplate code for manual linkage.
 
+## Observability & Telemetry
+
+Quark v1.0 features a centralized observability pipeline built directly into the low-level execution path (`BaseQuery`).
+
+1. **Unified Event Streams**: Every database interaction (CRUD, Raw SQL, Migrations, Preloads) triggers a `QueryEvent` sent to registered `QueryObserver` instances.
+2. **Detailed Metrics**: Events include raw SQL, positional arguments, execution duration, rows affected, and errors.
+3. **Audit-Grade Logging**: Pre-built `SQLQueryLogger` provides structured logging (via `slog`) suitable for production audit trails.
+
+## Tenant Context Propagation
+
+A critical feature of Quark's multi-tenancy is the automatic propagation of tenant context through the entire operation lifecycle:
+
+- **Recursive Saving**: When saving a nested graph (e.g., Author with Profiles and Posts), the tenant identifier is inherited by all related models during the recursive persistence process.
+- **Preload Isolation**: Eager loading queries (`Preload`) automatically inject `WHERE tenant_id = ?` clauses for related models that support multi-tenancy, preventing data leakage.
+- **Centralized Enforcement**: Injection happens at the lowest possible layer before SQL construction, ensuring that even raw SQL executions through the ORM benefit from isolation checks.
+
 ## Evolutionary Migrations
 
 Quark's auto-migration system supports table evolution through ALTER TABLE operations:
