@@ -37,44 +37,61 @@ func main() {
 	}
 	defer db.Close()
 
-	// 2. Initialize Quark with Multi-Tenant RLS
-	client, err := quark.New(db, 
-		quark.WithDialect(quark.PostgreSQL()),
-		quark.WithTenantStrategy(quark.RowLevelSecurity, "tenant_id"),
-	)
+	// 2. Initialize Base Quark Client
+	baseClient, err := quark.New(db, quark.WithDialect(quark.PostgreSQL()))
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	// 3. Migrate
+	// 3. Initialize TenantRouter for RLS
+	router := quark.NewTenantRouter(
+		quark.TenantConfig{
+			Strategy:     quark.RowLevelSecurity,
+			BaseClient:   baseClient,
+			TenantColumn: "tenant_id",
+		},
+		func(ctx context.Context) string {
+			if val, ok := ctx.Value("tenant_id").(string); ok {
+				return val
+			}
+			return ""
+		},
+		nil, // No factory needed for RLS
+	)
+
+	// 4. Migrate (using base client)
 	fmt.Println("🚀 Migrating Postgres schema...")
-	if err := client.Migrate(ctx, &Product{}); err != nil {
+	if err := baseClient.Migrate(ctx, &Product{}); err != nil {
 		log.Fatal(err)
 	}
 
-	// 4. Create products for different tenants
+	// 5. Create products for different tenants
 	fmt.Println("📝 Creating multi-tenant products...")
 	
 	// Create for Tenant A
 	ctxA := context.WithValue(ctx, "tenant_id", "tenant-a")
 	prodA := &Product{Name: "Laptop", Price: 1200.0}
-	if err := quark.For[Product](ctxA, client).Create(prodA); err != nil {
+	if err := quark.For[Product](ctxA, router).Create(prodA); err != nil {
 		log.Fatal(err)
 	}
 
 	// Create for Tenant B
 	ctxB := context.WithValue(ctx, "tenant_id", "tenant-b")
 	prodB := &Product{Name: "Smartphone", Price: 800.0}
-	if err := quark.For[Product](ctxB, client).Create(prodB); err != nil {
+	if err := quark.For[Product](ctxB, router).Create(prodB); err != nil {
 		log.Fatal(err)
 	}
 
-	// 5. Verify Isolation
+	// 6. Verify Isolation
 	fmt.Println("🔍 Verifying Tenant Isolation...")
 	
-	itemsA, _ := quark.For[Product](ctxA, client).List()
-	fmt.Printf("Tenant A sees %d products: %v\n", len(itemsA), itemsA[0].Name)
+	itemsA, _ := quark.For[Product](ctxA, router).List()
+	if len(itemsA) > 0 {
+		fmt.Printf("Tenant A sees %d products: %v\n", len(itemsA), itemsA[0].Name)
+	}
 
-	itemsB, _ := quark.For[Product](ctxB, client).List()
-	fmt.Printf("Tenant B sees %d products: %v\n", len(itemsB), itemsB[0].Name)
+	itemsB, _ := quark.For[Product](ctxB, router).List()
+	if len(itemsB) > 0 {
+		fmt.Printf("Tenant B sees %d products: %v\n", len(itemsB), itemsB[0].Name)
+	}
 }

@@ -50,7 +50,7 @@ func main() {
 
 	// 4. Transaction Example
 	fmt.Println("💸 Executing transactional order...")
-	err = client.Transaction(ctx, func(tx *quark.Tx) error {
+	err = client.Tx(ctx, func(tx *quark.Tx) error {
 		order := &Order{
 			OrderNo:   "ORD-1001",
 			Amount:    250.75,
@@ -58,7 +58,7 @@ func main() {
 			CreatedAt: time.Now(),
 		}
 
-		if err := quark.For[Order](ctx, tx.Client()).Create(order); err != nil {
+		if err := quark.ForTx[Order](ctx, tx).Create(order); err != nil {
 			return err
 		}
 
@@ -72,14 +72,12 @@ func main() {
 
 	// 5. Streaming Results
 	fmt.Println("🌊 Streaming orders...")
-	it, err := quark.For[Order](ctx, client).Iter()
+	err = quark.For[Order](ctx, client).Iter(func(o Order) error {
+		fmt.Printf("- Order: %s, Status: %s\n", o.OrderNo, o.Status)
+		return nil
+	})
+
 	if err != nil {
 		log.Fatal(err)
-	}
-	defer it.Close()
-
-	for it.Next() {
-		o, _ := it.Value()
-		fmt.Printf("- Order: %s, Status: %s\n", o.OrderNo, o.Status)
 	}
 }
