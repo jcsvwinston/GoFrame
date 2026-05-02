@@ -11,11 +11,17 @@ import (
 
 // RelationMeta holds metadata about a model relation.
 type RelationMeta struct {
-	Type    string       // "has_one", "has_many", "belongs_to"
-	Field   string       // struct field name
-	JoinCol string       // foreign key column
-	RefType reflect.Type // type of the related model (the struct type)
-	IsSlice bool         // true for has_many
+	Type           string       // "has_one", "has_many", "belongs_to", "m2m", "polymorphic"
+	Field          string       // struct field name
+	JoinCol        string       // foreign key column (for belongs_to, has_one, has_many)
+	JoinTable      string       // join table name (for m2m)
+	JoinFK         string       // foreign key in join table pointing to this model (for m2m)
+	JoinRefFK      string       // foreign key in join table pointing to related model (for m2m)
+	PolyType       string       // polymorphic type identifier (for polymorphic)
+	PolyTypeColumn string       // column storing the polymorphic type (for polymorphic)
+	PolyIDColumn   string       // column storing the polymorphic foreign key (for polymorphic)
+	RefType        reflect.Type // type of the related model (the struct type)
+	IsSlice        bool         // true for has_many, m2m
 }
 
 // PKMeta holds primary key metadata.
@@ -58,7 +64,7 @@ type ModelMeta struct {
 	PK         PKMeta
 	HasPK      bool
 	Fields     []FieldMeta
-	FieldByCol map[string]*FieldMeta  // lookup by db column name
+	FieldByCol map[string]*FieldMeta    // lookup by db column name
 	Relations  map[string]*RelationMeta // lookup by field name
 }
 
@@ -68,7 +74,8 @@ type FieldMeta struct {
 	Column string // value of the db:"" tag
 	Kind   reflect.Kind
 	Type   reflect.Type
-	IsPK   bool
+	IsPK      bool
+	OldColumn string // for renames
 }
 
 // modelRegistry caches ModelMeta by reflect.Type.
@@ -109,10 +116,24 @@ func GetModelMetaByType(t reflect.Type) *ModelMeta {
 	return actual.(*ModelMeta)
 }
 
+// TableNamer interface for custom table names.
+type TableNamer interface {
+	TableName() string
+}
+
 // computeModelMeta builds ModelMeta from a reflect.Type.
 func computeModelMeta(t reflect.Type) *ModelMeta {
+	tableName := ToSnakeCase(Pluralize(t.Name()))
+	
+	// Check if type implements TableName() string
+	// We create a zero value of the type to check for methods
+	zero := reflect.New(t).Interface()
+	if tn, ok := zero.(TableNamer); ok {
+		tableName = tn.TableName()
+	}
+
 	meta := &ModelMeta{
-		Table:      ToSnakeCase(Pluralize(t.Name())),
+		Table:      tableName,
 		FieldByCol: make(map[string]*FieldMeta),
 		Relations:  make(map[string]*RelationMeta),
 	}
@@ -152,13 +173,45 @@ func computeModelMeta(t reflect.Type) *ModelMeta {
 				refType = refType.Elem()
 			}
 
-			meta.Relations[field.Name] = &RelationMeta{
+			relMeta := &RelationMeta{
 				Type:    relTag,
 				Field:   field.Name,
 				JoinCol: joinCol,
 				RefType: refType,
 				IsSlice: isSlice,
 			}
+
+			// Parse m2m (many-to-many) tag: m2m:"join_table" or m2m:"join_table:this_fk:ref_fk"
+			if m2mTag := field.Tag.Get("m2m"); m2mTag != "" {
+				parts := strings.Split(m2mTag, ":")
+				relMeta.JoinTable = parts[0]
+				if len(parts) >= 3 {
+					relMeta.JoinFK = parts[1]
+					relMeta.JoinRefFK = parts[2]
+				}
+				// Auto-generate fk names if not specified
+				if relMeta.JoinFK == "" {
+					relMeta.JoinFK = ToSnakeCase(t.Name()) + "_id"
+				}
+				if relMeta.JoinRefFK == "" {
+					relMeta.JoinRefFK = ToSnakeCase(refType.Name()) + "_id"
+				}
+			}
+
+			// Parse polymorphic tag: polymorphic:"type_col:poly_type" or polymorphic:"poly_type"
+			if polyTag := field.Tag.Get("polymorphic"); polyTag != "" {
+				parts := strings.Split(polyTag, ":")
+				if len(parts) == 2 {
+					relMeta.PolyTypeColumn = parts[0]
+					relMeta.PolyType = parts[1]
+				} else {
+					relMeta.PolyType = parts[0]
+					relMeta.PolyTypeColumn = "poly_type"
+				}
+				relMeta.PolyIDColumn = ToSnakeCase(field.Name) + "_id"
+			}
+
+			meta.Relations[field.Name] = relMeta
 			continue
 		}
 
@@ -168,12 +221,18 @@ func computeModelMeta(t reflect.Type) *ModelMeta {
 		}
 
 		isPK := i == pkIndex
+		oldCol := ""
+		if quarkTag := field.Tag.Get("quark"); strings.HasPrefix(quarkTag, "rename:") {
+			oldCol = strings.TrimPrefix(quarkTag, "rename:")
+		}
+
 		fm := FieldMeta{
-			Index:  i,
-			Column: dbTag,
-			Kind:   field.Type.Kind(),
-			Type:   field.Type,
-			IsPK:   isPK,
+			Index:     i,
+			Column:    dbTag,
+			Kind:      field.Type.Kind(),
+			Type:      field.Type,
+			IsPK:      isPK,
+			OldColumn: oldCol,
 		}
 		meta.Fields = append(meta.Fields, fm)
 		meta.FieldByCol[dbTag] = &meta.Fields[len(meta.Fields)-1]

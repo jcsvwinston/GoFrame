@@ -6,6 +6,7 @@ import (
 
 	"github.com/fatih/color"
 	"github.com/jcsvwinston/GoFrame/pkg/quark/cli/internal/db"
+	internaldb "github.com/jcsvwinston/GoFrame/pkg/quark/internal/db"
 	"github.com/olekukonko/tablewriter"
 	"github.com/spf13/cobra"
 )
@@ -68,7 +69,7 @@ func runInspectTable(name string) {
 		return
 	}
 
-	info, err := db.GetTableInfo(client.Raw(), client.Dialect().Name(), name)
+	info, err := internaldb.GetTableInfo(client.Raw(), client.Dialect().Name(), name)
 	if err != nil {
 		color.Red("Error introspecting table %s: %v", name, err)
 		return

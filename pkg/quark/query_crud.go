@@ -12,7 +12,7 @@ import (
 
 // executeExec runs an ExecContext through the middleware chain.
 // This is used for INSERT, UPDATE, DELETE operations.
-func (q *Query[T]) executeExec(ctx context.Context, sqlStr string, args []any) (sql.Result, error) {
+func (q *BaseQuery) executeExec(ctx context.Context, sqlStr string, args []any) (sql.Result, error) {
 	if q.err != nil {
 		return nil, q.err
 	}
@@ -61,12 +61,11 @@ func setPKValue(v reflect.Value, pk pkMeta, id int64) {
 }
 
 // ensureTenantID populates the tenant field if RLS is active and the field is zero.
-func (q *Query[T]) ensureTenantID(entity *T) {
+func (q *BaseQuery) ensureTenantID(v reflect.Value) {
 	if q.tenantID == "" || q.tenantCol == "" {
 		return
 	}
 
-	v := reflect.ValueOf(entity).Elem()
 	if q.meta != nil {
 		if fm, ok := q.meta.FieldByCol[q.tenantCol]; ok {
 			field := v.Field(fm.Index)
@@ -80,6 +79,7 @@ func (q *Query[T]) ensureTenantID(entity *T) {
 // Create inserts a new record.
 // The entity must have a db tag on fields to be persisted.
 // Returns with the ID set from the database.
+// Create inserts a new record and recursively saves associations.
 func (q *Query[T]) Create(entity *T) error {
 	if q.client == nil {
 		return fmt.Errorf("%w: client not initialized", ErrInvalidQuery)
@@ -89,108 +89,14 @@ func (q *Query[T]) Create(entity *T) error {
 		return fmt.Errorf("validation failed: %w", err)
 	}
 
-	q.ensureTenantID(entity)
-
 	if hook, ok := any(entity).(BeforeCreateHook); ok {
 		if err := hook.BeforeCreate(q.ctx); err != nil {
 			return err
 		}
 	}
 
-	// Build INSERT
-	sqlStr, args, err := q.buildInsert(entity)
-	if err != nil {
+	if _, err := q.client.saveAny(q.ctx, q.exec, entity, false); err != nil {
 		return err
-	}
-
-	// Execute with timeout
-	ctx, cancel := context.WithTimeout(q.ctx, q.client.limits.QueryTimeout)
-	defer cancel()
-
-	start := time.Now()
-
-	var lastID int64
-	var duration time.Duration
-
-	if q.dialect.SupportsReturning() {
-		if q.dialect.Name() == "oracle" {
-			// Oracle go-ora driver requires PL/SQL block for RETURNING ... INTO with Exec
-			var id int64
-			sqlWithOut := "BEGIN " + sqlStr + " INTO :ret_id; END;"
-			_, err = q.executeExec(ctx, sqlWithOut, append(args, sql.Named("ret_id", sql.Out{Dest: &id})))
-			duration = time.Since(start)
-			if err != nil {
-				return fmt.Errorf("oracle insert failed: %w", err)
-			}
-			v := reflect.ValueOf(entity).Elem()
-			setPKValue(v, q.pk, id)
-		} else {
-			// Use RETURNING clause (PostgreSQL/SQLite)
-			row := q.executeQueryRow(ctx, sqlStr, args)
-			duration = time.Since(start)
-
-			// Scan returned values (id, timestamps, etc.)
-			if err = q.scanReturning(row, entity); err != nil {
-				return err
-			}
-		}
-
-		q.notifyObservers(QueryEvent{
-			SQL:       sqlStr,
-			Args:      args,
-			Duration:  duration,
-			Table:     q.table,
-			Operation: "INSERT",
-		})
-	} else {
-		if q.dialect.Name() == "mssql" {
-			// MSSQL requires the identity query to be in the same batch as the INSERT
-			sqlBatch := sqlStr + "; " + q.dialect.LastInsertIDQuery(q.table, q.pk.Column)
-			err = q.executeQueryRow(ctx, sqlBatch, args).Scan(&lastID)
-			duration = time.Since(start)
-
-			q.notifyObservers(QueryEvent{
-				SQL:       sqlBatch,
-				Args:      args,
-				Duration:  duration,
-				Error:     err,
-				Table:     q.table,
-				Operation: "INSERT",
-			})
-
-			if err != nil {
-				return fmt.Errorf("insert failed: %w", err)
-			}
-		} else {
-			var result sql.Result
-			result, err = q.executeExec(ctx, sqlStr, args)
-			duration = time.Since(start)
-
-			q.notifyObservers(QueryEvent{
-				SQL:       sqlStr,
-				Args:      args,
-				Duration:  duration,
-				Error:     err,
-				Table:     q.table,
-				Operation: "INSERT",
-			})
-
-			if err != nil {
-				return fmt.Errorf("insert failed: %w", err)
-			}
-
-			if q.dialect.SupportsLastInsertID() && q.dialect.LastInsertIDQuery("", "") != "" {
-				err = q.executeQueryRow(ctx, q.dialect.LastInsertIDQuery(q.table, q.pk.Column), nil).Scan(&lastID)
-				if err != nil {
-					return fmt.Errorf("failed to get last insert ID: %w", err)
-				}
-			} else {
-				lastID, _ = result.LastInsertId()
-			}
-		}
-
-		v := reflect.ValueOf(entity).Elem()
-		setPKValue(v, q.pk, lastID)
 	}
 
 	if hook, ok := any(entity).(AfterCreateHook); ok {
@@ -203,8 +109,7 @@ func (q *Query[T]) Create(entity *T) error {
 }
 
 // buildInsert constructs the INSERT SQL.
-func (q *Query[T]) buildInsert(entity *T) (string, []any, error) {
-	v := reflect.ValueOf(entity).Elem()
+func (q *BaseQuery) buildInsert(v reflect.Value) (string, []any, error) {
 	t := v.Type()
 
 	var columns []string
@@ -253,8 +158,7 @@ func (q *Query[T]) buildInsert(entity *T) (string, []any, error) {
 }
 
 // scanReturning scans RETURNING clause results into the entity's PK field.
-func (q *Query[T]) scanReturning(row *sql.Row, entity *T) error {
-	v := reflect.ValueOf(entity).Elem()
+func (q *BaseQuery) scanReturning(row *sql.Row, v reflect.Value) error {
 	pkField := v.Field(q.pk.Index)
 
 	if pkField.CanAddr() {
@@ -274,16 +178,11 @@ func (q *Query[T]) scanReturning(row *sql.Row, entity *T) error {
 // Non-zero fields are updated (partial update).
 // Any Where() conditions are merged into the WHERE clause alongside the PK.
 // Returns the number of rows affected.
+// Update performs a partial update of non-zero fields and recursively saves associations.
 func (q *Query[T]) Update(entity *T) (int64, error) {
 	if q.client == nil {
 		return 0, fmt.Errorf("%w: client not initialized", ErrInvalidQuery)
 	}
-
-	if err := q.client.Validate(q.ctx, entity); err != nil {
-		return 0, fmt.Errorf("validation failed: %w", err)
-	}
-
-	q.ensureTenantID(entity)
 
 	if hook, ok := any(entity).(BeforeUpdateHook); ok {
 		if err := hook.BeforeUpdate(q.ctx); err != nil {
@@ -291,42 +190,14 @@ func (q *Query[T]) Update(entity *T) (int64, error) {
 		}
 	}
 
-	// Build UPDATE
-	sql, args, err := q.buildUpdate(entity)
+	rowsAffected, err := q.client.saveAny(q.ctx, q.exec, entity, true)
 	if err != nil {
-		return 0, err
-	}
-
-	// Execute with timeout
-	ctx, cancel := context.WithTimeout(q.ctx, q.client.limits.QueryTimeout)
-	defer cancel()
-
-	start := time.Now()
-	result, err := q.executeExec(ctx, sql, args)
-	duration := time.Since(start)
-
-	// Notify observers
-	rowsAffected := int64(0)
-	if err == nil {
-		rowsAffected, _ = result.RowsAffected()
-	}
-	q.notifyObservers(QueryEvent{
-		SQL:       sql,
-		Args:      args,
-		Duration:  duration,
-		Error:     err,
-		Table:     q.table,
-		Operation: "UPDATE",
-		Rows:      rowsAffected,
-	})
-
-	if err != nil {
-		return 0, fmt.Errorf("update failed: %w", err)
+		return rowsAffected, err
 	}
 
 	if hook, ok := any(entity).(AfterUpdateHook); ok {
 		if err := hook.AfterUpdate(q.ctx); err != nil {
-			return 0, err
+			return rowsAffected, err
 		}
 	}
 
@@ -388,8 +259,7 @@ func (q *Query[T]) UpdateMap(data map[string]any) (int64, error) {
 
 // buildUpdate constructs UPDATE SQL from entity (partial update of non-zero fields).
 // Merges PK-based WHERE with any additional Where() conditions from the builder.
-func (q *Query[T]) buildUpdate(entity *T) (string, []any, error) {
-	v := reflect.ValueOf(entity).Elem()
+func (q *BaseQuery) buildUpdate(v reflect.Value) (string, []any, error) {
 	t := v.Type()
 
 	var setClauses []string
@@ -468,7 +338,7 @@ func (q *Query[T]) buildUpdate(entity *T) (string, []any, error) {
 
 // buildUpdateMap constructs UPDATE SQL from map.
 // Keys are sorted for deterministic query generation.
-func (q *Query[T]) buildUpdateMap(data map[string]any) (string, []any, error) {
+func (q *BaseQuery) buildUpdateMap(data map[string]any) (string, []any, error) {
 	// Sort keys for deterministic SQL output
 	keys := make([]string, 0, len(data))
 	for col := range data {
@@ -795,3 +665,90 @@ func (q *Query[T]) hardDeleteWhere() (int64, error) {
 
 	return rowsAffected, nil
 }
+
+// saveAssociations recursively saves related models.
+func (q *BaseQuery) saveAssociations(v reflect.Value, isUpdate bool) error {
+	for _, rel := range q.meta.Relations {
+		field := v.FieldByName(rel.Field)
+		if !field.IsValid() || field.IsZero() {
+			continue
+		}
+
+		switch rel.Type {
+		case "has_one":
+			pkVal := getPKValue(v, q.pk)
+			relatedVal := field
+			if relatedVal.Kind() != reflect.Ptr {
+				relatedVal = field.Addr()
+			}
+			
+			// Set foreign key on related
+			relMeta := GetModelMetaByType(rel.RefType)
+			if fm, ok := relMeta.FieldByCol[rel.JoinCol]; ok {
+				reflect.Indirect(relatedVal).Field(fm.Index).Set(reflect.ValueOf(pkVal))
+			}
+
+			if _, err := q.client.saveAny(q.ctx, q.exec, relatedVal.Interface(), isUpdate); err != nil {
+				return err
+			}
+
+		case "has_many":
+			pkVal := getPKValue(v, q.pk)
+			relMeta := GetModelMetaByType(rel.RefType)
+
+			for i := 0; i < field.Len(); i++ {
+				item := field.Index(i)
+				itemPtr := item.Addr()
+
+				// Set foreign key
+				if fm, ok := relMeta.FieldByCol[rel.JoinCol]; ok {
+					item.Field(fm.Index).Set(reflect.ValueOf(pkVal))
+				}
+
+				if _, err := q.client.saveAny(q.ctx, q.exec, itemPtr.Interface(), isUpdate); err != nil {
+					return err
+				}
+			}
+
+		case "many_to_many":
+			pkVal := getPKValue(v, q.pk)
+			relMeta := GetModelMetaByType(rel.RefType)
+
+			for i := 0; i < field.Len(); i++ {
+				item := field.Index(i)
+				itemPtr := item.Addr()
+
+				// Save related item first
+				if _, err := q.client.saveAny(q.ctx, q.exec, itemPtr.Interface(), isUpdate); err != nil {
+					return err
+				}
+
+				// Link in join table
+				itemPK := getPKValue(item, relMeta.PK)
+				if err := q.linkM2M(*rel, pkVal, itemPK); err != nil {
+					return err
+				}
+			}
+		}
+	}
+	return nil
+}
+
+// linkM2M creates a record in the join table if it doesn't exist.
+func (q *BaseQuery) linkM2M(rel RelationMeta, parentPK, childPK any) error {
+	sqlStr := fmt.Sprintf("INSERT INTO %s (%s, %s) VALUES (%s, %s)",
+		q.dialect.Quote(rel.JoinTable),
+		q.dialect.Quote(rel.JoinFK),
+		q.dialect.Quote(rel.JoinRefFK),
+		q.dialect.Placeholder(1),
+		q.dialect.Placeholder(2),
+	)
+
+	_, err := q.executeExec(q.ctx, sqlStr, []any{parentPK, childPK})
+	if err != nil {
+		// Ignore duplicate key errors - already linked
+		return nil 
+	}
+	return nil
+}
+

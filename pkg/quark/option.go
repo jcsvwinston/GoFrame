@@ -50,6 +50,7 @@ type Limits struct {
 	MaxWhereConditions int
 	QueryTimeout       time.Duration
 	AllowRawQueries    bool
+	SafeMigrations     bool
 }
 
 // DefaultLimits returns sensible default limits.
@@ -60,7 +61,8 @@ func DefaultLimits() Limits {
 		MaxJoins:           5,
 		MaxWhereConditions: 20,
 		QueryTimeout:       30 * time.Second,
-		AllowRawQueries:    false,           // Must explicitly enable
+		AllowRawQueries:    false, // Must explicitly enable
+		SafeMigrations:     true,  // Prevent accidental data loss
 	}
 }
 

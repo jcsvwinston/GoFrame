@@ -70,8 +70,10 @@ func (r *Routine[T]) List() ([]T, error) {
 	// Reusing the mapping logic from Query
 	// Since we don't have a Query instance, we create a dummy one just for scanRow
 	dummyQuery := &Query[T]{
-		dialect: client.dialect,
-		guard:   client.guard,
+		BaseQuery: BaseQuery{
+			dialect: client.dialect,
+			guard:   client.guard,
+		},
 	}
 	if isStruct {
 		dummyQuery.meta = GetModelMeta[T]()

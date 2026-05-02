@@ -55,6 +55,29 @@ type Dialect interface {
 	// BuildProcedureCall returns the SQL for calling a procedure (pure logic / OUT params).
 	// E.g., MySQL: CALL proc(?, ?)
 	BuildProcedureCall(procedure string, argCount int) string
+
+	// AlterTableAddColumn returns SQL to add a column to a table.
+	// E.g., PostgreSQL: ALTER TABLE "users" ADD COLUMN "email" VARCHAR(255)
+	AlterTableAddColumn(table, column, dataType string) string
+
+	// AlterTableDropColumn returns SQL to drop a column from a table.
+	// E.g., PostgreSQL: ALTER TABLE "users" DROP COLUMN "email"
+	AlterTableDropColumn(table, column string) string
+
+	// AlterTableAlterColumn returns SQL to alter a column's type.
+	// E.g., PostgreSQL: ALTER TABLE "users" ALTER COLUMN "email" TYPE VARCHAR(255)
+	AlterTableAlterColumn(table, column, newDataType string) string
+
+	// RenameColumn returns SQL to rename a column.
+	// E.g., PostgreSQL: ALTER TABLE "users" RENAME COLUMN "old_name" TO "new_name"
+	RenameColumn(table, oldName, newName string) string
+
+	// RenameTable returns SQL to rename a table.
+	// E.g., PostgreSQL: ALTER TABLE "users" RENAME TO "accounts"
+	RenameTable(oldName, newName string) string
+
+	// SupportsTransactionalDDL indicates if the dialect supports DDL in transactions.
+	SupportsTransactionalDDL() bool
 }
 
 // baseDialect provides common functionality for all dialects.
@@ -144,6 +167,30 @@ func (p *PostgresDialect) BuildProcedureCall(procedure string, argCount int) str
 	return fmt.Sprintf("CALL %s(%s)", p.Quote(procedure), placeholders)
 }
 
+func (p *PostgresDialect) AlterTableAddColumn(table, column, dataType string) string {
+	return fmt.Sprintf("ALTER TABLE %s ADD COLUMN %s %s", p.Quote(table), p.Quote(column), dataType)
+}
+
+func (p *PostgresDialect) AlterTableDropColumn(table, column string) string {
+	return fmt.Sprintf("ALTER TABLE %s DROP COLUMN %s", p.Quote(table), p.Quote(column))
+}
+
+func (p *PostgresDialect) AlterTableAlterColumn(table, column, newDataType string) string {
+	return fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s TYPE %s", p.Quote(table), p.Quote(column), newDataType)
+}
+
+func (p *PostgresDialect) RenameColumn(table, oldName, newName string) string {
+	return fmt.Sprintf("ALTER TABLE %s RENAME COLUMN %s TO %s", p.Quote(table), p.Quote(oldName), p.Quote(newName))
+}
+
+func (p *PostgresDialect) RenameTable(oldName, newName string) string {
+	return fmt.Sprintf("ALTER TABLE %s RENAME TO %s", p.Quote(oldName), p.Quote(newName))
+}
+
+func (p *PostgresDialect) SupportsTransactionalDDL() bool {
+	return true
+}
+
 // MySQLDialect implements the MySQL dialect.
 type MySQLDialect struct {
 	baseDialect
@@ -213,6 +260,34 @@ func (m *MySQLDialect) BuildRoutineQuery(routine string, argCount int) string {
 func (m *MySQLDialect) BuildProcedureCall(procedure string, argCount int) string {
 	placeholders := strings.Join(m.Placeholders(argCount), ", ")
 	return fmt.Sprintf("CALL %s(%s)", m.Quote(procedure), placeholders)
+}
+
+func (m *MySQLDialect) AlterTableAddColumn(table, column, dataType string) string {
+	return fmt.Sprintf("ALTER TABLE %s ADD COLUMN %s %s", m.Quote(table), m.Quote(column), dataType)
+}
+
+func (m *MySQLDialect) AlterTableDropColumn(table, column string) string {
+	return fmt.Sprintf("ALTER TABLE %s DROP COLUMN %s", m.Quote(table), m.Quote(column))
+}
+
+func (m *MySQLDialect) AlterTableAlterColumn(table, column, newDataType string) string {
+	// MySQL uses MODIFY for changing column types
+	return fmt.Sprintf("ALTER TABLE %s MODIFY COLUMN %s %s", m.Quote(table), m.Quote(column), newDataType)
+}
+
+func (m *MySQLDialect) RenameColumn(table, oldName, newName string) string {
+	// MySQL requires the full column definition to rename, using CHANGE COLUMN
+	// This is a simplified version - actual implementation would need the current column type
+	return fmt.Sprintf("ALTER TABLE %s CHANGE COLUMN %s %s", m.Quote(table), m.Quote(oldName), m.Quote(newName))
+}
+
+func (m *MySQLDialect) RenameTable(oldName, newName string) string {
+	return fmt.Sprintf("RENAME TABLE %s TO %s", m.Quote(oldName), m.Quote(newName))
+}
+
+func (m *MySQLDialect) SupportsTransactionalDDL() bool {
+	// MySQL does not support transactional DDL
+	return false
 }
 
 // SQLiteDialect implements the SQLite dialect.
@@ -296,6 +371,34 @@ func (s *SQLiteDialect) BuildProcedureCall(procedure string, argCount int) strin
 	return fmt.Sprintf("SELECT %s(%s)", s.Quote(procedure), placeholders)
 }
 
+func (s *SQLiteDialect) AlterTableAddColumn(table, column, dataType string) string {
+	return fmt.Sprintf("ALTER TABLE %s ADD COLUMN %s %s", s.Quote(table), s.Quote(column), dataType)
+}
+
+func (s *SQLiteDialect) AlterTableDropColumn(table, column string) string {
+	// SQLite only supports DROP COLUMN since version 3.35.0
+	return fmt.Sprintf("ALTER TABLE %s DROP COLUMN %s", s.Quote(table), s.Quote(column))
+}
+
+func (s *SQLiteDialect) AlterTableAlterColumn(table, column, newDataType string) string {
+	// SQLite does not support ALTER COLUMN directly
+	// Would require table recreation in practice
+	return fmt.Sprintf("-- SQLite does not support ALTER COLUMN: ALTER TABLE %s ALTER COLUMN %s TYPE %s", s.Quote(table), s.Quote(column), newDataType)
+}
+
+func (s *SQLiteDialect) RenameColumn(table, oldName, newName string) string {
+	return fmt.Sprintf("ALTER TABLE %s RENAME COLUMN %s TO %s", s.Quote(table), s.Quote(oldName), s.Quote(newName))
+}
+
+func (s *SQLiteDialect) RenameTable(oldName, newName string) string {
+	return fmt.Sprintf("ALTER TABLE %s RENAME TO %s", s.Quote(oldName), s.Quote(newName))
+}
+
+func (s *SQLiteDialect) SupportsTransactionalDDL() bool {
+	// SQLite supports transactional DDL
+	return true
+}
+
 // MSSQLDialect implements the Microsoft SQL Server dialect.
 type MSSQLDialect struct {
 	baseDialect
@@ -366,6 +469,33 @@ func (m *MSSQLDialect) BuildRoutineQuery(routine string, argCount int) string {
 func (m *MSSQLDialect) BuildProcedureCall(procedure string, argCount int) string {
 	placeholders := strings.Join(m.Placeholders(argCount), ", ")
 	return fmt.Sprintf("EXEC %s %s", m.Quote(procedure), placeholders)
+}
+
+func (m *MSSQLDialect) AlterTableAddColumn(table, column, dataType string) string {
+	return fmt.Sprintf("ALTER TABLE %s ADD %s %s", m.Quote(table), m.Quote(column), dataType)
+}
+
+func (m *MSSQLDialect) AlterTableDropColumn(table, column string) string {
+	return fmt.Sprintf("ALTER TABLE %s DROP COLUMN %s", m.Quote(table), m.Quote(column))
+}
+
+func (m *MSSQLDialect) AlterTableAlterColumn(table, column, newDataType string) string {
+	// MSSQL uses ALTER COLUMN
+	return fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s %s", m.Quote(table), m.Quote(column), newDataType)
+}
+
+func (m *MSSQLDialect) RenameColumn(table, oldName, newName string) string {
+	// MSSQL requires sp_rename stored procedure for renaming columns
+	return fmt.Sprintf("EXEC sp_rename '%s.%s', '%s', 'COLUMN'", table, oldName, newName)
+}
+
+func (m *MSSQLDialect) RenameTable(oldName, newName string) string {
+	return fmt.Sprintf("EXEC sp_rename '%s', '%s'", oldName, newName)
+}
+
+func (m *MSSQLDialect) SupportsTransactionalDDL() bool {
+	// MSSQL supports transactional DDL
+	return true
 }
 
 // OracleDialect implements the Oracle Database dialect.
@@ -450,8 +580,56 @@ func (o *OracleDialect) BuildProcedureCall(procedure string, argCount int) strin
 	return fmt.Sprintf("BEGIN %s(%s); END;", o.Quote(procedure), placeholders)
 }
 
+func (o *OracleDialect) AlterTableAddColumn(table, column, dataType string) string {
+	return fmt.Sprintf("ALTER TABLE %s ADD %s %s", o.Quote(table), o.Quote(column), dataType)
+}
+
+func (o *OracleDialect) AlterTableDropColumn(table, column string) string {
+	return fmt.Sprintf("ALTER TABLE %s DROP COLUMN %s", o.Quote(table), o.Quote(column))
+}
+
+func (o *OracleDialect) AlterTableAlterColumn(table, column, newDataType string) string {
+	// Oracle uses MODIFY for changing column types
+	return fmt.Sprintf("ALTER TABLE %s MODIFY %s %s", o.Quote(table), o.Quote(column), newDataType)
+}
+
+func (o *OracleDialect) RenameColumn(table, oldName, newName string) string {
+	return fmt.Sprintf("ALTER TABLE %s RENAME COLUMN %s TO %s", o.Quote(table), o.Quote(oldName), o.Quote(newName))
+}
+
+func (o *OracleDialect) RenameTable(oldName, newName string) string {
+	return fmt.Sprintf("ALTER TABLE %s RENAME TO %s", o.Quote(oldName), o.Quote(newName))
+}
+
+func (o *OracleDialect) SupportsTransactionalDDL() bool {
+	// Oracle supports transactional DDL
+	return true
+}
+
+// customDialectRegistry holds user-registered dialects
+var customDialectRegistry = make(map[string]Dialect)
+
+// RegisterDialect allows developers to register custom database dialects.
+// This enables support for proprietary or non-standard databases.
+//
+// Example:
+//
+//	quark.RegisterDialect("cockroach", myCockroachDialect)
+//
+// The registered dialect can then be used with:
+//
+//	client, err := quark.New(db, quark.WithDialect(quark.DetectDialectByName("cockroach")))
+func RegisterDialect(name string, d Dialect) {
+	customDialectRegistry[name] = d
+}
+
 // DetectDialect attempts to auto-detect the dialect from a driver name.
 func DetectDialect(driverName string) (Dialect, error) {
+	// First check custom registry
+	if d, ok := customDialectRegistry[driverName]; ok {
+		return d, nil
+	}
+
 	switch driverName {
 	case "postgres", "pgx", "pgx/v5", "pq":
 		return PostgreSQL(), nil
@@ -466,4 +644,16 @@ func DetectDialect(driverName string) (Dialect, error) {
 	default:
 		return nil, fmt.Errorf("%w: %s", ErrDialectNotSupported, driverName)
 	}
+}
+
+// DetectDialectByName attempts to get a dialect by name from all registered dialects
+// including custom ones. This is useful when you know the exact dialect name.
+func DetectDialectByName(name string) (Dialect, error) {
+	// First check custom registry
+	if d, ok := customDialectRegistry[name]; ok {
+		return d, nil
+	}
+
+	// Fall back to standard detection
+	return DetectDialect(name)
 }

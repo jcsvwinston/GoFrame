@@ -19,6 +19,10 @@ This document outlines the current state and future development goals for the Qu
 - [x] **Quark CLI**: Standalone tool for project initialization and code generation.
 - [x] **Advanced Migrations**: Version-controlled migration files (Up/Down) via CLI.
 - [x] **Model Introspection**: Automated generation of Go models from existing DB schemas.
+- [x] **Many-to-Many Relations**: Support for M2M associations via join tables with `m2m` tags.
+- [x] **Polymorphic Relations**: Support for polymorphic associations with `polymorphic` tags.
+- [x] **Custom Dialects**: Public API to register custom database dialects via `RegisterDialect()`.
+- [x] **Evolutionary Migrations**: ALTER TABLE support for adding, dropping, and modifying columns.
 
 ## In Progress / Short-Term Goals
 

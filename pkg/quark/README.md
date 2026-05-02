@@ -8,11 +8,12 @@ Quark es un ORM (Object-Relational Mapping) moderno, ligero y fuertemente tipado
 *   **Seguridad por Diseño (SQLGuard)**: Verificación estricta de nombres de columnas, operadores y palabras clave en tiempo real para evitar SQL Injection.
 *   **Caché de Reflexión**: Metadatos analizados una sola vez por modelo (al inicio) para un mapeo `O(1)` ultrarrápido y consultas sin latencia de _reflection_.
 *   **Builder Inmutable**: Construye consultas dinámicas concurrentemente de forma segura; los métodos no mutan la instancia original sino que clonan el estado.
-*   **Soporte Multidialecto**: Soporte automático para PostgreSQL, MySQL/MariaDB y SQLite.
+*   **Soporte Multidialecto**: Soporte nativo y optimizado para **PostgreSQL, MySQL/MariaDB, SQLite, MSSQL y Oracle**.
 *   **Transacciones Robustas**: API dual (Callbacks automáticos y manuales con soporte nativo de `Savepoints`).
-*   **Auto-Migraciones**: Creación y validación de tablas basada puramente en struct tags (`client.Migrate()`).
+*   **Auto-Migraciones Evolutivas (`Sync`)**: Sincronización inteligente de esquemas (`client.Sync()`) con soporte para adición de columnas, renombrado dinámico (`quark:"rename:old_name"`) y borrado destructivo controlado.
 *   **Validación Integrada**: Soporte nativo para `validator/v10` y validación programática (interfaz `Validatable`) interceptando llamadas CRUD.
-*   **Eager Loading**: Carga eficiente de relaciones (HasMany, BelongsTo) con `Preload()` evitando el problema N+1.
+*   **Persistencia de Asociaciones Recursiva**: Guarda grafos de objetos profundos (HasMany, BelongsTo, ManyToMany) en una sola operación de `Create` o `Update`.
+*   **Eager Loading**: Carga eficiente de relaciones con `Preload()` evitando el problema N+1.
 *   **Multi-Tenant**: `TenantRouter` nativo con soporte para aislamiento por Base de Datos, Esquemas, y Seguridad a Nivel de Fila (RLS).
 *   **Ejecución Interceptable**: Arquitectura de `Middleware` nativa, `Hooks` de ciclo de vida (`BeforeCreate`, `AfterUpdate`) para interceptores robustos.
 *   **Ejecución Nativa**: Soporte robusto y unificado para Funciones, Procedimientos Almacenados (con parámetros `OUT`) y Eventos (PubSub).

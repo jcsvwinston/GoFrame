@@ -145,13 +145,15 @@ func ForTx[T any](ctx context.Context, tx *Tx) *Query[T] {
 	meta := GetModelMeta[T]()
 
 	return &Query[T]{
-		ctx:     ctx,
-		client:  tx.client,
-		dialect: tx.client.dialect,
-		guard:   tx.client.guard,
-		table:   meta.Table,
-		pk:      meta.PK,
-		exec:    tx.tx,
-		meta:    meta,
+		BaseQuery: BaseQuery{
+			ctx:     ctx,
+			client:  tx.client,
+			dialect: tx.client.dialect,
+			guard:   tx.client.guard,
+			table:   meta.Table,
+			pk:      meta.PK,
+			exec:    tx.tx,
+			meta:    meta,
+		},
 	}
 }

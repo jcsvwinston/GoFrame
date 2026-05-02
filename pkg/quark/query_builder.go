@@ -25,10 +25,8 @@ type join struct {
 	args     []any
 }
 
-// Query represents a type-safe database query builder for model T.
-// All builder methods return a new Query (immutable/clone pattern) for thread-safety.
-// Execution methods are in query_exec.go and query_crud.go
-type Query[T any] struct {
+// BaseQuery holds the non-generic state of a database query.
+type BaseQuery struct {
 	client  *Client
 	ctx     context.Context
 	table   string
@@ -47,15 +45,22 @@ type Query[T any] struct {
 	preloads   []string
 	limit      int
 	offset     int
-	hasLimit   bool // tracks if Limit() was explicitly called
-	unscoped bool // if true, includes soft-deleted records
-	tenantID string // for RowLevelSecurity isolation
-	tenantCol string // column name for tenant isolation
-	err      error // stores initialization error from ClientProvider
+	hasLimit   bool   // tracks if Limit() was explicitly called
+	unscoped   bool   // if true, includes soft-deleted records
+	tenantID   string // for RowLevelSecurity isolation
+	tenantCol  string // column name for tenant isolation
+	err        error  // stores initialization error from ClientProvider
+}
+
+// Query represents a type-safe database query builder for model T.
+// All builder methods return a new Query (immutable/clone pattern) for thread-safety.
+// Execution methods are in query_exec.go and query_crud.go
+type Query[T any] struct {
+	BaseQuery
 }
 
 // fullTableName returns the table name optionally prefixed by a schema.
-func (q *Query[T]) fullTableName() string {
+func (q *BaseQuery) fullTableName() string {
 	if q.schema != "" {
 		return q.dialect.Quote(q.schema) + "." + q.dialect.Quote(q.table)
 	}
@@ -149,14 +154,16 @@ func (q *Query[T]) WhereBetween(column string, start, end any) *Query[T] {
 func (q *Query[T]) Or(fn func(*Query[T]) *Query[T]) *Query[T] {
 	// Create a blank query to collect conditions from the callback
 	blank := &Query[T]{
-		client:  q.client,
-		ctx:     q.ctx,
-		table:   q.table,
-		dialect: q.dialect,
-		guard:   q.guard,
-		pk:      q.pk,
-		exec:    q.exec,
-		meta:    q.meta,
+		BaseQuery: BaseQuery{
+			client:  q.client,
+			ctx:     q.ctx,
+			table:   q.table,
+			dialect: q.dialect,
+			guard:   q.guard,
+			pk:      q.pk,
+			exec:    q.exec,
+			meta:    q.meta,
+		},
 	}
 	result := fn(blank)
 

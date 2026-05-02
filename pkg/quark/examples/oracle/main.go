@@ -1,15 +1,14 @@
 package main
 
 import (
-	"context"
-	"database/sql"
 	"fmt"
-	"log"
 	"os"
 	"time"
 
-	"github.com/jcsvwinston/GoFrame/pkg/quark"
-	// _ "github.com/godror/godror" // godror requires CGO
+	// "context"
+	// "database/sql"
+	// "log"
+	// "github.com/jcsvwinston/GoFrame/pkg/quark"
 )
 
 // Department represents a department model
@@ -21,8 +20,6 @@ type Department struct {
 }
 
 func main() {
-	ctx := context.Background()
-
 	// 1. Initialize Oracle connection
 	dsn := os.Getenv("QUARK_EXAMPLE_ORACLE_DSN")
 	if dsn == "" {

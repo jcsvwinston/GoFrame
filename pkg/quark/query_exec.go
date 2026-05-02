@@ -11,7 +11,7 @@ import (
 
 // executeQuery runs a QueryContext through the middleware chain.
 // This is used for SELECT operations returning multiple rows.
-func (q *Query[T]) executeQuery(ctx context.Context, sqlStr string, args []any) (*sql.Rows, error) {
+func (q *BaseQuery) executeQuery(ctx context.Context, sqlStr string, args []any) (*sql.Rows, error) {
 	if q.err != nil {
 		return nil, q.err
 	}
@@ -30,7 +30,7 @@ func (q *Query[T]) executeQuery(ctx context.Context, sqlStr string, args []any) 
 
 // executeQueryRow runs a QueryRowContext through the middleware chain.
 // This is used for SELECT operations returning a single row (like Count).
-func (q *Query[T]) executeQueryRow(ctx context.Context, sqlStr string, args []any) *sql.Row {
+func (q *BaseQuery) executeQueryRow(ctx context.Context, sqlStr string, args []any) *sql.Row {
 	// Note: We cannot return an error here directly since sql.Row doesn't expose error until Scan.
 	// But executing a bad query will cause an error on Scan anyway.
 	if q.err != nil {
@@ -575,136 +575,392 @@ func (q *Query[T]) loadRelations(results []T) error {
 		}
 
 		relModel := GetModelMetaByType(relMeta.RefType)
-		
-		// Determine which column in the parent we are joining on
-		var parentCol string
-		if relMeta.Type == "belongs_to" {
-			parentCol = relMeta.JoinCol // The parent holds the FK
-		} else {
-			parentCol = q.meta.PK.Column // The parent holds the PK
-		}
 
-		// Find the field index for the parent column
-		parentFieldMeta, ok := q.meta.FieldByCol[parentCol]
-		if !ok {
-			// Fallback: assume it's a field name
-			for _, fm := range q.meta.Fields {
-				if strings.EqualFold(fm.Type.Name(), parentCol) {
-					parentFieldMeta = &fm
-					break
-				}
-			}
-			if parentFieldMeta == nil {
-				return fmt.Errorf("could not find parent column %s for relation %s", parentCol, relName)
-			}
-		}
-
-		// Collect parent keys
-		var parentKeys []any
-		keyMap := make(map[any][]int) // parent key -> indexes in results slice
-
-		for i := range results {
-			val := reflect.ValueOf(&results[i]).Elem()
-			pKey := val.Field(parentFieldMeta.Index).Interface()
-			
-			// Skip zero values
-			if reflect.ValueOf(pKey).IsZero() {
-				continue
-			}
-
-			parentKeys = append(parentKeys, pKey)
-			keyMap[pKey] = append(keyMap[pKey], i)
-		}
-
-		if len(parentKeys) == 0 {
-			continue
-		}
-
-		// Determine the foreign column in the related table
-		var foreignCol string
-		if relMeta.Type == "belongs_to" {
-			foreignCol = relModel.PK.Column
-		} else {
-			foreignCol = relMeta.JoinCol
-		}
-
-		// Build query using IN clause
-		placeholders := make([]string, len(parentKeys))
-		for i := range parentKeys {
-			placeholders[i] = q.dialect.Placeholder(i + 1)
-		}
-		
-		query := fmt.Sprintf("SELECT * FROM %s WHERE %s IN (%s)", 
-			q.dialect.Quote(relModel.Table),
-			q.dialect.Quote(foreignCol),
-			strings.Join(placeholders, ", "),
-		)
-
-		ctx, cancel := context.WithTimeout(q.ctx, q.client.limits.QueryTimeout)
-		rows, err := q.client.RawQuery(ctx, query, parentKeys...)
-		cancel()
-		if err != nil {
-			return fmt.Errorf("failed to load relation %s: %w", relName, err)
-		}
-
-		// Read and map results
-		cols, _ := rows.Columns()
-		
-		foreignFieldMeta, ok := relModel.FieldByCol[foreignCol]
-		if !ok {
-			rows.Close()
-			return fmt.Errorf("could not find foreign column %s in related model", foreignCol)
-		}
-
-		for rows.Next() {
-			// Create a new instance of the related model
-			relPtr := reflect.New(relMeta.RefType)
-			relVal := relPtr.Elem()
-
-			scanDest := make([]any, len(cols))
-			for i, col := range cols {
-				if fm, ok := relModel.FieldByCol[col]; ok {
-					scanDest[i] = relVal.Field(fm.Index).Addr().Interface()
-				} else {
-					var discard any
-					scanDest[i] = &discard
-				}
-			}
-
-			if err := rows.Scan(scanDest...); err != nil {
-				rows.Close()
+		switch relMeta.Type {
+		case "m2m":
+			if err := q.loadM2MRelation(results, relName, relMeta, relModel); err != nil {
 				return err
 			}
-
-			// Get the foreign key value from the scanned related model
-			fKey := relVal.Field(foreignFieldMeta.Index).Interface()
-
-			// Assign to parent structs
-			if parentIndexes, ok := keyMap[fKey]; ok {
-				for _, pIdx := range parentIndexes {
-					parentVal := reflect.ValueOf(&results[pIdx]).Elem()
-					relField := parentVal.FieldByName(relName)
-					
-					if relMeta.IsSlice {
-						// Append to slice
-						relField.Set(reflect.Append(relField, relVal))
-					} else {
-						// Set single value
-						if relField.Kind() == reflect.Ptr {
-							relField.Set(relPtr)
-						} else {
-							relField.Set(relVal)
-						}
-					}
-				}
+		case "polymorphic":
+			if err := q.loadPolymorphicRelation(results, relName, relMeta, relModel); err != nil {
+				return err
 			}
-		}
-		rows.Close()
-		
-		if err := rows.Err(); err != nil {
-			return err
+		default:
+			// has_one, has_many, belongs_to
+			if err := q.loadStandardRelation(results, relName, relMeta, relModel); err != nil {
+				return err
+			}
 		}
 	}
 
 	return nil
+}
+
+// loadStandardRelation handles has_one, has_many, and belongs_to relations
+func (q *Query[T]) loadStandardRelation(results []T, relName string, relMeta *RelationMeta, relModel *ModelMeta) error {
+	// Determine which column in the parent we are joining on
+	var parentCol string
+	if relMeta.Type == "belongs_to" {
+		parentCol = relMeta.JoinCol // The parent holds the FK
+	} else {
+		parentCol = q.meta.PK.Column // The parent holds the PK
+	}
+
+	// Find the field index for the parent column
+	parentFieldMeta, ok := q.meta.FieldByCol[parentCol]
+	if !ok {
+		// Fallback: assume it's a field name
+		for _, fm := range q.meta.Fields {
+			if strings.EqualFold(fm.Type.Name(), parentCol) {
+				parentFieldMeta = &fm
+				break
+			}
+		}
+		if parentFieldMeta == nil {
+			return fmt.Errorf("could not find parent column %s for relation %s", parentCol, relName)
+		}
+	}
+
+	// Collect parent keys
+	var parentKeys []any
+	keyMap := make(map[any][]int) // parent key -> indexes in results slice
+
+	for i := range results {
+		val := reflect.ValueOf(&results[i]).Elem()
+		pKey := val.Field(parentFieldMeta.Index).Interface()
+
+		// Skip zero values
+		if reflect.ValueOf(pKey).IsZero() {
+			continue
+		}
+
+		parentKeys = append(parentKeys, pKey)
+		keyMap[pKey] = append(keyMap[pKey], i)
+	}
+
+	if len(parentKeys) == 0 {
+		return nil
+	}
+
+	// Determine the foreign column in the related table
+	var foreignCol string
+	if relMeta.Type == "belongs_to" {
+		foreignCol = relModel.PK.Column
+	} else {
+		foreignCol = relMeta.JoinCol
+	}
+
+	// Build query using IN clause
+	placeholders := make([]string, len(parentKeys))
+	for i := range parentKeys {
+		placeholders[i] = q.dialect.Placeholder(i + 1)
+	}
+
+	query := fmt.Sprintf("SELECT * FROM %s WHERE %s IN (%s)",
+		q.dialect.Quote(relModel.Table),
+		q.dialect.Quote(foreignCol),
+		strings.Join(placeholders, ", "),
+	)
+
+	ctx, cancel := context.WithTimeout(q.ctx, q.client.limits.QueryTimeout)
+	rows, err := q.client.Raw().QueryContext(ctx, query, parentKeys...)
+	cancel()
+	if err != nil {
+		return fmt.Errorf("failed to load relation %s: %w", relName, err)
+	}
+	defer rows.Close()
+
+	return q.scanAndMapRelations(rows, results, relName, relMeta, relModel, foreignCol, keyMap)
+}
+
+// loadM2MRelation handles many-to-many relations through a join table
+func (q *Query[T]) loadM2MRelation(results []T, relName string, relMeta *RelationMeta, relModel *ModelMeta) error {
+	// Get parent PK values
+	parentCol := q.meta.PK.Column
+	parentFieldMeta, ok := q.meta.FieldByCol[parentCol]
+	if !ok {
+		return fmt.Errorf("could not find parent PK column %s for m2m relation %s", parentCol, relName)
+	}
+
+	// Collect parent keys
+	var parentKeys []any
+	parentKeyMap := make(map[any][]int)
+
+	for i := range results {
+		val := reflect.ValueOf(&results[i]).Elem()
+		pKey := val.Field(parentFieldMeta.Index).Interface()
+		if reflect.ValueOf(pKey).IsZero() {
+			continue
+		}
+		parentKeys = append(parentKeys, pKey)
+		parentKeyMap[pKey] = append(parentKeyMap[pKey], i)
+	}
+
+	if len(parentKeys) == 0 {
+		return nil
+	}
+
+	// Query join table to get mappings
+	joinPlaceholders := make([]string, len(parentKeys))
+	for i := range parentKeys {
+		joinPlaceholders[i] = q.dialect.Placeholder(i + 1)
+	}
+
+	joinQuery := fmt.Sprintf("SELECT %s, %s FROM %s WHERE %s IN (%s)",
+		q.dialect.Quote(relMeta.JoinFK),
+		q.dialect.Quote(relMeta.JoinRefFK),
+		q.dialect.Quote(relMeta.JoinTable),
+		q.dialect.Quote(relMeta.JoinFK),
+		strings.Join(joinPlaceholders, ", "),
+	)
+
+	ctx, cancel := context.WithTimeout(q.ctx, q.client.limits.QueryTimeout)
+	joinRows, err := q.client.Raw().QueryContext(ctx, joinQuery, parentKeys...)
+	cancel()
+	if err != nil {
+		return fmt.Errorf("failed to load join table for relation %s: %w", relName, err)
+	}
+
+	// Build map of related ID -> parent IDs
+	relatedToParent := make(map[any][]any) // related_id -> []parent_id
+	var relatedKeys []any
+	seenRelated := make(map[any]bool)
+
+	for joinRows.Next() {
+		var parentID, relatedID any
+		if err := joinRows.Scan(&parentID, &relatedID); err != nil {
+			joinRows.Close()
+			return err
+		}
+		relatedToParent[relatedID] = append(relatedToParent[relatedID], parentID)
+		if !seenRelated[relatedID] {
+			relatedKeys = append(relatedKeys, relatedID)
+			seenRelated[relatedID] = true
+		}
+	}
+	joinRows.Close()
+
+	if len(relatedKeys) == 0 {
+		return nil
+	}
+
+	// Query related table
+	relPlaceholders := make([]string, len(relatedKeys))
+	for i := range relatedKeys {
+		relPlaceholders[i] = q.dialect.Placeholder(i + 1)
+	}
+
+	relQuery := fmt.Sprintf("SELECT * FROM %s WHERE %s IN (%s)",
+		q.dialect.Quote(relModel.Table),
+		q.dialect.Quote(relModel.PK.Column),
+		strings.Join(relPlaceholders, ", "),
+	)
+
+	ctx, cancel = context.WithTimeout(q.ctx, q.client.limits.QueryTimeout)
+	rows, err := q.client.Raw().QueryContext(ctx, relQuery, relatedKeys...)
+	cancel()
+	if err != nil {
+		return fmt.Errorf("failed to load m2m relation %s: %w", relName, err)
+	}
+	defer rows.Close()
+
+	// Custom mapping for m2m: map related records back to parents
+	cols, _ := rows.Columns()
+	pkFieldMeta, ok := relModel.FieldByCol[relModel.PK.Column]
+	if !ok {
+		return fmt.Errorf("could not find PK column %s in related model", relModel.PK.Column)
+	}
+
+	for rows.Next() {
+		relPtr := reflect.New(relMeta.RefType)
+		relVal := relPtr.Elem()
+
+		scanDest := make([]any, len(cols))
+		for i, col := range cols {
+			if fm, ok := relModel.FieldByCol[col]; ok {
+				scanDest[i] = relVal.Field(fm.Index).Addr().Interface()
+			} else {
+				var discard any
+				scanDest[i] = &discard
+			}
+		}
+
+		if err := rows.Scan(scanDest...); err != nil {
+			return err
+		}
+
+		// Get the related ID
+		relatedID := relVal.Field(pkFieldMeta.Index).Interface()
+
+		// Find parent IDs that have this related record
+		if parentIDs, ok := relatedToParent[relatedID]; ok {
+			for _, parentID := range parentIDs {
+				if parentIndexes, ok := parentKeyMap[parentID]; ok {
+					for _, pIdx := range parentIndexes {
+						parentVal := reflect.ValueOf(&results[pIdx]).Elem()
+						relField := parentVal.FieldByName(relName)
+						relField.Set(reflect.Append(relField, relVal))
+					}
+				}
+			}
+		}
+	}
+
+	return rows.Err()
+}
+
+// loadPolymorphicRelation handles polymorphic relations
+func (q *Query[T]) loadPolymorphicRelation(results []T, relName string, relMeta *RelationMeta, relModel *ModelMeta) error {
+	// Get parent PK values
+	parentCol := q.meta.PK.Column
+	parentFieldMeta, ok := q.meta.FieldByCol[parentCol]
+	if !ok {
+		return fmt.Errorf("could not find parent PK column %s for polymorphic relation %s", parentCol, relName)
+	}
+
+	// Collect parent keys
+	var parentKeys []any
+	parentKeyMap := make(map[any][]int)
+
+	for i := range results {
+		val := reflect.ValueOf(&results[i]).Elem()
+		pKey := val.Field(parentFieldMeta.Index).Interface()
+		if reflect.ValueOf(pKey).IsZero() {
+			continue
+		}
+		parentKeys = append(parentKeys, pKey)
+		parentKeyMap[pKey] = append(parentKeyMap[pKey], i)
+	}
+
+	if len(parentKeys) == 0 {
+		return nil
+	}
+
+	// Query related table filtering by type column and parent IDs
+	placeholders := make([]string, len(parentKeys))
+	for i := range parentKeys {
+		placeholders[i] = q.dialect.Placeholder(i + 2) // +2 because $1 is the type
+	}
+
+	polyQuery := fmt.Sprintf("SELECT * FROM %s WHERE %s = %s AND %s IN (%s)",
+		q.dialect.Quote(relModel.Table),
+		q.dialect.Quote(relMeta.PolyTypeColumn),
+		q.dialect.Placeholder(1),
+		q.dialect.Quote(relMeta.PolyIDColumn),
+		strings.Join(placeholders, ", "),
+	)
+
+	args := append([]any{relMeta.PolyType}, parentKeys...)
+
+	ctx, cancel := context.WithTimeout(q.ctx, q.client.limits.QueryTimeout)
+	rows, err := q.client.Raw().QueryContext(ctx, polyQuery, args...)
+	cancel()
+	if err != nil {
+		return fmt.Errorf("failed to load polymorphic relation %s: %w", relName, err)
+	}
+	defer rows.Close()
+
+	return q.scanAndMapPolymorphicRelations(rows, results, relName, relMeta, relModel, parentKeyMap)
+}
+
+// scanAndMapRelations scans rows and maps them to parent structs (for standard relations)
+func (q *Query[T]) scanAndMapRelations(rows *sql.Rows, results []T, relName string, relMeta *RelationMeta, relModel *ModelMeta, foreignCol string, keyMap map[any][]int) error {
+	cols, _ := rows.Columns()
+
+	foreignFieldMeta, ok := relModel.FieldByCol[foreignCol]
+	if !ok {
+		return fmt.Errorf("could not find foreign column %s in related model", foreignCol)
+	}
+
+	for rows.Next() {
+		relPtr := reflect.New(relMeta.RefType)
+		relVal := relPtr.Elem()
+
+		scanDest := make([]any, len(cols))
+		for i, col := range cols {
+			if fm, ok := relModel.FieldByCol[col]; ok {
+				scanDest[i] = relVal.Field(fm.Index).Addr().Interface()
+			} else {
+				var discard any
+				scanDest[i] = &discard
+			}
+		}
+
+		if err := rows.Scan(scanDest...); err != nil {
+			return err
+		}
+
+		fKey := relVal.Field(foreignFieldMeta.Index).Interface()
+
+		if parentIndexes, ok := keyMap[fKey]; ok {
+			for _, pIdx := range parentIndexes {
+				parentVal := reflect.ValueOf(&results[pIdx]).Elem()
+				relField := parentVal.FieldByName(relName)
+
+				if relMeta.IsSlice {
+					relField.Set(reflect.Append(relField, relVal))
+				} else {
+					if relField.Kind() == reflect.Ptr {
+						relField.Set(relPtr)
+					} else {
+						relField.Set(relVal)
+					}
+				}
+			}
+		}
+	}
+
+	return rows.Err()
+}
+
+// scanAndMapPolymorphicRelations scans rows and maps them to parent structs (for polymorphic relations)
+func (q *Query[T]) scanAndMapPolymorphicRelations(rows *sql.Rows, results []T, relName string, relMeta *RelationMeta, relModel *ModelMeta, parentKeyMap map[any][]int) error {
+	cols, _ := rows.Columns()
+
+	// Find the poly ID column in related model
+	polyIDFieldMeta, ok := relModel.FieldByCol[relMeta.PolyIDColumn]
+	if !ok {
+		return fmt.Errorf("could not find polymorphic ID column %s in related model", relMeta.PolyIDColumn)
+	}
+
+	for rows.Next() {
+		relPtr := reflect.New(relMeta.RefType)
+		relVal := relPtr.Elem()
+
+		scanDest := make([]any, len(cols))
+		for i, col := range cols {
+			if fm, ok := relModel.FieldByCol[col]; ok {
+				scanDest[i] = relVal.Field(fm.Index).Addr().Interface()
+			} else {
+				var discard any
+				scanDest[i] = &discard
+			}
+		}
+
+		if err := rows.Scan(scanDest...); err != nil {
+			return err
+		}
+
+		// Get the parent ID from the polymorphic foreign key
+		parentID := relVal.Field(polyIDFieldMeta.Index).Interface()
+
+		if parentIndexes, ok := parentKeyMap[parentID]; ok {
+			for _, pIdx := range parentIndexes {
+				parentVal := reflect.ValueOf(&results[pIdx]).Elem()
+				relField := parentVal.FieldByName(relName)
+
+				if relMeta.IsSlice {
+					relField.Set(reflect.Append(relField, relVal))
+				} else {
+					if relField.Kind() == reflect.Ptr {
+						relField.Set(relPtr)
+					} else {
+						relField.Set(relVal)
+					}
+				}
+			}
+		}
+	}
+
+	return rows.Err()
 }

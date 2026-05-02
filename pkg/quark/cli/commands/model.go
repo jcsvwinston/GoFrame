@@ -8,6 +8,7 @@ import (
 
 	"github.com/fatih/color"
 	"github.com/jcsvwinston/GoFrame/pkg/quark/cli/internal/db"
+	internaldb "github.com/jcsvwinston/GoFrame/pkg/quark/internal/db"
 	"github.com/jcsvwinston/GoFrame/pkg/quark/cli/internal/gen"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -94,13 +95,28 @@ func generateFromTables() {
 
 	for _, tableName := range tables {
 		tableName = strings.TrimSpace(tableName)
-		info, err := db.GetTableInfo(sqlDB, dialect, tableName)
+		info, err := internaldb.GetTableInfo(sqlDB, dialect, tableName)
 		if err != nil {
 			color.Red("Error introspecting table %s: %v", tableName, err)
 			continue
 		}
 
-		if err := generator.GenerateFromTable(*info); err != nil {
+		genTable := gen.TableInfo{
+			Name:    info.Name,
+			Columns: make([]gen.ColumnInfo, len(info.Columns)),
+		}
+		for i, col := range info.Columns {
+			genTable.Columns[i] = gen.ColumnInfo{
+				Name:       col.Name,
+				Type:       col.Type,
+				IsNullable: col.IsNullable,
+				IsPK:       col.IsPK,
+				IsAuto:     col.IsAuto,
+				Default:    col.Default.String,
+			}
+		}
+
+		if err := generator.GenerateFromTable(genTable); err != nil {
 			color.Red("Error generating model for %s: %v", tableName, err)
 			continue
 		}

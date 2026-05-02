@@ -7,8 +7,21 @@ import (
 	"strings"
 	"text/template"
 
-	"github.com/jcsvwinston/GoFrame/pkg/quark/cli/internal/db"
 )
+
+type TableInfo struct {
+	Name    string
+	Columns []ColumnInfo
+}
+
+type ColumnInfo struct {
+	Name       string
+	Type       string
+	IsNullable bool
+	IsPK       bool
+	IsAuto     bool
+	Default    string
+}
 
 type ModelGenerator struct {
 	PackageName string
@@ -54,7 +67,7 @@ func (g *ModelGenerator) GenerateFromData(data ModelData) error {
 	return os.WriteFile(path, buf.Bytes(), 0644)
 }
 
-func (g *ModelGenerator) GenerateFromTable(table db.TableInfo) error {
+func (g *ModelGenerator) GenerateFromTable(table TableInfo) error {
 	data := ModelData{
 		Package:    g.PackageName,
 		StructName: SnakeToCamel(table.Name, true),
@@ -88,7 +101,7 @@ func (g *ModelGenerator) GenerateFromTable(table db.TableInfo) error {
 	return os.WriteFile(path, buf.Bytes(), 0644)
 }
 
-func mapSQLToGo(col db.ColumnInfo) (string, []string) {
+func mapSQLToGo(col ColumnInfo) (string, []string) {
 	var goType string
 	var tags []string
 
