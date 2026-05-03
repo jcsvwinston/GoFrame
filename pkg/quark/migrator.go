@@ -46,8 +46,20 @@ func (c *Client) createTable(ctx context.Context, model any) error {
 			continue
 		}
 
-		colDef := c.dialect.Quote(field.Column) + " " + migrate.SQLType(c.dialect.Name(), field.Type, field.IsPK)
+		// For composite PKs, never mark individual columns as PRIMARY KEY —
+		// we'll append a table-level constraint below instead.
+		isPK := field.IsPK && !meta.HasCompositePK
+		colDef := c.dialect.Quote(field.Column) + " " + migrate.SQLType(c.dialect.Name(), field.Type, isPK)
 		columns = append(columns, colDef)
+	}
+
+	// Composite PK: append table-level PRIMARY KEY constraint
+	if meta.HasCompositePK {
+		pkCols := make([]string, len(meta.CompositePK))
+		for i, pk := range meta.CompositePK {
+			pkCols[i] = c.dialect.Quote(pk.Column)
+		}
+		columns = append(columns, fmt.Sprintf("PRIMARY KEY (%s)", strings.Join(pkCols, ", ")))
 	}
 
 	if len(columns) == 0 {

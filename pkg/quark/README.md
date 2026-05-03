@@ -72,6 +72,44 @@ type User struct {
 }
 ```
 
+### Clave Primaria Compuesta (Composite PK)
+
+Añade `pk:"true"` a **múltiples campos** para declarar una PK compuesta. Quark detecta esto automáticamente y genera las cláusulas `WHERE col1 = $1 AND col2 = $2` correctas en `Update`, `Delete` y `HardDelete`.
+
+```go
+// Tabla de unión típica (ej. order_items)
+type OrderItem struct {
+    OrderID   int64  `db:"order_id"   pk:"true"`
+    ProductID int64  `db:"product_id" pk:"true"`
+    Qty       int    `db:"qty"`
+}
+
+// También funciona con claves string
+type RolePermission struct {
+    RoleID       string `db:"role_id"       pk:"true"`
+    PermissionID string `db:"permission_id" pk:"true"`
+    Granted      bool   `db:"granted"`
+}
+```
+
+```go
+// Create — incluye siempre todas las columnas PK (no son auto-increment)
+item := OrderItem{OrderID: 1, ProductID: 10, Qty: 5}
+err := quark.For[OrderItem](ctx, client).Create(&item)
+
+// Update — WHERE order_id = $1 AND product_id = $2
+item.Qty = 99
+rows, err := quark.For[OrderItem](ctx, client).Update(&item)
+
+// HardDelete — DELETE FROM order_items WHERE order_id = $1 AND product_id = $2
+rows, err := quark.For[OrderItem](ctx, client).HardDelete(&item)
+
+// List con filtro parcial (solo una columna de la PK)
+items, err := quark.For[OrderItem](ctx, client).Where("order_id", "=", 1).List()
+```
+
+> **Nota:** `Find(id)` utiliza la PK simple (`ModelMeta.PK`). Para modelos con composite PK usa `Where(...).First()` o `Where(...).List()`.
+
 ---
 
 ## 🛠 Operaciones CRUD Básicas

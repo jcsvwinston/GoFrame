@@ -67,6 +67,16 @@ func isZeroPKValue(v reflect.Value) bool {
 	}
 }
 
+// isZeroCompositePK returns true when ALL pk columns are zero (i.e. the record is new).
+func isZeroCompositePK(elem reflect.Value, pks []pkMeta) bool {
+	for _, pk := range pks {
+		if !isZeroPKValue(elem.Field(pk.Index)) {
+			return false
+		}
+	}
+	return true
+}
+
 // getPKValue returns the primary key value from a struct.
 func getPKValue(v reflect.Value, pk pkMeta) any {
 	return v.Field(pk.Index).Interface()
@@ -114,10 +124,16 @@ func (q *BaseQuery) saveAny(ctx context.Context, exec Executor, entity any, isUp
 	meta := GetModelMetaByType(elem.Type())
 
 	// Decide if we should Insert or Update.
-	// If it's an update but the PK is zero, it must be an insert (new record in existing association).
+	// If it's an update but ALL PKs are zero, it must be an insert (new record).
 	actualUpdate := isUpdate
-	if actualUpdate && isZeroPKValue(elem.Field(meta.PK.Index)) {
-		actualUpdate = false
+	if actualUpdate {
+		if meta.HasCompositePK {
+			if isZeroCompositePK(elem, meta.CompositePK) {
+				actualUpdate = false
+			}
+		} else if isZeroPKValue(elem.Field(meta.PK.Index)) {
+			actualUpdate = false
+		}
 	}
 
 	// 1. Save BelongsTo associations FIRST (so we have their PKs)
@@ -295,8 +311,9 @@ func (q *BaseQuery) buildInsert(v reflect.Value) (string, []any, error) {
 			continue // Skip fields without db tag
 		}
 
-		// Skip auto-increment PK if it's zero (let DB assign it)
-		if i == q.pk.Index && isZeroPKValue(v.Field(i)) {
+		// Skip PK columns that are zero (let DB assign auto-increment).
+		// For composite PKs all columns must be included since they are not auto-generated.
+		if !q.meta.HasCompositePK && i == q.pk.Index && isZeroPKValue(v.Field(i)) {
 			continue
 		}
 
@@ -455,8 +472,19 @@ func (q *BaseQuery) buildUpdate(v reflect.Value) (string, []any, error) {
 			continue
 		}
 
-		// Skip primary key in SET clause
-		if i == q.pk.Index {
+		// Skip primary key column(s) in SET clause.
+		if q.meta.HasCompositePK {
+			isPKCol := false
+			for _, cpk := range q.meta.CompositePK {
+				if i == cpk.Index {
+					isPKCol = true
+					break
+				}
+			}
+			if isPKCol {
+				continue
+			}
+		} else if i == q.pk.Index {
 			continue
 		}
 
@@ -480,20 +508,32 @@ func (q *BaseQuery) buildUpdate(v reflect.Value) (string, []any, error) {
 		return "", nil, fmt.Errorf("%w: no non-zero fields to update", ErrInvalidQuery)
 	}
 
-	// Get PK value for WHERE clause
-	pkValue := getPKValue(v, q.pk)
-
 	var sql strings.Builder
 	sql.WriteString("UPDATE ")
 	sql.WriteString(q.fullTableName())
 	sql.WriteString(" SET ")
 	sql.WriteString(strings.Join(setClauses, ", "))
 	sql.WriteString(" WHERE ")
-	sql.WriteString(q.dialect.Quote(q.pk.Column))
-	sql.WriteString(" = ")
-	sql.WriteString(q.dialect.Placeholder(argIndex))
-	args = append(args, pkValue)
-	argIndex++
+
+	// Build WHERE clause: composite or single PK
+	if q.meta.HasCompositePK {
+		for j, cpk := range q.meta.CompositePK {
+			if j > 0 {
+				sql.WriteString(" AND ")
+			}
+			sql.WriteString(q.dialect.Quote(cpk.Column))
+			sql.WriteString(" = ")
+			sql.WriteString(q.dialect.Placeholder(argIndex))
+			args = append(args, v.Field(cpk.Index).Interface())
+			argIndex++
+		}
+	} else {
+		sql.WriteString(q.dialect.Quote(q.pk.Column))
+		sql.WriteString(" = ")
+		sql.WriteString(q.dialect.Placeholder(argIndex))
+		args = append(args, getPKValue(v, q.pk))
+		argIndex++
+	}
 
 	// Merge any additional Where() conditions
 	for _, cond := range q.where {
@@ -626,7 +666,16 @@ func (q *Query[T]) Delete(entity *T) (int64, error) {
 		}
 	}
 
-	pkValue := getPKValue(v, q.pk)
+	var pkValue any
+	if q.meta != nil && q.meta.HasCompositePK {
+		vals := make([]any, len(q.meta.CompositePK))
+		for j, cpk := range q.meta.CompositePK {
+			vals[j] = v.Field(cpk.Index).Interface()
+		}
+		pkValue = vals
+	} else {
+		pkValue = getPKValue(v, q.pk)
+	}
 
 	var rows int64
 	var err error
@@ -678,7 +727,16 @@ func (q *Query[T]) HardDelete(entity *T) (int64, error) {
 	}
 
 	v := reflect.ValueOf(entity).Elem()
-	pkValue := getPKValue(v, q.pk)
+	var pkValue any
+	if q.meta != nil && q.meta.HasCompositePK {
+		vals := make([]any, len(q.meta.CompositePK))
+		for j, cpk := range q.meta.CompositePK {
+			vals[j] = v.Field(cpk.Index).Interface()
+		}
+		pkValue = vals
+	} else {
+		pkValue = getPKValue(v, q.pk)
+	}
 
 	rows, err := q.hardDeleteByPK(pkValue)
 	if err == nil {
@@ -704,10 +762,24 @@ func (q *Query[T]) softDelete(pkValue any) (int64, error) {
 	sql.WriteString(" = ")
 	sql.WriteString(q.dialect.CurrentTimestamp())
 	sql.WriteString(" WHERE ")
-	sql.WriteString(q.dialect.Quote(q.pk.Column))
-	sql.WriteString(" = ")
-	sql.WriteString(q.dialect.Placeholder(1))
-	args = append(args, pkValue)
+
+	if q.meta != nil && q.meta.HasCompositePK {
+		pkVals, _ := pkValue.([]any)
+		for j, cpk := range q.meta.CompositePK {
+			if j > 0 {
+				sql.WriteString(" AND ")
+			}
+			sql.WriteString(q.dialect.Quote(cpk.Column))
+			sql.WriteString(" = ")
+			sql.WriteString(q.dialect.Placeholder(j + 1))
+			args = append(args, pkVals[j])
+		}
+	} else {
+		sql.WriteString(q.dialect.Quote(q.pk.Column))
+		sql.WriteString(" = ")
+		sql.WriteString(q.dialect.Placeholder(1))
+		args = append(args, pkValue)
+	}
 
 	// Add deleted_at IS NULL to ensure we don't update already deleted rows
 	sql.WriteString(" AND ")
@@ -730,7 +802,9 @@ func (q *Query[T]) softDelete(pkValue any) (int64, error) {
 	return rowsAffected, nil
 }
 
-// hardDeleteByPK performs a hard delete by primary key.
+// hardDeleteByPK performs a hard delete by primary key (single or composite).
+// For single-PK models pass the pk value; for composite PKs pass a []any of values
+// in the same order as ModelMeta.CompositePK.
 func (q *Query[T]) hardDeleteByPK(pkValue any) (int64, error) {
 	var sql strings.Builder
 	var args []any
@@ -738,10 +812,24 @@ func (q *Query[T]) hardDeleteByPK(pkValue any) (int64, error) {
 	sql.WriteString("DELETE FROM ")
 	sql.WriteString(q.fullTableName())
 	sql.WriteString(" WHERE ")
-	sql.WriteString(q.dialect.Quote(q.pk.Column))
-	sql.WriteString(" = ")
-	sql.WriteString(q.dialect.Placeholder(1))
-	args = append(args, pkValue)
+
+	if q.meta != nil && q.meta.HasCompositePK {
+		pkVals, _ := pkValue.([]any)
+		for j, cpk := range q.meta.CompositePK {
+			if j > 0 {
+				sql.WriteString(" AND ")
+			}
+			sql.WriteString(q.dialect.Quote(cpk.Column))
+			sql.WriteString(" = ")
+			sql.WriteString(q.dialect.Placeholder(j + 1))
+			args = append(args, pkVals[j])
+		}
+	} else {
+		sql.WriteString(q.dialect.Quote(q.pk.Column))
+		sql.WriteString(" = ")
+		sql.WriteString(q.dialect.Placeholder(1))
+		args = append(args, pkValue)
+	}
 
 	ctx, cancel := context.WithTimeout(q.ctx, q.client.limits.QueryTimeout)
 	defer cancel()

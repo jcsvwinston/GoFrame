@@ -1,11 +1,13 @@
 package quark_test
 
 import (
-	"github.com/jcsvwinston/GoFrame/pkg/quark"
 	"database/sql"
+	"log/slog"
 	"os"
 	"testing"
-	"log/slog"
+
+	"github.com/jcsvwinston/GoFrame/pkg/quark"
+	quarkotel "github.com/jcsvwinston/GoFrame/pkg/quark/otel"
 
 	_ "github.com/go-sql-driver/mysql"
 )
@@ -23,7 +25,11 @@ func TestSuiteMySQL(t *testing.T) {
 	defer db.Close()
 
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
-	client, err := quark.New(db, quark.WithDialect(quark.MySQL()), quark.WithQueryObserver(NewSQLQueryLogger(logger)))
+	client, err := quark.New(db,
+		quark.WithDialect(quark.MySQL()),
+		quark.WithQueryObserver(NewSQLQueryLogger(logger)),
+		quark.WithMiddleware(quarkotel.New()),
+	)
 	if err != nil {
 		t.Fatal(err)
 	}

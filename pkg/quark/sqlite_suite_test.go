@@ -1,11 +1,13 @@
 package quark_test
 
 import (
-	"github.com/jcsvwinston/GoFrame/pkg/quark"
 	"database/sql"
-	"testing"
 	"log/slog"
 	"os"
+	"testing"
+
+	"github.com/jcsvwinston/GoFrame/pkg/quark"
+	quarkotel "github.com/jcsvwinston/GoFrame/pkg/quark/otel"
 
 	_ "modernc.org/sqlite"
 )
@@ -18,7 +20,11 @@ func TestSuiteSQLite(t *testing.T) {
 	defer db.Close()
 
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
-	client, err := quark.New(db, quark.WithDialect(quark.SQLite()), quark.WithQueryObserver(NewSQLQueryLogger(logger)))
+	client, err := quark.New(db,
+		quark.WithDialect(quark.SQLite()),
+		quark.WithQueryObserver(NewSQLQueryLogger(logger)),
+		quark.WithMiddleware(quarkotel.New()),
+	)
 	if err != nil {
 		t.Fatal(err)
 	}

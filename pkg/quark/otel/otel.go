@@ -19,8 +19,8 @@ type Middleware struct {
 	tracer trace.Tracer
 }
 
-// NewMiddleware creates a new OTel middleware for Quark.
-func NewMiddleware() *Middleware {
+// New creates a new OTel middleware for Quark.
+func New() *Middleware {
 	return &Middleware{
 		tracer: otel.GetTracerProvider().Tracer(tracerName),
 	}

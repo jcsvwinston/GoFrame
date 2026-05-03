@@ -1,12 +1,14 @@
 package quark_test
 
 import (
-	"github.com/jcsvwinston/GoFrame/pkg/quark"
 	"database/sql"
 	"log/slog"
 	"os"
 	"strings"
 	"testing"
+
+	"github.com/jcsvwinston/GoFrame/pkg/quark"
+	quarkotel "github.com/jcsvwinston/GoFrame/pkg/quark/otel"
 
 	_ "github.com/microsoft/go-mssqldb"
 )
@@ -21,7 +23,7 @@ func TestSuiteMSSQL(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	
+
 	// Create database if not exists
 	_, _ = db.Exec("IF NOT EXISTS (SELECT * FROM sys.databases WHERE name = 'quark_test') CREATE DATABASE quark_test")
 	db.Close()
@@ -44,7 +46,11 @@ func TestSuiteMSSQL(t *testing.T) {
 	defer db.Close()
 
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
-	client, err := quark.New(db, quark.WithDialect(quark.MSSQL()), quark.WithQueryObserver(NewSQLQueryLogger(logger)))
+	client, err := quark.New(db,
+		quark.WithDialect(quark.MSSQL()),
+		quark.WithQueryObserver(NewSQLQueryLogger(logger)),
+		quark.WithMiddleware(quarkotel.New()),
+	)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -24,18 +24,36 @@ type RelationMeta struct {
 	IsSlice        bool         // true for has_many, m2m
 }
 
-// PKMeta holds primary key metadata.
+// PKMeta holds primary key metadata for a single PK column.
 type PKMeta struct {
 	Column string
 	Index  int
 	Kind   reflect.Kind
 }
 
+// IsComposite returns true when the model uses a multi-column primary key.
+// Use ModelMeta.CompositePK instead of ModelMeta.PK when this is true.
+func (p PKMeta) IsComposite() bool { return false } // sentinel; see ModelMeta.HasCompositePK
+
 // FindPK finds the primary key field in a struct value.
 // It first looks for a pk:"true" tag, then falls back to db:"id".
+// When multiple fields carry pk:"true" the first one is returned for
+// backward-compatibility; use FindPKs to obtain all of them.
 func FindPK(v reflect.Value) (PKMeta, bool) {
+	pks := FindPKs(v)
+	if len(pks) == 0 {
+		return PKMeta{}, false
+	}
+	return pks[0], true
+}
+
+// FindPKs returns all primary key fields from a struct value.
+// Fields tagged with pk:"true" are returned in declaration order.
+// When no pk:"true" tag is present it falls back to the single db:"id" field.
+func FindPKs(v reflect.Value) []PKMeta {
 	t := v.Type()
 
+	var pks []PKMeta
 	for i := 0; i < t.NumField(); i++ {
 		field := t.Field(i)
 		if field.Tag.Get("pk") == "true" {
@@ -43,37 +61,43 @@ func FindPK(v reflect.Value) (PKMeta, bool) {
 			if dbTag == "" || dbTag == "-" {
 				dbTag = ToSnakeCase(field.Name)
 			}
-			return PKMeta{Column: dbTag, Index: i, Kind: field.Type.Kind()}, true
+			pks = append(pks, PKMeta{Column: dbTag, Index: i, Kind: field.Type.Kind()})
 		}
 	}
+	if len(pks) > 0 {
+		return pks
+	}
 
+	// Fallback: db:"id"
 	for i := 0; i < t.NumField(); i++ {
 		field := t.Field(i)
 		if field.Tag.Get("db") == "id" {
-			return PKMeta{Column: "id", Index: i, Kind: field.Type.Kind()}, true
+			return []PKMeta{{Column: "id", Index: i, Kind: field.Type.Kind()}}
 		}
 	}
 
-	return PKMeta{}, false
+	return nil
 }
 
 // ModelMeta holds cached metadata about a model struct.
 // Computed once per type and stored in a global registry.
 type ModelMeta struct {
-	Table      string
-	PK         PKMeta
-	HasPK      bool
-	Fields     []FieldMeta
-	FieldByCol map[string]*FieldMeta    // lookup by db column name
-	Relations  map[string]*RelationMeta // lookup by field name
+	Table          string
+	PK             PKMeta
+	HasPK          bool
+	CompositePK    []PKMeta // populated when two or more fields carry pk:"true"
+	HasCompositePK bool     // true when len(CompositePK) > 1
+	Fields         []FieldMeta
+	FieldByCol     map[string]*FieldMeta    // lookup by db column name
+	Relations      map[string]*RelationMeta // lookup by field name
 }
 
 // FieldMeta holds metadata about a single struct field.
 type FieldMeta struct {
-	Index  int
-	Column string // value of the db:"" tag
-	Kind   reflect.Kind
-	Type   reflect.Type
+	Index     int
+	Column    string // value of the db:"" tag
+	Kind      reflect.Kind
+	Type      reflect.Type
 	IsPK      bool
 	OldColumn string // for renames
 }
@@ -124,7 +148,7 @@ type TableNamer interface {
 // computeModelMeta builds ModelMeta from a reflect.Type.
 func computeModelMeta(t reflect.Type) *ModelMeta {
 	tableName := ToSnakeCase(Pluralize(t.Name()))
-	
+
 	// Check if type implements TableName() string
 	// We create a zero value of the type to check for methods
 	zero := reflect.New(t).Interface()
@@ -138,24 +162,21 @@ func computeModelMeta(t reflect.Type) *ModelMeta {
 		Relations:  make(map[string]*RelationMeta),
 	}
 
-	// Find PK: first look for pk:"true", then fall back to db:"id"
-	pkIndex := -1
+	// Find PKs: collect all pk:"true" tags; fall back to db:"id"
+	var pkIndices []int
 	for i := 0; i < t.NumField(); i++ {
-		field := t.Field(i)
-		if field.Tag.Get("pk") == "true" {
-			pkIndex = i
-			break
+		if t.Field(i).Tag.Get("pk") == "true" {
+			pkIndices = append(pkIndices, i)
 		}
 	}
-	if pkIndex == -1 {
+	if len(pkIndices) == 0 {
 		for i := 0; i < t.NumField(); i++ {
 			if t.Field(i).Tag.Get("db") == "id" {
-				pkIndex = i
+				pkIndices = append(pkIndices, i)
 				break
 			}
 		}
 	}
-
 	for i := 0; i < t.NumField(); i++ {
 		field := t.Field(i)
 
@@ -231,7 +252,13 @@ func computeModelMeta(t reflect.Type) *ModelMeta {
 			continue
 		}
 
-		isPK := i == pkIndex
+		isPK := false
+		for _, idx := range pkIndices {
+			if i == idx {
+				isPK = true
+				break
+			}
+		}
 		oldCol := ""
 		if quarkTag := field.Tag.Get("quark"); strings.HasPrefix(quarkTag, "rename:") {
 			oldCol = strings.TrimPrefix(quarkTag, "rename:")
@@ -249,9 +276,16 @@ func computeModelMeta(t reflect.Type) *ModelMeta {
 		meta.FieldByCol[strings.ToLower(dbTag)] = &meta.Fields[len(meta.Fields)-1]
 
 		if isPK {
-			meta.PK = PKMeta{Column: dbTag, Index: i, Kind: field.Type.Kind()}
-			meta.HasPK = true
+			meta.CompositePK = append(meta.CompositePK, PKMeta{Column: dbTag, Index: i, Kind: field.Type.Kind()})
+			if !meta.HasPK {
+				meta.PK = PKMeta{Column: dbTag, Index: i, Kind: field.Type.Kind()}
+				meta.HasPK = true
+			}
 		}
+	}
+
+	if len(meta.CompositePK) > 1 {
+		meta.HasCompositePK = true
 	}
 
 	return meta

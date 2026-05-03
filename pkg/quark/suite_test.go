@@ -99,6 +99,14 @@ func SharedSuite(t *testing.T, client *quark.Client) {
 	t.Run("Caching", func(t *testing.T) {
 		testCaching(ctx, t, client)
 	})
+
+	t.Run("OpenTelemetry", func(t *testing.T) {
+		testOtelInSharedSuite(ctx, t, client)
+	})
+
+	t.Run("CompositePK", func(t *testing.T) {
+		testCompositePK(ctx, t, client)
+	})
 }
 
 func testCaching(ctx context.Context, t *testing.T, client *quark.Client) {
@@ -822,4 +830,140 @@ func testJSON(ctx context.Context, t *testing.T, client *quark.Client) {
 	if len(results) != 1 {
 		t.Errorf("Expected 1 result for JSON query, got %d", len(results))
 	}
+}
+
+// testOtelInSharedSuite verifica que las operaciones generan trazas OTel
+func testOtelInSharedSuite(ctx context.Context, t *testing.T, client *quark.Client) {
+	// Crear exporter en memoria para capturar spans
+	exporter, shutdown := setupTestTelemetry()
+	defer shutdown(context.Background())
+
+	type OtelSuiteUser struct {
+		ID    int64  `db:"id" pk:"true"`
+		Name  string `db:"name"`
+		Email string `db:"email"`
+	}
+
+	// Limpiar tabla si existe
+	dropTable(client, "otel_suite_users")
+
+	if err := client.Migrate(ctx, &OtelSuiteUser{}); err != nil {
+		t.Fatalf("migrate failed: %v", err)
+	}
+
+	// Limpiar spans de migración
+	exporter.Reset()
+
+	// Test 1: INSERT
+	t.Run("Insert", func(t *testing.T) {
+		user := &OtelSuiteUser{Name: "Otel Test", Email: "otel@test.com"}
+		if err := quark.For[OtelSuiteUser](ctx, client).Create(user); err != nil {
+			t.Fatalf("create failed: %v", err)
+		}
+
+		spans := exporter.GetSpans()
+		if len(spans) == 0 {
+			t.Error("expected spans for INSERT operation")
+		}
+		t.Logf("✓ INSERT generated %d spans", len(spans))
+		exporter.Reset()
+	})
+
+	// Test 2: SELECT
+	t.Run("Select", func(t *testing.T) {
+		users, err := quark.For[OtelSuiteUser](ctx, client).List()
+		if err != nil {
+			t.Fatalf("list failed: %v", err)
+		}
+		if len(users) != 1 {
+			t.Errorf("expected 1 user, got %d", len(users))
+		}
+
+		spans := exporter.GetSpans()
+		if len(spans) == 0 {
+			t.Error("expected spans for SELECT operation")
+		}
+		t.Logf("✓ SELECT generated %d spans", len(spans))
+		exporter.Reset()
+	})
+
+	// Test 3: First
+	t.Run("First", func(t *testing.T) {
+		user, err := quark.For[OtelSuiteUser](ctx, client).First()
+		if err != nil {
+			t.Fatalf("first failed: %v", err)
+		}
+		if user.Name != "Otel Test" {
+			t.Errorf("expected 'Otel Test', got %s", user.Name)
+		}
+
+		spans := exporter.GetSpans()
+		if len(spans) == 0 {
+			t.Error("expected spans for First operation")
+		}
+		t.Logf("✓ First() generated %d spans", len(spans))
+		exporter.Reset()
+	})
+
+	// Test 4: UPDATE
+	t.Run("Update", func(t *testing.T) {
+		user, _ := quark.For[OtelSuiteUser](ctx, client).First()
+		user.Name = "Updated Otel"
+		_, err := quark.For[OtelSuiteUser](ctx, client).Update(&user)
+		if err != nil {
+			t.Fatalf("update failed: %v", err)
+		}
+
+		spans := exporter.GetSpans()
+		if len(spans) == 0 {
+			t.Error("expected spans for UPDATE operation")
+		}
+		t.Logf("✓ UPDATE generated %d spans", len(spans))
+		exporter.Reset()
+	})
+
+	// Test 5: DELETE
+	t.Run("Delete", func(t *testing.T) {
+		_, err := quark.For[OtelSuiteUser](ctx, client).Where("id", ">", 0).DeleteBy()
+		if err != nil {
+			t.Fatalf("delete failed: %v", err)
+		}
+
+		spans := exporter.GetSpans()
+		if len(spans) == 0 {
+			t.Error("expected spans for DELETE operation")
+		}
+		t.Logf("✓ DELETE generated %d spans", len(spans))
+		exporter.Reset()
+	})
+
+	// Test 6: Verificar atributos
+	t.Run("SpanAttributes", func(t *testing.T) {
+		// Insertar para generar spans
+		user := &OtelSuiteUser{Name: "Attr Test", Email: "attr@test.com"}
+		quark.For[OtelSuiteUser](ctx, client).Create(user)
+
+		spans := exporter.GetSpans()
+		validSpans := 0
+		for _, span := range spans {
+			hasDBStatement := false
+			hasDBOperation := false
+			for _, attr := range span.Attributes {
+				if attr.Key == "db.statement" && attr.Value.AsString() != "" {
+					hasDBStatement = true
+				}
+				if attr.Key == "db.operation" && attr.Value.AsString() != "" {
+					hasDBOperation = true
+				}
+			}
+			if hasDBStatement && hasDBOperation {
+				validSpans++
+			}
+		}
+
+		if validSpans == 0 {
+			t.Error("expected spans with db.statement and db.operation attributes")
+		}
+		t.Logf("✓ %d spans have valid attributes", validSpans)
+	})
 }
