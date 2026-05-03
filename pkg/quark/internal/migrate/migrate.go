@@ -6,21 +6,52 @@ import (
 )
 
 // SQLType maps Go types to SQL types for the given dialect name.
+//
+// When isPK is true the column DDL includes the PRIMARY KEY constraint.
+// The exact type depends on the Go field kind:
+//
+//   - int / int64 → dialect-native auto-increment (SERIAL, AUTO_INCREMENT, IDENTITY…)
+//   - string      → VARCHAR(36) PRIMARY KEY — UUID-friendly; no auto-increment
+//   - anything else → its natural SQL type + PRIMARY KEY (no auto-increment)
 func SQLType(dialectName string, t reflect.Type, isPK bool) string {
 	if isPK {
-		switch dialectName {
-		case "sqlite":
-			return "INTEGER PRIMARY KEY AUTOINCREMENT"
-		case "postgres":
-			return "SERIAL PRIMARY KEY"
-		case "mysql", "mariadb":
-			return "INT AUTO_INCREMENT PRIMARY KEY"
-		case "mssql":
-			return "INT IDENTITY(1,1) PRIMARY KEY"
-		case "oracle":
-			return "NUMBER GENERATED ALWAYS AS IDENTITY PRIMARY KEY"
+		// Unwrap pointer (e.g. *string, *int64)
+		base := t
+		if base.Kind() == reflect.Ptr {
+			base = base.Elem()
+		}
+
+		switch base.Kind() {
+		case reflect.String:
+			// UUID / ULID / KSUID — caller supplies the value, no auto-generation.
+			switch dialectName {
+			case "oracle":
+				return "VARCHAR2(36) PRIMARY KEY"
+			case "mssql":
+				return "NVARCHAR(36) PRIMARY KEY"
+			default:
+				return "VARCHAR(36) PRIMARY KEY"
+			}
+		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
+			reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+			// Integer PK → auto-increment
+			switch dialectName {
+			case "sqlite":
+				return "INTEGER PRIMARY KEY AUTOINCREMENT"
+			case "postgres":
+				return "SERIAL PRIMARY KEY"
+			case "mysql", "mariadb":
+				return "INT AUTO_INCREMENT PRIMARY KEY"
+			case "mssql":
+				return "INT IDENTITY(1,1) PRIMARY KEY"
+			case "oracle":
+				return "NUMBER GENERATED ALWAYS AS IDENTITY PRIMARY KEY"
+			default:
+				return "INTEGER PRIMARY KEY"
+			}
 		default:
-			return "INTEGER PRIMARY KEY"
+			// Composite-PK columns, bool, float, etc. — just append PRIMARY KEY.
+			return SQLType(dialectName, t, false) + " PRIMARY KEY"
 		}
 	}
 
