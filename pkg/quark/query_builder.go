@@ -5,6 +5,10 @@ import (
 	"time"
 )
 
+// Scope is a reusable query modifier — a function that receives and returns a *Query[T].
+// Scopes can be composed via Apply().
+type Scope[T any] func(*Query[T]) *Query[T]
+
 // condition represents a WHERE clause condition.
 type condition struct {
 	column   string
@@ -54,7 +58,10 @@ type BaseQuery struct {
 	tenantID   string // for RowLevelSecurity isolation
 	tenantCol  string // column name for tenant isolation
 	cache      CacheConfig
-	err        error // stores initialization error from ClientProvider
+	groupBy    []string    // GROUP BY columns
+	having     []condition // HAVING conditions
+	distinct   bool        // SELECT DISTINCT
+	err        error       // stores initialization error from ClientProvider
 }
 
 // Query represents a type-safe database query builder for model T.
@@ -81,7 +88,10 @@ func (q *Query[T]) clone() *Query[T] {
 	c.selectCols = append([]string(nil), q.selectCols...)
 	c.joins = append([]join(nil), q.joins...)
 	c.preloads = append([]string(nil), q.preloads...)
+	c.groupBy = append([]string(nil), q.groupBy...)
+	c.having = append([]condition(nil), q.having...)
 	c.unscoped = q.unscoped
+	c.distinct = q.distinct
 	c.tenantID = q.tenantID
 	c.tenantCol = q.tenantCol
 	c.cache = q.cache
@@ -246,6 +256,67 @@ func (q *Query[T]) Cache(ttl time.Duration, tags ...string) *Query[T] {
 		c.cache.Tags = []string{q.table}
 	}
 	return c
+}
+
+// WhereNot adds a WHERE NOT condition with AND logic.
+//
+// Example:
+//
+//	quark.For[User](ctx, client).WhereNot("active", "=", false).List()
+//
+// Generates: WHERE NOT ("active" = $1)
+func (q *Query[T]) WhereNot(column string, operator string, value any) *Query[T] {
+	c := q.clone()
+	c.where = append(c.where, condition{
+		column:   column,
+		operator: operator,
+		value:    value,
+		logic:    "AND NOT",
+	})
+	return c
+}
+
+// Distinct adds SELECT DISTINCT to the query.
+func (q *Query[T]) Distinct() *Query[T] {
+	c := q.clone()
+	c.distinct = true
+	return c
+}
+
+// GroupBy adds a GROUP BY clause.
+func (q *Query[T]) GroupBy(columns ...string) *Query[T] {
+	c := q.clone()
+	c.groupBy = append(c.groupBy, columns...)
+	return c
+}
+
+// Having adds a HAVING condition (used together with GroupBy).
+func (q *Query[T]) Having(column string, operator string, value any) *Query[T] {
+	c := q.clone()
+	c.having = append(c.having, condition{
+		column:   column,
+		operator: operator,
+		value:    value,
+		logic:    "AND",
+	})
+	return c
+}
+
+// Apply applies one or more Scope functions to the query.
+// Scopes are composable, reusable query fragments.
+//
+// Example:
+//
+//	activeUsers := func(q *quark.Query[User]) *quark.Query[User] {
+//	    return q.Where("active", "=", true)
+//	}
+//	users, _ := quark.For[User](ctx, client).Apply(activeUsers).List()
+func (q *Query[T]) Apply(scopes ...Scope[T]) *Query[T] {
+	current := q
+	for _, s := range scopes {
+		current = s(current)
+	}
+	return current
 }
 
 // WhereJSON adds a WHERE condition for a JSON field.

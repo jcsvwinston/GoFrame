@@ -40,5 +40,5 @@ func (q *BaseQuery) generateCacheKey(sqlStr string, args []any) string {
 		h.Write([]byte(fmt.Sprintf("%v", arg)))
 	}
 
-	return "quark:cache:" + hex.EncodeToString(h.Sum(nil))
+	return hex.EncodeToString(h.Sum(nil))
 }

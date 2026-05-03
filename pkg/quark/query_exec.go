@@ -10,6 +10,76 @@ import (
 	"time"
 )
 
+// timeFormats is the ordered list of layouts tried when parsing datetime strings from drivers
+// (e.g. MySQL without parseTime=true returns []uint8 / string instead of time.Time).
+var timeFormats = []string{
+	time.RFC3339Nano,
+	"2006-01-02 15:04:05.999999999",
+	"2006-01-02 15:04:05",
+	"2006-01-02",
+}
+
+// timeScanner wraps a *time.Time destination so that []uint8 / string values
+// returned by MySQL/MariaDB (when parseTime is not set) are parsed correctly.
+type timeScanner struct{ dest *time.Time }
+
+func (ts timeScanner) Scan(src any) error {
+	if src == nil {
+		*ts.dest = time.Time{}
+		return nil
+	}
+	switch v := src.(type) {
+	case time.Time:
+		*ts.dest = v
+	case []byte:
+		return ts.parse(string(v))
+	case string:
+		return ts.parse(v)
+	default:
+		return fmt.Errorf("timeScanner: unsupported type %T", src)
+	}
+	return nil
+}
+
+func (ts timeScanner) parse(s string) error {
+	for _, layout := range timeFormats {
+		if t, err := time.Parse(layout, s); err == nil {
+			*ts.dest = t
+			return nil
+		}
+	}
+	return fmt.Errorf("timeScanner: cannot parse %q as time", s)
+}
+
+// nullTimeScanner wraps a **time.Time (nullable) destination with the same []uint8 handling.
+type nullTimeScanner struct{ dest **time.Time }
+
+func (ns nullTimeScanner) Scan(src any) error {
+	if src == nil {
+		*ns.dest = nil
+		return nil
+	}
+	t := new(time.Time)
+	if err := (timeScanner{dest: t}).Scan(src); err != nil {
+		return err
+	}
+	*ns.dest = t
+	return nil
+}
+
+// makeScanDest returns a slice of scan destinations for a row, wrapping *time.Time
+// and **time.Time fields with the appropriate scanner.
+func makeScanDest(field reflect.Value) any {
+	iface := field.Addr().Interface()
+	switch dst := iface.(type) {
+	case *time.Time:
+		return timeScanner{dest: dst}
+	case **time.Time:
+		return nullTimeScanner{dest: dst}
+	}
+	return iface
+}
+
 // executeQuery runs a QueryContext through the middleware chain.
 // This is used for SELECT operations returning multiple rows.
 func (q *BaseQuery) executeQuery(ctx context.Context, sqlStr string, args []any) (*sql.Rows, error) {
@@ -110,7 +180,7 @@ func (q *Query[T]) List() ([]T, error) {
 	duration := time.Since(start)
 
 	if err != nil {
-		return nil, fmt.Errorf("query failed: %w", err)
+		return nil, fmt.Errorf("query failed: %w", wrapDBError(err))
 	}
 	defer rows.Close()
 
@@ -125,7 +195,7 @@ func (q *Query[T]) List() ([]T, error) {
 	}
 
 	if err := rows.Err(); err != nil {
-		return nil, err
+		return nil, wrapDBError(err)
 	}
 
 	// 3. Save to Cache
@@ -354,6 +424,9 @@ func (q *Query[T]) buildSelect() (string, []any, error) {
 
 	// SELECT clause
 	sqlBuf.WriteString("SELECT ")
+	if q.distinct {
+		sqlBuf.WriteString("DISTINCT ")
+	}
 	if len(q.selectCols) > 0 {
 		quoted := make([]string, len(q.selectCols))
 		for i, col := range q.selectCols {
@@ -392,7 +465,12 @@ func (q *Query[T]) buildSelect() (string, []any, error) {
 		}
 	}
 
-	// WHERE clause
+	// WHERE clause — enforce MaxWhereConditions limit
+	if q.client != nil && len(q.where) > q.client.limits.MaxWhereConditions {
+		return "", nil, fmt.Errorf("%w: query has %d WHERE conditions, exceeds maximum of %d",
+			ErrInvalidQuery, len(q.where), q.client.limits.MaxWhereConditions)
+	}
+
 	whereConds := q.where
 	if !q.unscoped {
 		if _, hasDeletedAt := q.meta.FieldByCol["deleted_at"]; hasDeletedAt {
@@ -413,6 +491,31 @@ func (q *Query[T]) buildSelect() (string, []any, error) {
 		sqlBuf.WriteString(" WHERE ")
 		sqlBuf.WriteString(whereSQL)
 		args = append(args, whereArgs...)
+	}
+
+	// GROUP BY clause
+	if len(q.groupBy) > 0 {
+		quotedGrp := make([]string, len(q.groupBy))
+		for i, col := range q.groupBy {
+			if err := q.guard.ValidateIdentifier(col); err != nil {
+				return "", nil, err
+			}
+			quotedGrp[i] = q.dialect.Quote(col)
+		}
+		sqlBuf.WriteString(" GROUP BY ")
+		sqlBuf.WriteString(strings.Join(quotedGrp, ", "))
+	}
+
+	// HAVING clause
+	if len(q.having) > 0 {
+		argIndex := len(args) + 1
+		havingSQL, havingArgs, err := q.buildWhereClause(q.having, argIndex)
+		if err != nil {
+			return "", nil, err
+		}
+		sqlBuf.WriteString(" HAVING ")
+		sqlBuf.WriteString(havingSQL)
+		args = append(args, havingArgs...)
 	}
 
 	// ORDER BY clause
@@ -450,7 +553,15 @@ func (q *Query[T]) buildSelect() (string, []any, error) {
 		sqlBuf.WriteString(limitOffset)
 	}
 
-	return sqlBuf.String(), args, nil
+	sqlStr := sqlBuf.String()
+
+	// Enforce MaxQueryLength
+	if q.client != nil && q.client.limits.MaxQueryLength > 0 && len(sqlStr) > q.client.limits.MaxQueryLength {
+		return "", nil, fmt.Errorf("%w: generated SQL length %d exceeds maximum of %d bytes",
+			ErrInvalidQuery, len(sqlStr), q.client.limits.MaxQueryLength)
+	}
+
+	return sqlStr, args, nil
 }
 
 // buildWhereClause recursively builds WHERE SQL from conditions,
@@ -462,12 +573,19 @@ func (q *Query[T]) buildWhereClause(conds []condition, argIndex int) (string, []
 	for i, cond := range conds {
 		// Determine connector
 		connector := ""
+		not := ""
 		if i > 0 {
-			if cond.logic == "OR" {
+			switch cond.logic {
+			case "OR":
 				connector = " OR "
-			} else {
+			case "AND NOT":
+				connector = " AND "
+				not = "NOT "
+			default:
 				connector = " AND "
 			}
+		} else if cond.logic == "AND NOT" {
+			not = "NOT "
 		}
 
 		// Handle grouped sub-conditions (from Or())
@@ -488,12 +606,21 @@ func (q *Query[T]) buildWhereClause(conds []condition, argIndex int) (string, []
 				return "", nil, err
 			}
 		}
+		// Raw expressions with empty operator are written as-is (e.g. subqueries)
+		if cond.isRaw && cond.operator == "" {
+			parts = append(parts, connector+not+cond.column)
+			continue
+		}
+
 		if err := q.guard.ValidateOperator(cond.operator); err != nil {
 			return "", nil, err
 		}
 
 		var condSQL strings.Builder
 		condSQL.WriteString(connector)
+		if not != "" {
+			condSQL.WriteString(not)
+		}
 		if cond.isRaw {
 			condSQL.WriteString(cond.column)
 		} else {
@@ -560,7 +687,7 @@ func (q *Query[T]) scanRow(rows *sql.Rows, dest *T) error {
 		// Fast path: use cached metadata
 		if q.meta != nil {
 			if fm, ok := q.meta.FieldByCol[strings.ToLower(col)]; ok {
-				scanDest[i] = elem.Field(fm.Index).Addr().Interface()
+				scanDest[i] = makeScanDest(elem.Field(fm.Index))
 				matched = true
 			}
 		}
@@ -568,7 +695,7 @@ func (q *Query[T]) scanRow(rows *sql.Rows, dest *T) error {
 			// Slow path: reflection lookup
 			field := q.findField(elem, col)
 			if field.IsValid() && field.CanAddr() {
-				scanDest[i] = field.Addr().Interface()
+				scanDest[i] = makeScanDest(field)
 				matched = true
 			} else {
 				var discard any
@@ -602,11 +729,6 @@ func (q *Query[T]) findField(elem reflect.Value, column string) reflect.Value {
 
 // loadRelations eager loads requested relations for the given results.
 func (q *Query[T]) loadRelations(results []T) error {
-	if !q.client.limits.AllowRawQueries {
-		q.client.limits.AllowRawQueries = true // temporarily enable for internal use
-		defer func() { q.client.limits.AllowRawQueries = false }()
-	}
-
 	for _, relName := range q.preloads {
 		relMeta, ok := q.meta.Relations[relName]
 		if !ok {
@@ -616,7 +738,7 @@ func (q *Query[T]) loadRelations(results []T) error {
 		relModel := GetModelMetaByType(relMeta.RefType)
 
 		switch relMeta.Type {
-		case "m2m":
+		case "m2m", "many_to_many":
 			if err := q.loadM2MRelation(results, relName, relMeta, relModel); err != nil {
 				return err
 			}
@@ -840,7 +962,7 @@ func (q *Query[T]) loadM2MRelation(results []T, relName string, relMeta *Relatio
 		scanDest := make([]any, len(cols))
 		for i, col := range cols {
 			if fm, ok := relModel.FieldByCol[col]; ok {
-				scanDest[i] = relVal.Field(fm.Index).Addr().Interface()
+				scanDest[i] = makeScanDest(relVal.Field(fm.Index))
 			} else {
 				var discard any
 				scanDest[i] = &discard
@@ -950,7 +1072,7 @@ func (q *Query[T]) scanAndMapRelations(rows *sql.Rows, results []T, relName stri
 		scanDest := make([]any, len(cols))
 		for i, col := range cols {
 			if fm, ok := relModel.FieldByCol[strings.ToLower(col)]; ok {
-				scanDest[i] = relVal.Field(fm.Index).Addr().Interface()
+				scanDest[i] = makeScanDest(relVal.Field(fm.Index))
 			} else {
 				var discard any
 				scanDest[i] = &discard
@@ -984,6 +1106,98 @@ func (q *Query[T]) scanAndMapRelations(rows *sql.Rows, results []T, relName stri
 	return rows.Err()
 }
 
+// aggregate executes SELECT agg_func(column) FROM table WHERE …
+func (q *Query[T]) aggregate(fn, column string) (float64, error) {
+	if q.client == nil {
+		return 0, fmt.Errorf("%w: client not initialized", ErrInvalidQuery)
+	}
+	if err := q.guard.ValidateIdentifier(column); err != nil {
+		return 0, err
+	}
+
+	var sqlBuf strings.Builder
+	var args []any
+
+	sqlBuf.WriteString("SELECT ")
+	sqlBuf.WriteString(fn)
+	sqlBuf.WriteString("(")
+	sqlBuf.WriteString(q.dialect.Quote(column))
+	sqlBuf.WriteString(") FROM ")
+	sqlBuf.WriteString(q.fullTableName())
+
+	whereConds := q.where
+	if !q.unscoped {
+		if _, hasDeletedAt := q.meta.FieldByCol["deleted_at"]; hasDeletedAt {
+			whereConds = append([]condition{{column: "deleted_at", operator: "IS NULL", logic: "AND"}}, whereConds...)
+		}
+	}
+	if len(whereConds) > 0 {
+		whereSQL, whereArgs, err := q.buildWhereClause(whereConds, 1)
+		if err != nil {
+			return 0, err
+		}
+		sqlBuf.WriteString(" WHERE ")
+		sqlBuf.WriteString(whereSQL)
+		args = append(args, whereArgs...)
+	}
+
+	ctx, cancel := context.WithTimeout(q.ctx, q.client.limits.QueryTimeout)
+	defer cancel()
+
+	row := q.executeQueryRow(ctx, sqlBuf.String(), args)
+	var result sql.NullFloat64
+	if err := row.Scan(&result); err != nil {
+		return 0, err
+	}
+	if !result.Valid {
+		return 0, nil
+	}
+	return result.Float64, nil
+}
+
+// Sum returns the sum of the given column across all matching rows.
+func (q *Query[T]) Sum(column string) (float64, error) {
+	return q.aggregate("SUM", column)
+}
+
+// Avg returns the average of the given column across all matching rows.
+func (q *Query[T]) Avg(column string) (float64, error) {
+	return q.aggregate("AVG", column)
+}
+
+// Min returns the minimum value of the given column across all matching rows.
+func (q *Query[T]) Min(column string) (float64, error) {
+	return q.aggregate("MIN", column)
+}
+
+// Max returns the maximum value of the given column across all matching rows.
+func (q *Query[T]) Max(column string) (float64, error) {
+	return q.aggregate("MAX", column)
+}
+
+// WhereSubquery adds a WHERE column operator (subquery) condition.
+// The subquery is a raw SQL string. Use this only when AllowRawQueries is enabled.
+//
+// Example:
+//
+//	sub := "SELECT MAX(id) FROM orders WHERE status = 'open'"
+//	quark.For[User](ctx, client).WhereSubquery("id", "IN", sub).List()
+func (q *Query[T]) WhereSubquery(column, operator, subquery string) *Query[T] {
+	c := q.clone()
+	c.where = append(c.where, condition{
+		column:   q.dialect.Quote(column) + " " + operator + " (" + subquery + ")",
+		operator: "IS NOT NULL", // sentinel — overridden by isRaw rendering below
+		logic:    "AND",
+		isRaw:    true,
+		value:    nil,
+	})
+	// Override: store as a raw expression without the sentinel operator
+	last := &c.where[len(c.where)-1]
+	last.column = q.dialect.Quote(column) + " " + operator + " (" + subquery + ")"
+	last.operator = ""
+	return c
+}
+
 // scanAndMapPolymorphicRelations scans rows and maps them to parent structs (for polymorphic relations)
 func (q *Query[T]) scanAndMapPolymorphicRelations(rows *sql.Rows, results []T, relName string, relMeta *RelationMeta, relModel *ModelMeta, parentKeyMap map[any][]int) error {
 	cols, _ := rows.Columns()
@@ -1001,7 +1215,7 @@ func (q *Query[T]) scanAndMapPolymorphicRelations(rows *sql.Rows, results []T, r
 		scanDest := make([]any, len(cols))
 		for i, col := range cols {
 			if fm, ok := relModel.FieldByCol[strings.ToLower(col)]; ok {
-				scanDest[i] = relVal.Field(fm.Index).Addr().Interface()
+				scanDest[i] = makeScanDest(relVal.Field(fm.Index))
 			} else {
 				var discard any
 				scanDest[i] = &discard

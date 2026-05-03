@@ -40,19 +40,13 @@ func NewEventBus(client *Client) *EventBus {
 }
 
 // CreateListener creates an EventListener based on the dialect.
+//
+// NOTE: EventBus is experimental in V1. Native LISTEN/NOTIFY (PostgreSQL)
+// requires a dedicated connection with a driver-specific implementation
+// (e.g., github.com/lib/pq). This will be completed in a future release.
 func (eb *EventBus) CreateListener() (EventListener, error) {
-	// In a real implementation, we would check the dialect and return
-	// a specific listener implementation (e.g., using github.com/lib/pq for Postgres).
-	// For V1, we return a mock or an error indicating lack of native driver integration.
-	
-	switch eb.client.dialect.Name() {
-	case "postgres":
-		// Here you would instantiate a Postgres specific listener using the active connection config.
-		// Example: return newPostgresListener(eb.client.dsn), nil
-		return nil, fmt.Errorf("native postgres listen/notify requires specific driver integration not yet mapped in V1")
-	default:
-		return nil, fmt.Errorf("event listeners are not natively supported by the %s dialect", eb.client.dialect.Name())
-	}
+	return nil, fmt.Errorf("%w: EventBus.CreateListener is not yet implemented for dialect %q — this feature is experimental in V1",
+		ErrDialectNotSupported, eb.client.dialect.Name())
 }
 
 // Notify is a helper to trigger a database event (e.g., NOTIFY in Postgres).

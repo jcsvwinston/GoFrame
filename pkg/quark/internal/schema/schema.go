@@ -100,6 +100,9 @@ type FieldMeta struct {
 	Type      reflect.Type
 	IsPK      bool
 	OldColumn string // for renames
+	NotNull   bool   // from tag: quark:"not_null" or nullable:"false"
+	Default   string // from tag: default:"value"
+	Unique    bool   // from tag: quark:"unique"
 }
 
 // modelRegistry caches ModelMeta by reflect.Type.
@@ -240,7 +243,13 @@ func computeModelMeta(t reflect.Type) *ModelMeta {
 					relMeta.PolyType = parts[0]
 					relMeta.PolyTypeColumn = "poly_type"
 				}
-				relMeta.PolyIDColumn = ToSnakeCase(field.Name) + "_id"
+				// Use the join tag value as the PolyIDColumn if provided,
+				// otherwise derive from field name.
+				if joinCol != "" {
+					relMeta.PolyIDColumn = joinCol
+				} else {
+					relMeta.PolyIDColumn = ToSnakeCase(field.Name) + "_id"
+				}
 			}
 
 			meta.Relations[field.Name] = relMeta
@@ -260,8 +269,26 @@ func computeModelMeta(t reflect.Type) *ModelMeta {
 			}
 		}
 		oldCol := ""
-		if quarkTag := field.Tag.Get("quark"); strings.HasPrefix(quarkTag, "rename:") {
-			oldCol = strings.TrimPrefix(quarkTag, "rename:")
+		notNull := isPK // PKs are always NOT NULL
+		defaultVal := ""
+		unique := false
+		if quarkTag := field.Tag.Get("quark"); quarkTag != "" {
+			for _, part := range strings.Split(quarkTag, ",") {
+				part = strings.TrimSpace(part)
+				if strings.HasPrefix(part, "rename:") {
+					oldCol = strings.TrimPrefix(part, "rename:")
+				} else if part == "not_null" {
+					notNull = true
+				} else if part == "unique" {
+					unique = true
+				}
+			}
+		}
+		if nullable := field.Tag.Get("nullable"); nullable == "false" {
+			notNull = true
+		}
+		if def := field.Tag.Get("default"); def != "" {
+			defaultVal = def
 		}
 
 		fm := FieldMeta{
@@ -271,6 +298,9 @@ func computeModelMeta(t reflect.Type) *ModelMeta {
 			Type:      field.Type,
 			IsPK:      isPK,
 			OldColumn: oldCol,
+			NotNull:   notNull,
+			Default:   defaultVal,
+			Unique:    unique,
 		}
 		meta.Fields = append(meta.Fields, fm)
 		meta.FieldByCol[strings.ToLower(dbTag)] = &meta.Fields[len(meta.Fields)-1]

@@ -83,6 +83,14 @@ type Dialect interface {
 
 	// SupportsTransactionalDDL indicates if the dialect supports DDL in transactions.
 	SupportsTransactionalDDL() bool
+
+	// UpsertSQL returns the dialect-specific upsert (INSERT … ON CONFLICT … DO UPDATE)
+	// fragment that is appended after the VALUES clause.
+	// conflictCols: columns that define the conflict target (e.g. primary key or unique index).
+	// updateCols:   columns to update on conflict; if empty defaults to all non-conflict columns.
+	// argOffset:    current placeholder index (1-based) so positional dialects stay in sync.
+	// Returns the SQL fragment and the additional argument list (for the SET clause values).
+	UpsertSQL(conflictCols, updateCols []string, argOffset int) string
 }
 
 // baseDialect provides common functionality for all dialects.
@@ -202,6 +210,26 @@ func (p *PostgresDialect) SupportsTransactionalDDL() bool {
 	return true
 }
 
+// UpsertSQL for PostgreSQL: INSERT … ON CONFLICT (cols) DO UPDATE SET col = EXCLUDED.col
+func (p *PostgresDialect) UpsertSQL(conflictCols, updateCols []string, _ int) string {
+	if len(conflictCols) == 0 {
+		return " ON CONFLICT DO NOTHING"
+	}
+	quoted := make([]string, len(conflictCols))
+	for i, c := range conflictCols {
+		quoted[i] = p.Quote(c)
+	}
+	conflict := strings.Join(quoted, ", ")
+	if len(updateCols) == 0 {
+		return fmt.Sprintf(" ON CONFLICT (%s) DO NOTHING", conflict)
+	}
+	sets := make([]string, len(updateCols))
+	for i, c := range updateCols {
+		sets[i] = fmt.Sprintf("%s = EXCLUDED.%s", p.Quote(c), p.Quote(c))
+	}
+	return fmt.Sprintf(" ON CONFLICT (%s) DO UPDATE SET %s", conflict, strings.Join(sets, ", "))
+}
+
 // MySQLDialect implements the MySQL dialect.
 type MySQLDialect struct {
 	baseDialect
@@ -303,6 +331,18 @@ func (m *MySQLDialect) RenameTable(oldName, newName string) string {
 func (m *MySQLDialect) SupportsTransactionalDDL() bool {
 	// MySQL does not support transactional DDL
 	return false
+}
+
+// UpsertSQL for MySQL: INSERT … ON DUPLICATE KEY UPDATE col = VALUES(col)
+func (m *MySQLDialect) UpsertSQL(conflictCols, updateCols []string, _ int) string {
+	if len(updateCols) == 0 {
+		return " ON DUPLICATE KEY UPDATE " + m.Quote(conflictCols[0]) + " = VALUES(" + m.Quote(conflictCols[0]) + ")"
+	}
+	sets := make([]string, len(updateCols))
+	for i, c := range updateCols {
+		sets[i] = fmt.Sprintf("%s = VALUES(%s)", m.Quote(c), m.Quote(c))
+	}
+	return " ON DUPLICATE KEY UPDATE " + strings.Join(sets, ", ")
 }
 
 // SQLiteDialect implements the SQLite dialect.
@@ -419,6 +459,26 @@ func (s *SQLiteDialect) SupportsTransactionalDDL() bool {
 	return true
 }
 
+// UpsertSQL for SQLite: ON CONFLICT (cols) DO UPDATE SET col = excluded.col
+func (s *SQLiteDialect) UpsertSQL(conflictCols, updateCols []string, _ int) string {
+	if len(conflictCols) == 0 {
+		return " ON CONFLICT DO NOTHING"
+	}
+	quoted := make([]string, len(conflictCols))
+	for i, c := range conflictCols {
+		quoted[i] = s.Quote(c)
+	}
+	conflict := strings.Join(quoted, ", ")
+	if len(updateCols) == 0 {
+		return fmt.Sprintf(" ON CONFLICT (%s) DO NOTHING", conflict)
+	}
+	sets := make([]string, len(updateCols))
+	for i, c := range updateCols {
+		sets[i] = fmt.Sprintf("%s = excluded.%s", s.Quote(c), s.Quote(c))
+	}
+	return fmt.Sprintf(" ON CONFLICT (%s) DO UPDATE SET %s", conflict, strings.Join(sets, ", "))
+}
+
 // MSSQLDialect implements the Microsoft SQL Server dialect.
 type MSSQLDialect struct {
 	baseDialect
@@ -523,6 +583,14 @@ func (m *MSSQLDialect) SupportsTransactionalDDL() bool {
 	return true
 }
 
+// UpsertSQL for MSSQL: uses MERGE statement appended as a WITH-style hint.
+// MSSQL requires MERGE syntax which cannot be appended to a plain INSERT,
+// so we return a marker that buildUpsert handles specially.
+func (m *MSSQLDialect) UpsertSQL(conflictCols, updateCols []string, _ int) string {
+	// MSSQL MERGE is built separately in buildUpsert — return empty to signal that.
+	return ""
+}
+
 // OracleDialect implements the Oracle Database dialect.
 type OracleDialect struct {
 	baseDialect
@@ -623,6 +691,11 @@ func (o *OracleDialect) RenameTable(oldName, newName string) string {
 func (o *OracleDialect) SupportsTransactionalDDL() bool {
 	// Oracle supports transactional DDL
 	return true
+}
+
+// UpsertSQL for Oracle: MERGE syntax — same as MSSQL, built separately.
+func (o *OracleDialect) UpsertSQL(conflictCols, updateCols []string, _ int) string {
+	return ""
 }
 
 func (o *OracleDialect) JSONExtract(column, path string) string {
@@ -760,6 +833,11 @@ func (m *MariaDBDialect) AlterTableAlterColumn(table, column, newDataType string
 // implicit commits around DDL statements.
 func (m *MariaDBDialect) SupportsTransactionalDDL() bool {
 	return false
+}
+
+// UpsertSQL for MariaDB: INSERT … ON DUPLICATE KEY UPDATE (same as MySQL)
+func (m *MariaDBDialect) UpsertSQL(conflictCols, updateCols []string, argOffset int) string {
+	return m.MySQLDialect.UpsertSQL(conflictCols, updateCols, argOffset)
 }
 
 // customDialectRegistry holds user-registered dialects

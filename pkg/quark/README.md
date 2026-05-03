@@ -135,20 +135,45 @@ first, err := quark.For[User](ctx, client).Where("active", "=", true).First()
 users, err := quark.For[User](ctx, client).Limit(10).List()
 ```
 
-### Update (Actualizar)
-*Nota: Update() actualiza todos los campos de la entidad.*
+### Update (Actualizar — Parcial)
+
+> **Importante:** `Update()` realiza una actualización **parcial**: sólo actualiza los campos con valor no-zero en el struct. Los campos con su valor cero (0, "", false, nil) **no se modifican** en base de datos. Para actualizar a valores zero de forma explícita, usa `UpdateMap`.
+
 ```go
 user, _ := quark.For[User](ctx, client).Find(1)
-user.Name = "Bob"
+user.Name = "Bob"  // Solo este campo será actualizado
 err := quark.For[User](ctx, client).Update(&user)
+// SQL: UPDATE users SET name = 'Bob' WHERE id = 1
 ```
 
-Si sólo quieres actualizar campos específicos o múltiples filas, usa `UpdateMap`:
+Para actualizar campos específicos o forzar valores zero, usa `UpdateMap`:
 ```go
-// UPDATE users SET active = 0 WHERE name = 'Alice'
+// UPDATE users SET active = false, name = 'Evelyn' WHERE id = 1
 affected, err := quark.For[User](ctx, client).
-    Where("name", "=", "Alice").
-    UpdateMap(map[string]any{"active": false})
+    Where("id", "=", user.ID).
+    UpdateMap(map[string]any{"active": false, "name": "Evelyn"})
+```
+
+### Upsert (INSERT … ON CONFLICT)
+
+Inserta o actualiza un registro cuando se produce un conflicto en las columnas indicadas. Compatible con los 6 dialectos (Postgres, MySQL, MariaDB, SQLite, MSSQL, Oracle).
+
+```go
+user := User{Email: "alice@example.com", Name: "Alice", Age: 30}
+// Inserta; si ya existe un registro con ese email, actualiza name y age
+err := quark.For[User](ctx, client).Upsert(&user, []string{"email"}, []string{"name", "age"})
+```
+
+### CreateBatch (Inserción masiva)
+
+Inserta múltiples registros en una sola sentencia SQL.
+
+```go
+users := []*User{
+    {Name: "Alice", Email: "alice@example.com"},
+    {Name: "Bob",   Email: "bob@example.com"},
+}
+err := quark.For[User](ctx, client).CreateBatch(users)
 ```
 
 ### Delete (Eliminar)
@@ -197,6 +222,66 @@ users, err := quark.For[User](ctx, client).
 
 // Contar registros
 count, err := quark.For[User](ctx, client).Where("active", "=", true).Count()
+```
+
+### WhereNot
+
+Niega una condición añadiendo `NOT` al predicado:
+
+```go
+// WHERE NOT active = true  →  todos los usuarios inactivos
+users, _ := quark.For[User](ctx, client).WhereNot("active", "=", true).List()
+```
+
+### Distinct
+
+```go
+// SELECT DISTINCT name FROM users
+users, _ := quark.For[User](ctx, client).Select("name").Distinct().List()
+```
+
+### GroupBy y Having
+
+```go
+// SELECT department, COUNT(*) FROM employees GROUP BY department HAVING age > 30
+rows, _ := quark.For[Employee](ctx, client).
+    Select("department").
+    GroupBy("department").
+    Having("age", ">", 30).
+    List()
+```
+
+### Agregaciones (Sum, Avg, Min, Max)
+
+```go
+totalSales, _ := quark.For[Order](ctx, client).Sum("amount")
+avgAge,     _ := quark.For[User](ctx, client).Where("active", "=", true).Avg("age")
+oldest,     _ := quark.For[User](ctx, client).Max("age")
+youngest,   _ := quark.For[User](ctx, client).Min("age")
+```
+
+### Scopes (Consultas Reutilizables)
+
+Encapsula filtros frecuentes como funciones y aplícalos con `Apply()`:
+
+```go
+activeOnly := quark.Scope[User](func(q *quark.Query[User]) *quark.Query[User] {
+    return q.Where("active", "=", true)
+})
+adults := quark.Scope[User](func(q *quark.Query[User]) *quark.Query[User] {
+    return q.Where("age", ">=", 18)
+})
+
+users, _ := quark.For[User](ctx, client).Apply(activeOnly, adults).List()
+```
+
+### Subqueries en WHERE
+
+```go
+// WHERE id IN (SELECT user_id FROM orders WHERE total > 100)
+users, _ := quark.For[User](ctx, client).
+    WhereSubquery("id", "IN", `SELECT user_id FROM orders WHERE total > 100`).
+    List()
 ```
 
 ---
@@ -363,6 +448,58 @@ err := quark.Notify(ctx, client, "user_updates", "user_id_1_changed")
 ```
 
 ---
+
+## 🗄 Schema y Migraciones
+
+### Auto-Migrate
+
+Crea la tabla para un modelo si no existe:
+
+```go
+// Crear tablas en la base de datos
+err := client.Migrate(ctx, &User{}, &Order{})
+```
+
+### Auto-Sync (Evolución del esquema)
+
+Sincroniza la tabla con el struct actual — añade columnas nuevas, renombra con `quark:"rename:old_col"`:
+
+```go
+err := client.Sync(ctx, &User{})
+```
+
+### Tags de columna: NOT NULL, DEFAULT y UNIQUE
+
+```go
+type Product struct {
+    ID    int64   `db:"id"    pk:"true"`
+    Name  string  `db:"name"  quark:"not_null"`
+    Price float64 `db:"price" default:"0.00" quark:"not_null"`
+    SKU   string  `db:"sku"   quark:"unique"`
+}
+```
+
+| Tag                  | Efecto en DDL                        |
+|----------------------|--------------------------------------|
+| `quark:"not_null"`   | `NOT NULL`                           |
+| `nullable:"false"`   | `NOT NULL` (alternativa)             |
+| `default:"valor"`    | `DEFAULT valor`                      |
+| `quark:"unique"`     | `UNIQUE`                             |
+
+### CreateIndex
+
+```go
+// CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email ON users (email)
+err := client.CreateIndex(ctx, "users", "idx_users_email", []string{"email"}, true)
+```
+
+### AddForeignKey
+
+```go
+// ALTER TABLE orders ADD CONSTRAINT fk_orders_user FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+err := client.AddForeignKey(ctx, "orders", "fk_orders_user",
+    []string{"user_id"}, "users", []string{"id"}, "CASCADE", "")
+```
 
 ---
 

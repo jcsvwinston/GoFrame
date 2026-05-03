@@ -12,6 +12,7 @@ import (
 	"github.com/jcsvwinston/GoFrame/pkg/quark"
 	"github.com/jcsvwinston/GoFrame/pkg/quark/cache/memory"
 	"github.com/jcsvwinston/GoFrame/pkg/quark/cache/redis"
+	quarkotel "github.com/jcsvwinston/GoFrame/pkg/quark/otel"
 )
 
 type sqlCounter struct {
@@ -107,6 +108,10 @@ func SharedSuite(t *testing.T, client *quark.Client) {
 	t.Run("CompositePK", func(t *testing.T) {
 		testCompositePK(ctx, t, client)
 	})
+
+	t.Run("P1Features", func(t *testing.T) {
+		testP1Features(ctx, t, client)
+	})
 }
 
 func testCaching(ctx context.Context, t *testing.T, client *quark.Client) {
@@ -142,6 +147,9 @@ func runCacheValidation(ctx context.Context, t *testing.T, baseClient *quark.Cli
 
 	dropTable(client, "cache_models")
 	client.Migrate(ctx, &CacheModel{})
+
+	// Flush any stale cache entries for this table from prior runs
+	_ = store.InvalidateTags(ctx, "cache_models")
 
 	// Insert test data
 	m := &CacheModel{ID: 1, Data: "initial"}
@@ -508,7 +516,7 @@ func (o *mockObserver) ObserveQuery(e quark.QueryEvent) {
 }
 
 func testEvents(ctx context.Context, t *testing.T, client *quark.Client) {
-	dropTable(client, "events_users")
+	dropTable(client, "event_users")
 	obs := &mockObserver{}
 	// Since client options are applied at quark.New(), we can't easily add an observer to an existing client
 	// unless we use a middleware or the client supports it.
@@ -832,11 +840,270 @@ func testJSON(ctx context.Context, t *testing.T, client *quark.Client) {
 	}
 }
 
-// testOtelInSharedSuite verifica que las operaciones generan trazas OTel
+// testP1Features validates P0/P1 query features across all dialects.
+func testP1Features(ctx context.Context, t *testing.T, client *quark.Client) {
+	// ── models ──────────────────────────────────────────────────────────────
+	type P1SuiteUser struct {
+		ID     int64  `db:"id" pk:"true"`
+		Name   string `db:"name"`
+		Email  string `db:"email"`
+		Age    int    `db:"age"`
+		Active bool   `db:"active"`
+	}
+	type P1SuiteOrder struct {
+		ID     int64   `db:"id" pk:"true"`
+		UserID int64   `db:"user_id"`
+		Amount float64 `db:"amount"`
+	}
+
+	dropTable(client, "p1_suite_users")
+	dropTable(client, "p1_suite_orders")
+	if err := client.Migrate(ctx, &P1SuiteUser{}, &P1SuiteOrder{}); err != nil {
+		t.Fatalf("migrate P1 tables: %v", err)
+	}
+
+	// ── Upsert ───────────────────────────────────────────────────────────────
+	t.Run("Upsert", func(t *testing.T) {
+		// Insert a record first; the PK always has a UNIQUE constraint across dialects.
+		u := &P1SuiteUser{Name: "Alice", Email: "alice-suite@test.com", Age: 30}
+		if err := quark.For[P1SuiteUser](ctx, client).Create(u); err != nil {
+			t.Fatalf("create: %v", err)
+		}
+		if u.ID == 0 {
+			t.Fatal("create did not populate ID")
+		}
+		// Upsert on PK: same ID → update name/age.
+		u2 := &P1SuiteUser{ID: u.ID, Email: "alice-suite@test.com", Name: "Alice Updated", Age: 31}
+		if err := quark.For[P1SuiteUser](ctx, client).Upsert(u2, []string{"id"}, []string{"name", "age"}); err != nil {
+			t.Fatalf("upsert: %v", err)
+		}
+		got, err := quark.For[P1SuiteUser](ctx, client).Find(u.ID)
+		if err != nil {
+			t.Fatalf("find after upsert: %v", err)
+		}
+		if got.Name != "Alice Updated" {
+			t.Errorf("upsert: expected 'Alice Updated', got %q", got.Name)
+		}
+	})
+
+	// ── CreateBatch ──────────────────────────────────────────────────────────
+	t.Run("CreateBatch", func(t *testing.T) {
+		batch := []*P1SuiteUser{
+			{Name: "Batch1", Email: "b1-suite@test.com", Age: 10},
+			{Name: "Batch2", Email: "b2-suite@test.com", Age: 20},
+			{Name: "Batch3", Email: "b3-suite@test.com", Age: 30},
+		}
+		if err := quark.For[P1SuiteUser](ctx, client).CreateBatch(batch); err != nil {
+			t.Fatalf("CreateBatch: %v", err)
+		}
+		count, _ := quark.For[P1SuiteUser](ctx, client).
+			WhereIn("email", []any{"b1-suite@test.com", "b2-suite@test.com", "b3-suite@test.com"}).
+			Count()
+		if count != 3 {
+			t.Errorf("CreateBatch: expected 3 records, got %d", count)
+		}
+	})
+
+	// ── WhereNot ─────────────────────────────────────────────────────────────
+	t.Run("WhereNot", func(t *testing.T) {
+		dropTable(client, "p1_suite_users")
+		client.Migrate(ctx, &P1SuiteUser{})
+		quark.For[P1SuiteUser](ctx, client).CreateBatch([]*P1SuiteUser{
+			{Name: "WNActive", Email: "wn-active@test.com", Active: true},
+			{Name: "WNInactive", Email: "wn-inactive@test.com", Active: false},
+		})
+		results, err := quark.For[P1SuiteUser](ctx, client).WhereNot("active", "=", true).List()
+		if err != nil {
+			t.Fatalf("WhereNot: %v", err)
+		}
+		for _, r := range results {
+			if r.Active {
+				t.Errorf("WhereNot: got active user %q", r.Name)
+			}
+		}
+	})
+
+	// ── Distinct ─────────────────────────────────────────────────────────────
+	t.Run("Distinct", func(t *testing.T) {
+		dropTable(client, "p1_suite_users")
+		client.Migrate(ctx, &P1SuiteUser{})
+		quark.For[P1SuiteUser](ctx, client).CreateBatch([]*P1SuiteUser{
+			{Name: "DistinctA", Email: "da1@test.com"},
+			{Name: "DistinctA", Email: "da2@test.com"},
+			{Name: "DistinctB", Email: "db1@test.com"},
+		})
+		results, err := quark.For[P1SuiteUser](ctx, client).Select("name").Distinct().List()
+		if err != nil {
+			t.Fatalf("Distinct: %v", err)
+		}
+		seen := map[string]int{}
+		for _, r := range results {
+			seen[r.Name]++
+		}
+		for name, cnt := range seen {
+			if cnt > 1 {
+				t.Errorf("Distinct: name %q appeared %d times", name, cnt)
+			}
+		}
+	})
+
+	// ── GroupBy ──────────────────────────────────────────────────────────────
+	t.Run("GroupBy", func(t *testing.T) {
+		dropTable(client, "p1_suite_users")
+		client.Migrate(ctx, &P1SuiteUser{})
+		quark.For[P1SuiteUser](ctx, client).CreateBatch([]*P1SuiteUser{
+			{Name: "GroupA", Email: "g1@test.com", Age: 20},
+			{Name: "GroupA", Email: "g2@test.com", Age: 20},
+			{Name: "GroupB", Email: "g3@test.com", Age: 30},
+		})
+		results, err := quark.For[P1SuiteUser](ctx, client).Select("name").GroupBy("name").List()
+		if err != nil {
+			t.Fatalf("GroupBy: %v", err)
+		}
+		if len(results) != 2 {
+			t.Errorf("GroupBy: expected 2 grouped rows, got %d", len(results))
+		}
+	})
+
+	// ── Aggregates ───────────────────────────────────────────────────────────
+	t.Run("Aggregates", func(t *testing.T) {
+		dropTable(client, "p1_suite_orders")
+		client.Migrate(ctx, &P1SuiteOrder{})
+		quark.For[P1SuiteOrder](ctx, client).CreateBatch([]*P1SuiteOrder{
+			{UserID: 1, Amount: 10.0},
+			{UserID: 1, Amount: 20.0},
+			{UserID: 2, Amount: 5.0},
+		})
+
+		sum, err := quark.For[P1SuiteOrder](ctx, client).Sum("amount")
+		if err != nil {
+			t.Fatalf("Sum: %v", err)
+		}
+		if sum != 35.0 {
+			t.Errorf("Sum: expected 35.0, got %f", sum)
+		}
+
+		min, err := quark.For[P1SuiteOrder](ctx, client).Min("amount")
+		if err != nil {
+			t.Fatalf("Min: %v", err)
+		}
+		if min != 5.0 {
+			t.Errorf("Min: expected 5.0, got %f", min)
+		}
+
+		max, err := quark.For[P1SuiteOrder](ctx, client).Max("amount")
+		if err != nil {
+			t.Fatalf("Max: %v", err)
+		}
+		if max != 20.0 {
+			t.Errorf("Max: expected 20.0, got %f", max)
+		}
+
+		avg, err := quark.For[P1SuiteOrder](ctx, client).Where("user_id", "=", 1).Avg("amount")
+		if err != nil {
+			t.Fatalf("Avg: %v", err)
+		}
+		if avg != 15.0 {
+			t.Errorf("Avg: expected 15.0, got %f", avg)
+		}
+	})
+
+	// ── Scopes ───────────────────────────────────────────────────────────────
+	t.Run("Scopes", func(t *testing.T) {
+		dropTable(client, "p1_suite_users")
+		client.Migrate(ctx, &P1SuiteUser{})
+		quark.For[P1SuiteUser](ctx, client).CreateBatch([]*P1SuiteUser{
+			{Name: "SA", Email: "sa@test.com", Active: true, Age: 20},
+			{Name: "SB", Email: "sb@test.com", Active: false, Age: 30},
+			{Name: "SC", Email: "sc@test.com", Active: true, Age: 40},
+		})
+		activeOnly := quark.Scope[P1SuiteUser](func(q *quark.Query[P1SuiteUser]) *quark.Query[P1SuiteUser] {
+			return q.Where("active", "=", true)
+		})
+		olderThan25 := quark.Scope[P1SuiteUser](func(q *quark.Query[P1SuiteUser]) *quark.Query[P1SuiteUser] {
+			return q.Where("age", ">", 25)
+		})
+		results, err := quark.For[P1SuiteUser](ctx, client).Apply(activeOnly, olderThan25).List()
+		if err != nil {
+			t.Fatalf("Scopes: %v", err)
+		}
+		if len(results) != 1 || results[0].Name != "SC" {
+			t.Errorf("Scopes: expected [SC], got %v", results)
+		}
+	})
+
+	// ── WhereSubquery ────────────────────────────────────────────────────────
+	t.Run("WhereSubquery", func(t *testing.T) {
+		dropTable(client, "p1_suite_orders")
+		client.Migrate(ctx, &P1SuiteOrder{})
+		quark.For[P1SuiteOrder](ctx, client).CreateBatch([]*P1SuiteOrder{
+			{UserID: 1, Amount: 50.0},
+			{UserID: 2, Amount: 200.0},
+			{UserID: 3, Amount: 10.0},
+		})
+		// dialect-aware quoting for the subquery
+		q := client.Dialect().Quote
+		sub := fmt.Sprintf("SELECT %s FROM %s WHERE %s > 75",
+			q("id"), q("p1_suite_orders"), q("amount"))
+		results, err := quark.For[P1SuiteOrder](ctx, client).WhereSubquery("id", "IN", sub).List()
+		if err != nil {
+			t.Fatalf("WhereSubquery: %v", err)
+		}
+		if len(results) != 1 {
+			t.Errorf("WhereSubquery: expected 1 result, got %d", len(results))
+		}
+	})
+
+	// ── CreateIndex ──────────────────────────────────────────────────────────
+	t.Run("CreateIndex", func(t *testing.T) {
+		if err := client.CreateIndex(ctx, "p1_suite_users", "idx_p1su_email", []string{"email"}, true); err != nil {
+			t.Fatalf("CreateIndex: %v", err)
+		}
+		// idempotent — second call must not error
+		if err := client.CreateIndex(ctx, "p1_suite_users", "idx_p1su_email", []string{"email"}, true); err != nil {
+			t.Fatalf("CreateIndex (idempotent): %v", err)
+		}
+	})
+
+	// ── AddForeignKey ────────────────────────────────────────────────────────
+	t.Run("AddForeignKey", func(t *testing.T) {
+		err := client.AddForeignKey(ctx, "p1_suite_orders", "fk_p1so_user",
+			[]string{"user_id"}, "p1_suite_users", []string{"id"}, "CASCADE", "")
+		// SQLite will error; other dialects should succeed — we just require no panic
+		if err != nil {
+			t.Logf("AddForeignKey info (%s): %v", client.Dialect().Name(), err)
+		}
+	})
+}
+
+// testOtelInSharedSuite verifica que las operaciones generan trazas OTel.
+//
+// Cuando el collector OTLP está disponible en localhost:4318, las trazas se
+// envían a Jaeger usando el dialecto como service name (e.g. "quark-mysql").
+// Si el collector no está disponible se usa un exporter en memoria, por lo
+// que el test nunca hace skip: las assertions de spans son iguales en ambos paths.
 func testOtelInSharedSuite(ctx context.Context, t *testing.T, client *quark.Client) {
-	// Crear exporter en memoria para capturar spans
-	exporter, shutdown := setupTestTelemetry()
-	defer shutdown(context.Background())
+	dialect := client.Dialect().Name()
+	serviceName := fmt.Sprintf("quark-%s", dialect)
+
+	// setupSuiteOtel installs a combined OTLP+InMemory provider when the
+	// collector is reachable, or an InMemory-only provider otherwise.
+	exporter, realCollector, shutdown := setupSuiteOtel(ctx, dialect)
+	defer shutdown()
+
+	if realCollector {
+		t.Logf("📡 OTLP collector active — traces → Jaeger service '%s'", serviceName)
+		t.Logf("   Jaeger UI: http://localhost:16686")
+	}
+
+	// Client with OTel middleware wired to the now-active global TracerProvider.
+	otelClient, err := quark.New(client.Raw(),
+		quark.WithDialect(client.Dialect()),
+		quark.WithMiddleware(quarkotel.New()),
+	)
+	if err != nil {
+		t.Fatalf("failed to create otel client: %v", err)
+	}
 
 	type OtelSuiteUser struct {
 		ID    int64  `db:"id" pk:"true"`
@@ -844,23 +1111,18 @@ func testOtelInSharedSuite(ctx context.Context, t *testing.T, client *quark.Clie
 		Email string `db:"email"`
 	}
 
-	// Limpiar tabla si existe
 	dropTable(client, "otel_suite_users")
-
 	if err := client.Migrate(ctx, &OtelSuiteUser{}); err != nil {
 		t.Fatalf("migrate failed: %v", err)
 	}
-
-	// Limpiar spans de migración
 	exporter.Reset()
 
 	// Test 1: INSERT
 	t.Run("Insert", func(t *testing.T) {
 		user := &OtelSuiteUser{Name: "Otel Test", Email: "otel@test.com"}
-		if err := quark.For[OtelSuiteUser](ctx, client).Create(user); err != nil {
+		if err := quark.For[OtelSuiteUser](ctx, otelClient).Create(user); err != nil {
 			t.Fatalf("create failed: %v", err)
 		}
-
 		spans := exporter.GetSpans()
 		if len(spans) == 0 {
 			t.Error("expected spans for INSERT operation")
@@ -871,14 +1133,13 @@ func testOtelInSharedSuite(ctx context.Context, t *testing.T, client *quark.Clie
 
 	// Test 2: SELECT
 	t.Run("Select", func(t *testing.T) {
-		users, err := quark.For[OtelSuiteUser](ctx, client).List()
+		users, err := quark.For[OtelSuiteUser](ctx, otelClient).List()
 		if err != nil {
 			t.Fatalf("list failed: %v", err)
 		}
 		if len(users) != 1 {
 			t.Errorf("expected 1 user, got %d", len(users))
 		}
-
 		spans := exporter.GetSpans()
 		if len(spans) == 0 {
 			t.Error("expected spans for SELECT operation")
@@ -889,14 +1150,13 @@ func testOtelInSharedSuite(ctx context.Context, t *testing.T, client *quark.Clie
 
 	// Test 3: First
 	t.Run("First", func(t *testing.T) {
-		user, err := quark.For[OtelSuiteUser](ctx, client).First()
+		user, err := quark.For[OtelSuiteUser](ctx, otelClient).First()
 		if err != nil {
 			t.Fatalf("first failed: %v", err)
 		}
 		if user.Name != "Otel Test" {
 			t.Errorf("expected 'Otel Test', got %s", user.Name)
 		}
-
 		spans := exporter.GetSpans()
 		if len(spans) == 0 {
 			t.Error("expected spans for First operation")
@@ -907,13 +1167,11 @@ func testOtelInSharedSuite(ctx context.Context, t *testing.T, client *quark.Clie
 
 	// Test 4: UPDATE
 	t.Run("Update", func(t *testing.T) {
-		user, _ := quark.For[OtelSuiteUser](ctx, client).First()
+		user, _ := quark.For[OtelSuiteUser](ctx, otelClient).First()
 		user.Name = "Updated Otel"
-		_, err := quark.For[OtelSuiteUser](ctx, client).Update(&user)
-		if err != nil {
+		if _, err := quark.For[OtelSuiteUser](ctx, otelClient).Update(&user); err != nil {
 			t.Fatalf("update failed: %v", err)
 		}
-
 		spans := exporter.GetSpans()
 		if len(spans) == 0 {
 			t.Error("expected spans for UPDATE operation")
@@ -924,11 +1182,9 @@ func testOtelInSharedSuite(ctx context.Context, t *testing.T, client *quark.Clie
 
 	// Test 5: DELETE
 	t.Run("Delete", func(t *testing.T) {
-		_, err := quark.For[OtelSuiteUser](ctx, client).Where("id", ">", 0).DeleteBy()
-		if err != nil {
+		if _, err := quark.For[OtelSuiteUser](ctx, otelClient).Where("id", ">", 0).DeleteBy(); err != nil {
 			t.Fatalf("delete failed: %v", err)
 		}
-
 		spans := exporter.GetSpans()
 		if len(spans) == 0 {
 			t.Error("expected spans for DELETE operation")
@@ -937,11 +1193,10 @@ func testOtelInSharedSuite(ctx context.Context, t *testing.T, client *quark.Clie
 		exporter.Reset()
 	})
 
-	// Test 6: Verificar atributos
+	// Test 6: Atributos de span
 	t.Run("SpanAttributes", func(t *testing.T) {
-		// Insertar para generar spans
 		user := &OtelSuiteUser{Name: "Attr Test", Email: "attr@test.com"}
-		quark.For[OtelSuiteUser](ctx, client).Create(user)
+		quark.For[OtelSuiteUser](ctx, otelClient).Create(user)
 
 		spans := exporter.GetSpans()
 		validSpans := 0
@@ -960,10 +1215,12 @@ func testOtelInSharedSuite(ctx context.Context, t *testing.T, client *quark.Clie
 				validSpans++
 			}
 		}
-
 		if validSpans == 0 {
 			t.Error("expected spans with db.statement and db.operation attributes")
 		}
 		t.Logf("✓ %d spans have valid attributes", validSpans)
+		if realCollector {
+			t.Logf("📊 Traces visible in Jaeger UI → service: '%s'", serviceName)
+		}
 	})
 }

@@ -32,19 +32,20 @@ func (q *Query[T]) Paginate(pageSize, page int) (*Page[T], error) {
 		page = 0
 	}
 
-	// Set limit and offset
-	q.limit = pageSize
-	q.hasLimit = true
-	q.offset = page * pageSize
+	// Clone before mutating to preserve immutability of the original query.
+	pq := q.clone()
+	pq.limit = pageSize
+	pq.hasLimit = true
+	pq.offset = page * pageSize
 
-	// Get total count first
+	// Get total count first (without LIMIT/OFFSET so we get the real total)
 	total, err := q.Count()
 	if err != nil {
 		return nil, err
 	}
 
 	// Get items for this page
-	items, err := q.List()
+	items, err := pq.List()
 	if err != nil {
 		return nil, err
 	}

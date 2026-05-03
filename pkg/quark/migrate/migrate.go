@@ -22,6 +22,11 @@ func Register(m *Migration) {
 	registry[m.ID] = m
 }
 
+// Reset clears all registered migrations. Intended for use in tests only.
+func Reset() {
+	registry = make(map[string]*Migration)
+}
+
 type Migrator struct {
 	client    *quark.Client
 	tableName string
@@ -94,7 +99,12 @@ func (m *Migrator) Up(ctx context.Context, steps int) error {
 			return fmt.Errorf("failed to apply migration %s: %w", id, err)
 		}
 
-		if err := m.client.Exec(ctx, fmt.Sprintf("INSERT INTO %s (id, name) VALUES (?, ?)", m.tableName), id, migration.Name); err != nil {
+		insertSQL := fmt.Sprintf("INSERT INTO %s (id, name) VALUES (%s, %s)",
+			m.tableName,
+			m.client.Dialect().Placeholder(1),
+			m.client.Dialect().Placeholder(2),
+		)
+		if err := m.client.Exec(ctx, insertSQL, id, migration.Name); err != nil {
 			return err
 		}
 		count++
@@ -184,7 +194,11 @@ func (m *Migrator) Down(ctx context.Context, steps int) error {
 			return fmt.Errorf("failed to revert migration %s: %w", id, err)
 		}
 
-		if err := m.client.Exec(ctx, fmt.Sprintf("DELETE FROM %s WHERE id = ?", m.tableName), id); err != nil {
+		deleteSQL := fmt.Sprintf("DELETE FROM %s WHERE id = %s",
+			m.tableName,
+			m.client.Dialect().Placeholder(1),
+		)
+		if err := m.client.Exec(ctx, deleteSQL, id); err != nil {
 			return err
 		}
 		count++

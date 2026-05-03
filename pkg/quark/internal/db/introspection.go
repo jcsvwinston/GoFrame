@@ -24,7 +24,7 @@ func GetTableInfo(db *sql.DB, dialect, tableName string) (*TableInfo, error) {
 	switch dialect {
 	case "postgres", "postgresql", "pgx":
 		return getPostgresTableInfo(db, tableName)
-	case "mysql":
+	case "mysql", "mariadb":
 		return getMySQLTableInfo(db, tableName)
 	case "sqlite", "sqlite3":
 		return getSQLiteTableInfo(db, tableName)

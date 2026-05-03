@@ -3,6 +3,7 @@ package quark_test
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -12,11 +13,71 @@ import (
 	quarkotel "github.com/jcsvwinston/GoFrame/pkg/quark/otel"
 
 	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
+	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
+	semconv "go.opentelemetry.io/otel/semconv/v1.26.0"
+	"go.opentelemetry.io/otel/trace"
 
 	_ "modernc.org/sqlite"
 )
+
+// setupSuiteOtel builds a TracerProvider for the SharedSuite OpenTelemetry tests.
+//
+// When the OTLP collector is reachable at localhost:4318, a combined provider
+// is created with both the OTLP exporter (→ Jaeger) and an InMemoryExporter
+// (→ assertions). The service name is "quark-<dialect>".
+// When the collector is unavailable the provider uses only InMemory, so the
+// test never skips and assertions always work.
+//
+// Returns the InMemoryExporter for span assertions, a bool indicating whether
+// the real collector is active, and a shutdown function.
+func setupSuiteOtel(ctx context.Context, dialect string) (*tracetest.InMemoryExporter, bool, func()) {
+	const otlpEndpoint = "localhost:4318"
+	serviceName := fmt.Sprintf("quark-%s", dialect)
+
+	memExporter := tracetest.NewInMemoryExporter()
+
+	res, _ := resource.New(ctx,
+		resource.WithTelemetrySDK(),
+		resource.WithAttributes(semconv.ServiceName(serviceName)),
+	)
+
+	// Try OTLP exporter
+	otlpExp, err := otlptracehttp.New(ctx,
+		otlptracehttp.WithEndpoint(otlpEndpoint),
+		otlptracehttp.WithInsecure(),
+	)
+
+	var provider *sdktrace.TracerProvider
+	realCollector := err == nil
+	if realCollector {
+		provider = sdktrace.NewTracerProvider(
+			sdktrace.WithBatcher(otlpExp),
+			sdktrace.WithSyncer(memExporter),
+			sdktrace.WithResource(res),
+		)
+	} else {
+		provider = sdktrace.NewTracerProvider(
+			sdktrace.WithSyncer(memExporter),
+		)
+	}
+
+	otel.SetTracerProvider(provider)
+
+	shutdown := func() {
+		if realCollector {
+			// Flush so all spans reach Jaeger before shutdown.
+			time.Sleep(500 * time.Millisecond)
+			_ = provider.ForceFlush(ctx)
+		}
+		_ = provider.Shutdown(ctx)
+		otel.SetTracerProvider(trace.NewNoopTracerProvider())
+	}
+
+	return memExporter, realCollector, shutdown
+}
 
 // setupTestTelemetry configura OpenTelemetry con un exporter en memoria para tests
 func setupTestTelemetry() (*tracetest.InMemoryExporter, func(context.Context) error) {
@@ -30,7 +91,8 @@ func setupTestTelemetry() (*tracetest.InMemoryExporter, func(context.Context) er
 	otel.SetTracerProvider(provider)
 
 	shutdown := func(ctx context.Context) error {
-		otel.SetTracerProvider(nil) // Reset
+		// Restore a no-op provider so subsequent tests don't get a nil provider.
+		otel.SetTracerProvider(trace.NewNoopTracerProvider())
 		return provider.Shutdown(ctx)
 	}
 

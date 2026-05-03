@@ -2,7 +2,11 @@
 // It supports multiple SQL dialects and is designed to be framework-agnostic.
 package quark
 
-import "errors"
+import (
+	"context"
+	"errors"
+	"strings"
+)
 
 // Common errors returned by quark operations.
 var (
@@ -30,3 +34,43 @@ var (
 	// ErrConstraintViolation indicates a database constraint violation.
 	ErrConstraintViolation = errors.New("constraint violation")
 )
+
+// wrapDBError maps low-level database/context errors to quark sentinel errors.
+// It checks for timeout conditions and common constraint violation messages
+// across dialects (PostgreSQL, MySQL, SQLite, MSSQL, Oracle).
+func wrapDBError(err error) error {
+	if err == nil {
+		return nil
+	}
+
+	// Context timeout / deadline exceeded → ErrTimeout
+	if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
+		return errors.Join(ErrTimeout, err)
+	}
+
+	msg := strings.ToLower(err.Error())
+
+	// Timeout messages from various drivers
+	if strings.Contains(msg, "timeout") || strings.Contains(msg, "timed out") {
+		return errors.Join(ErrTimeout, err)
+	}
+
+	// Constraint violation messages across dialects:
+	// PostgreSQL: "unique constraint", "foreign key constraint", "check constraint", "not-null constraint"
+	// MySQL/MariaDB: "duplicate entry", "foreign key constraint fails", "cannot be null"
+	// SQLite: "unique constraint failed", "foreign key constraint failed", "not null constraint failed"
+	// MSSQL: "violation of unique key", "foreign key constraint", "cannot insert the value null"
+	// Oracle: "unique constraint", "integrity constraint"
+	if strings.Contains(msg, "unique constraint") ||
+		strings.Contains(msg, "duplicate entry") ||
+		strings.Contains(msg, "unique constraint failed") ||
+		strings.Contains(msg, "violation of unique key") ||
+		strings.Contains(msg, "integrity constraint") ||
+		strings.Contains(msg, "foreign key constraint") ||
+		strings.Contains(msg, "not null constraint") ||
+		strings.Contains(msg, "check constraint") {
+		return errors.Join(ErrConstraintViolation, err)
+	}
+
+	return err
+}

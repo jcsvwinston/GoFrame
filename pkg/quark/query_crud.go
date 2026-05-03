@@ -19,8 +19,9 @@ func (q *BaseQuery) executeExec(ctx context.Context, sqlStr string, args []any) 
 	// Base handler: direct execution
 	handler := ExecFunc(func(ctx context.Context, exec Executor, s string, a []any) (sql.Result, error) {
 		start := time.Now()
-		res, err := exec.ExecContext(ctx, s, a...)
+		res, execErr := exec.ExecContext(ctx, s, a...)
 		duration := time.Since(start)
+		err := wrapDBError(execErr)
 
 		// Automatic Cache Invalidation (Maintain data freshness)
 		if err == nil && q.client.cacheStore != nil && q.table != "" {
@@ -241,7 +242,9 @@ func (q *BaseQuery) saveAny(ctx context.Context, exec Executor, entity any, isUp
 				if err != nil {
 					return 0, err
 				}
-				if q.dialect.SupportsLastInsertID() {
+				// Only populate the PK from LastInsertId for single auto-generated PKs.
+				// Composite PKs are always user-supplied; overwriting them would corrupt values.
+				if q.dialect.SupportsLastInsertID() && !meta.HasCompositePK {
 					lastID, _ := res.LastInsertId()
 					setPKValue(elem, meta.PK, lastID)
 				}
@@ -949,9 +952,12 @@ func (q *BaseQuery) saveAssociations(v reflect.Value, isUpdate bool) error {
 				item := field.Index(i)
 				itemPtr := item.Addr()
 
-				// Save related item first
-				if _, err := q.saveAny(q.ctx, q.exec, itemPtr.Interface(), isUpdate); err != nil {
-					return err
+				// Only save related item if it is new (zero PK).
+				// If it already has a PK, it was created beforehand — just link it.
+				if isZeroPKValue(item.Field(relMeta.PK.Index)) {
+					if _, err := q.saveAny(q.ctx, q.exec, itemPtr.Interface(), isUpdate); err != nil {
+						return err
+					}
 				}
 
 				// Link in join table
@@ -963,6 +969,283 @@ func (q *BaseQuery) saveAssociations(v reflect.Value, isUpdate bool) error {
 		}
 	}
 	return nil
+}
+
+// Upsert inserts or updates a record depending on whether a conflict occurs on conflictCols.
+// updateCols specifies which columns to update on conflict; if empty, all non-conflict columns are updated.
+//
+// Example:
+//
+//	quark.For[User](ctx, client).Upsert(&user, []string{"email"}, []string{"name", "updated_at"})
+func (q *Query[T]) Upsert(entity *T, conflictCols []string, updateCols []string) error {
+	if q.client == nil {
+		return fmt.Errorf("%w: client not initialized", ErrInvalidQuery)
+	}
+	if err := q.client.Validate(q.ctx, entity); err != nil {
+		return fmt.Errorf("validation failed: %w", err)
+	}
+
+	v := reflect.ValueOf(entity)
+	if v.Kind() == reflect.Ptr {
+		v = v.Elem()
+	}
+
+	// Build the base INSERT SQL (same as buildInsert)
+	baseSQL, args, err := q.buildInsert(v)
+	if err != nil {
+		return err
+	}
+
+	// Strip RETURNING clause if present — upsert appends conflict handling first
+	returningIdx := strings.Index(baseSQL, " RETURNING ")
+	insertSQL := baseSQL
+	returningClause := ""
+	if returningIdx != -1 {
+		insertSQL = baseSQL[:returningIdx]
+		returningClause = baseSQL[returningIdx:]
+	}
+
+	dialectName := q.dialect.Name()
+	argOffset := len(args) + 1
+
+	switch dialectName {
+	case "mssql", "oracle":
+		// MERGE syntax — build the full MERGE statement
+		mergeSQL, mergeArgs, mergeErr := q.buildMerge(v, conflictCols, updateCols)
+		if mergeErr != nil {
+			return mergeErr
+		}
+		ctx, cancel := context.WithTimeout(q.ctx, q.client.limits.QueryTimeout)
+		defer cancel()
+		_, execErr := q.executeExec(ctx, mergeSQL, mergeArgs)
+		return execErr
+	default:
+		upsertFragment := q.dialect.UpsertSQL(conflictCols, updateCols, argOffset)
+		fullSQL := insertSQL + upsertFragment + returningClause
+
+		ctx, cancel := context.WithTimeout(q.ctx, q.client.limits.QueryTimeout)
+		defer cancel()
+
+		if q.dialect.SupportsReturning() && q.pk.Column != "" {
+			row := q.executeQueryRow(ctx, fullSQL, args)
+			return q.scanReturning(row, v)
+		}
+		_, execErr := q.executeExec(ctx, fullSQL, args)
+		if execErr != nil {
+			return execErr
+		}
+		if q.dialect.SupportsLastInsertID() && isZeroPKValue(v.Field(q.pk.Index)) {
+			idRow := q.executeQueryRow(ctx, q.dialect.LastInsertIDQuery(q.table, q.pk.Column), nil)
+			var id int64
+			if scanErr := idRow.Scan(&id); scanErr == nil {
+				setPKValue(v, q.pk, id)
+			}
+		}
+		return nil
+	}
+}
+
+// buildMerge constructs a MERGE (UPSERT) statement for MSSQL and Oracle.
+func (q *BaseQuery) buildMerge(v reflect.Value, conflictCols []string, updateCols []string) (string, []any, error) {
+	t := v.Type()
+	type colVal struct {
+		col string
+		val any
+	}
+	var allCols []colVal
+	argIndex := 1
+
+	for i := 0; i < t.NumField(); i++ {
+		field := t.Field(i)
+		dbTag := field.Tag.Get("db")
+		if dbTag == "" || dbTag == "-" {
+			continue
+		}
+		if !q.meta.HasCompositePK && i == q.pk.Index && isZeroPKValue(v.Field(i)) {
+			continue
+		}
+		allCols = append(allCols, colVal{col: dbTag, val: v.Field(i).Interface()})
+	}
+
+	conflictSet := make(map[string]bool, len(conflictCols))
+	for _, c := range conflictCols {
+		conflictSet[c] = true
+	}
+
+	table := q.fullTableName()
+	alias := "src"
+
+	// Source values: (SELECT $1 AS col1, $2 AS col2 …)
+	var srcCols []string
+	var args []any
+	for _, cv := range allCols {
+		srcCols = append(srcCols, fmt.Sprintf("%s AS %s", q.dialect.Placeholder(argIndex), q.dialect.Quote(cv.col)))
+		args = append(args, cv.val)
+		argIndex++
+	}
+
+	// ON clause
+	var onParts []string
+	for _, cc := range conflictCols {
+		onParts = append(onParts, fmt.Sprintf("target.%s = %s.%s", q.dialect.Quote(cc), alias, q.dialect.Quote(cc)))
+	}
+
+	// WHEN MATCHED THEN UPDATE SET
+	effectiveUpdateCols := updateCols
+	if len(effectiveUpdateCols) == 0 {
+		for _, cv := range allCols {
+			if !conflictSet[cv.col] {
+				effectiveUpdateCols = append(effectiveUpdateCols, cv.col)
+			}
+		}
+	}
+	var updateParts []string
+	for _, uc := range effectiveUpdateCols {
+		updateParts = append(updateParts, fmt.Sprintf("target.%s = %s.%s", q.dialect.Quote(uc), alias, q.dialect.Quote(uc)))
+	}
+
+	// WHEN NOT MATCHED THEN INSERT
+	var insCols []string
+	var insSrc []string
+	for _, cv := range allCols {
+		insCols = append(insCols, fmt.Sprintf("target.%s", q.dialect.Quote(cv.col)))
+		insSrc = append(insSrc, fmt.Sprintf("%s.%s", alias, q.dialect.Quote(cv.col)))
+	}
+
+	var sqlBuf strings.Builder
+	sqlBuf.WriteString(fmt.Sprintf("MERGE INTO %s AS target\n", table))
+	sqlBuf.WriteString(fmt.Sprintf("USING (SELECT %s) AS %s\n", strings.Join(srcCols, ", "), alias))
+	sqlBuf.WriteString(fmt.Sprintf("ON (%s)\n", strings.Join(onParts, " AND ")))
+	if len(updateParts) > 0 {
+		sqlBuf.WriteString(fmt.Sprintf("WHEN MATCHED THEN UPDATE SET %s\n", strings.Join(updateParts, ", ")))
+	}
+	sqlBuf.WriteString(fmt.Sprintf("WHEN NOT MATCHED THEN INSERT (%s) VALUES (%s)",
+		strings.Join(insCols, ", "), strings.Join(insSrc, ", ")))
+
+	if q.dialect.Name() == "mssql" {
+		sqlBuf.WriteString(";")
+	} else {
+		// Oracle
+		sqlBuf.WriteString(";")
+	}
+
+	return sqlBuf.String(), args, nil
+}
+
+// CreateBatch inserts multiple records in a single SQL statement using bulk VALUES.
+// Each entity gets its PK populated when the dialect supports RETURNING; otherwise
+// PKs are left at their zero value (callers can re-query if needed).
+//
+// Example:
+//
+//	users := []*User{{Name: "Alice"}, {Name: "Bob"}}
+//	err := quark.For[User](ctx, client).CreateBatch(users)
+func (q *Query[T]) CreateBatch(entities []*T) error {
+	if q.client == nil {
+		return fmt.Errorf("%w: client not initialized", ErrInvalidQuery)
+	}
+	if len(entities) == 0 {
+		return nil
+	}
+
+	// Validate all entities first
+	for _, e := range entities {
+		if err := q.client.Validate(q.ctx, e); err != nil {
+			return fmt.Errorf("validation failed: %w", err)
+		}
+	}
+
+	// Build column list from the first entity
+	first := reflect.ValueOf(entities[0])
+	if first.Kind() == reflect.Ptr {
+		first = first.Elem()
+	}
+	q.ensureTenantID(first)
+
+	t := first.Type()
+	var columns []string
+	var colIndexes []int
+	for i := 0; i < t.NumField(); i++ {
+		field := t.Field(i)
+		dbTag := field.Tag.Get("db")
+		if dbTag == "" || dbTag == "-" {
+			continue
+		}
+		if !q.meta.HasCompositePK && i == q.pk.Index && isZeroPKValue(first.Field(i)) {
+			continue
+		}
+		if err := q.guard.ValidateIdentifier(dbTag); err != nil {
+			return err
+		}
+		columns = append(columns, q.dialect.Quote(dbTag))
+		colIndexes = append(colIndexes, i)
+	}
+
+	var sqlBuf strings.Builder
+	sqlBuf.WriteString("INSERT INTO ")
+	sqlBuf.WriteString(q.fullTableName())
+	sqlBuf.WriteString(" (")
+	sqlBuf.WriteString(strings.Join(columns, ", "))
+	sqlBuf.WriteString(") VALUES ")
+
+	var args []any
+	argIndex := 1
+	for rowIdx, entity := range entities {
+		v := reflect.ValueOf(entity)
+		if v.Kind() == reflect.Ptr {
+			v = v.Elem()
+		}
+		q.ensureTenantID(v)
+
+		if rowIdx > 0 {
+			sqlBuf.WriteString(", ")
+		}
+		placeholders := make([]string, len(colIndexes))
+		for j, ci := range colIndexes {
+			placeholders[j] = q.dialect.Placeholder(argIndex)
+			args = append(args, v.Field(ci).Interface())
+			argIndex++
+		}
+		sqlBuf.WriteString("(")
+		sqlBuf.WriteString(strings.Join(placeholders, ", "))
+		sqlBuf.WriteString(")")
+	}
+
+	// RETURNING for dialects that support it
+	if q.dialect.SupportsReturning() && q.pk.Column != "" {
+		sqlBuf.WriteString(" ")
+		sqlBuf.WriteString(q.dialect.Returning(q.pk.Column))
+	}
+
+	ctx, cancel := context.WithTimeout(q.ctx, q.client.limits.QueryTimeout)
+	defer cancel()
+
+	if q.dialect.SupportsReturning() && q.pk.Column != "" {
+		rows, err := q.executeQuery(ctx, sqlBuf.String(), args)
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+		for i := 0; rows.Next(); i++ {
+			if i >= len(entities) {
+				break
+			}
+			v := reflect.ValueOf(entities[i])
+			if v.Kind() == reflect.Ptr {
+				v = v.Elem()
+			}
+			pkField := v.Field(q.pk.Index)
+			if pkField.CanAddr() {
+				if err := rows.Scan(pkField.Addr().Interface()); err != nil {
+					return err
+				}
+			}
+		}
+		return rows.Err()
+	}
+
+	_, err := q.executeExec(ctx, sqlBuf.String(), args)
+	return err
 }
 
 // linkM2M creates a record in the join table if it doesn't exist.

@@ -17,6 +17,7 @@ type Store struct {
 	mu         sync.RWMutex
 	data       map[string]cacheEntry
 	tagToIndex map[string]map[string]struct{}
+	stopCh     chan struct{}
 }
 
 type cacheEntry struct {
@@ -30,10 +31,16 @@ func New() *Store {
 	s := &Store{
 		data:       make(map[string]cacheEntry),
 		tagToIndex: make(map[string]map[string]struct{}),
+		stopCh:     make(chan struct{}),
 	}
-	// Start cleanup goroutine to prevent memory leaks
+	// Start cleanup goroutine to evict expired entries
 	go s.cleanupLoop()
 	return s
+}
+
+// Close stops the background cleanup goroutine and releases resources.
+func (s *Store) Close() {
+	close(s.stopCh)
 }
 
 func (s *Store) Get(ctx context.Context, key string) ([]byte, error) {
@@ -90,14 +97,20 @@ func (s *Store) InvalidateTags(ctx context.Context, tags ...string) error {
 
 func (s *Store) cleanupLoop() {
 	ticker := time.NewTicker(1 * time.Minute)
-	for range ticker.C {
-		s.mu.Lock()
-		now := time.Now()
-		for key, entry := range s.data {
-			if now.After(entry.Expiration) {
-				delete(s.data, key)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ticker.C:
+			s.mu.Lock()
+			now := time.Now()
+			for key, entry := range s.data {
+				if now.After(entry.Expiration) {
+					delete(s.data, key)
+				}
 			}
+			s.mu.Unlock()
+		case <-s.stopCh:
+			return
 		}
-		s.mu.Unlock()
 	}
 }
