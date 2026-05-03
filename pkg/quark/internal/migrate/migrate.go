@@ -13,7 +13,7 @@ func SQLType(dialectName string, t reflect.Type, isPK bool) string {
 			return "INTEGER PRIMARY KEY AUTOINCREMENT"
 		case "postgres":
 			return "SERIAL PRIMARY KEY"
-		case "mysql":
+		case "mysql", "mariadb":
 			return "INT AUTO_INCREMENT PRIMARY KEY"
 		case "mssql":
 			return "INT IDENTITY(1,1) PRIMARY KEY"
@@ -51,7 +51,7 @@ func SQLType(dialectName string, t reflect.Type, isPK bool) string {
 		switch dialectName {
 		case "sqlite", "postgres":
 			return "REAL"
-		case "mysql":
+		case "mysql", "mariadb":
 			return "DOUBLE"
 		case "oracle", "mssql":
 			return "FLOAT"
@@ -66,7 +66,7 @@ func SQLType(dialectName string, t reflect.Type, isPK bool) string {
 	case reflect.Struct:
 		if t.String() == "time.Time" {
 			switch dialectName {
-			case "sqlite", "mysql":
+			case "sqlite", "mysql", "mariadb":
 				return "DATETIME"
 			case "postgres", "oracle":
 				return "TIMESTAMP"

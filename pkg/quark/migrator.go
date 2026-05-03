@@ -68,7 +68,7 @@ func (c *Client) createTable(ctx context.Context, model any) error {
 
 	var query string
 	switch c.dialect.Name() {
-	case "mysql", "postgres", "sqlite":
+	case "mysql", "mariadb", "postgres", "sqlite":
 		query = fmt.Sprintf("CREATE TABLE IF NOT EXISTS %s (\n  %s\n);",
 			c.dialect.Quote(meta.Table),
 			strings.Join(columns, ",\n  "),
@@ -139,7 +139,7 @@ func (c *Client) createJoinTables(ctx context.Context, model any) error {
 		// Build CREATE TABLE query
 		var query string
 		switch c.dialect.Name() {
-		case "mysql", "postgres", "sqlite":
+		case "mysql", "mariadb", "postgres", "sqlite":
 			query = fmt.Sprintf("CREATE TABLE IF NOT EXISTS %s (\n  %s\n);",
 				c.dialect.Quote(rel.JoinTable),
 				strings.Join(columns, ",\n  "),

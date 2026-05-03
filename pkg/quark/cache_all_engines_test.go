@@ -76,6 +76,7 @@ func TestCacheAllEngines(t *testing.T) {
 		{"SQLite", ":memory:", "sqlite", quark.SQLite()},
 		{"Postgres", os.Getenv("QUARK_TEST_POSTGRES_DSN"), "pgx", quark.PostgreSQL()},
 		{"MySQL", os.Getenv("QUARK_TEST_MYSQL_DSN"), "mysql", quark.MySQL()},
+		{"MariaDB", os.Getenv("QUARK_TEST_MARIADB_DSN"), "mysql", quark.MariaDB()},
 		{"MSSQL", os.Getenv("QUARK_TEST_MSSQL_DSN"), "sqlserver", quark.MSSQL()},
 		{"Oracle", os.Getenv("QUARK_TEST_ORACLE_DSN"), "oracle", quark.Oracle()},
 	}

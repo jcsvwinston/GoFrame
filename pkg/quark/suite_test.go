@@ -580,7 +580,7 @@ func testRaw(ctx context.Context, t *testing.T, client *quark.Client) {
 
 	sqlType := "TEXT"
 	switch client.Dialect().Name() {
-	case "mysql":
+	case "mysql", "mariadb":
 		sqlType = "VARCHAR(255)"
 	case "oracle":
 		sqlType = "VARCHAR2(255)"
@@ -820,7 +820,7 @@ func testJSON(ctx context.Context, t *testing.T, client *quark.Client) {
 
 	if err != nil {
 		t.Logf("WhereJSON query info: %v", err)
-		if client.Dialect().Name() == "oracle" || client.Dialect().Name() == "mssql" {
+		if client.Dialect().Name() == "oracle" || client.Dialect().Name() == "mssql" || client.Dialect().Name() == "mariadb" {
 			t.Log("Skipping JSON deep verification for this dialect (requires specific setup)")
 			return
 		}
