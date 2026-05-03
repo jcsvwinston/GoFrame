@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"text/template"
 
 	"github.com/fatih/color"
@@ -73,6 +74,17 @@ var seedListCmd = &cobra.Command{
 	},
 }
 
+func snakeToCamel(s string) string {
+	parts := strings.Split(s, "_")
+	for i, p := range parts {
+		if len(p) == 0 {
+			continue
+		}
+		parts[i] = strings.ToUpper(p[:1]) + strings.ToLower(p[1:])
+	}
+	return strings.Join(parts, "")
+}
+
 func runSeedCreate(name string) {
 	filename := fmt.Sprintf("%s_seeder.go", name)
 	dir := viper.GetString("paths.seeders")
@@ -90,7 +102,7 @@ func runSeedCreate(name string) {
 	data := struct {
 		Name string
 	}{
-		Name: name,
+		Name: snakeToCamel(name),
 	}
 
 	tmpl, _ := template.New("seeder").Parse(seederTemplate)
