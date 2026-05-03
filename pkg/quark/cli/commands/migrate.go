@@ -97,7 +97,7 @@ func runMigrateCreate(name string) {
 	}
 
 	path := filepath.Join(dir, filename)
-	
+
 	data := struct {
 		ID      string
 		Name    string
@@ -132,7 +132,17 @@ func runMigrateUp() {
 	}
 
 	migrator := migrate.NewMigrator(client)
-	if err := migrator.Up(context.Background(), migrateSteps); err != nil {
+	ctx := context.Background()
+
+	if migrateDryRun {
+		color.Yellow("Dry-run mode: no migrations will be applied.")
+		if err := migrator.UpDryRun(ctx, migrateSteps); err != nil {
+			color.Red("Error: %v", err)
+		}
+		return
+	}
+
+	if err := migrator.Up(ctx, migrateSteps); err != nil {
 		color.Red("Error applying migrations: %v", err)
 		return
 	}

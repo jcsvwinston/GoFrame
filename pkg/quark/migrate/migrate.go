@@ -109,6 +109,44 @@ func (m *Migrator) Up(ctx context.Context, steps int) error {
 	return nil
 }
 
+// UpDryRun previews which migrations would be applied without executing them.
+func (m *Migrator) UpDryRun(ctx context.Context, steps int) error {
+	if err := m.Init(ctx); err != nil {
+		return err
+	}
+
+	applied, err := m.GetApplied(ctx)
+	if err != nil {
+		return err
+	}
+
+	var ids []string
+	for id := range registry {
+		if !applied[id] {
+			ids = append(ids, id)
+		}
+	}
+	sort.Strings(ids)
+
+	if len(ids) == 0 {
+		fmt.Println("No pending migrations.")
+		return nil
+	}
+
+	fmt.Println("[dry-run] Pending migrations (not applied):")
+	count := 0
+	for _, id := range ids {
+		if steps > 0 && count >= steps {
+			break
+		}
+		migration := registry[id]
+		fmt.Printf("  [pending] %s — %s\n", id, migration.Name)
+		count++
+	}
+	fmt.Printf("\n%d migration(s) would be applied.\n", count)
+	return nil
+}
+
 func (m *Migrator) Down(ctx context.Context, steps int) error {
 	if err := m.Init(ctx); err != nil {
 		return err
