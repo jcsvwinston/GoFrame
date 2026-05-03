@@ -630,6 +630,138 @@ func (o *OracleDialect) JSONExtract(column, path string) string {
 	return fmt.Sprintf("JSON_VALUE(%s, '$.%s')", o.Quote(column), path)
 }
 
+// MariaDBDialect implements the MariaDB dialect.
+// MariaDB is a fork of MySQL with significant additions:
+//   - RETURNING clause in INSERT/DELETE/UPDATE (10.5+)
+//   - Native sequences via CREATE SEQUENCE (10.3+)
+//   - Temporal tables / system-versioned tables (10.3.4+)
+//   - JSON_TABLE support (10.6+)
+//   - INTERSECT / EXCEPT set operations (10.3+)
+//   - Descending indexes (10.6+)
+//   - UUID() and UUID_SHORT() built-ins
+//   - IGNORE INDEX / USE INDEX hints identical to MySQL
+type MariaDBDialect struct {
+	MySQLDialect // embed MySQL — identical wire protocol and driver
+}
+
+// MariaDB returns a MariaDB dialect instance.
+func MariaDB() Dialect {
+	return &MariaDBDialect{
+		MySQLDialect: MySQLDialect{
+			baseDialect: baseDialect{name: "mariadb"},
+		},
+	}
+}
+
+// SupportsReturning returns true: MariaDB 10.5+ supports RETURNING in
+// INSERT … RETURNING, DELETE … RETURNING and UPDATE … RETURNING.
+func (m *MariaDBDialect) SupportsReturning() bool {
+	return true
+}
+
+// Returning generates a RETURNING clause compatible with MariaDB 10.5+.
+func (m *MariaDBDialect) Returning(columns ...string) string {
+	if len(columns) == 0 {
+		return ""
+	}
+	quoted := make([]string, len(columns))
+	for i, col := range columns {
+		quoted[i] = m.Quote(col)
+	}
+	return "RETURNING " + strings.Join(quoted, ", ")
+}
+
+// SupportsLastInsertID returns false when RETURNING is used.
+// The ORM prefers RETURNING over LAST_INSERT_ID() for MariaDB.
+func (m *MariaDBDialect) SupportsLastInsertID() bool {
+	return false
+}
+
+// LastInsertIDQuery is kept as fallback for engines older than 10.5.
+func (m *MariaDBDialect) LastInsertIDQuery(table, pkColumn string) string {
+	return "SELECT LAST_INSERT_ID()"
+}
+
+// JSONExtract uses the MariaDB / MySQL JSON_VALUE syntax (10.2.3+).
+// MariaDB also accepts the arrow operator col->>'$.key' from 10.4.3+.
+func (m *MariaDBDialect) JSONExtract(column, path string) string {
+	return fmt.Sprintf("JSON_VALUE(%s, '$.%s')", m.Quote(column), path)
+}
+
+// CreateSequence returns the DDL to create a named sequence (MariaDB 10.3+).
+func (m *MariaDBDialect) CreateSequence(name string, start, increment int64) string {
+	return fmt.Sprintf("CREATE SEQUENCE IF NOT EXISTS %s START WITH %d INCREMENT BY %d",
+		m.Quote(name), start, increment)
+}
+
+// NextVal returns the SQL expression that reads the next value from a sequence.
+func (m *MariaDBDialect) NextVal(sequenceName string) string {
+	return fmt.Sprintf("NEXTVAL(%s)", m.Quote(sequenceName))
+}
+
+// CreateSystemVersionedTable returns the DDL for a system-versioned (temporal) table.
+// Requires MariaDB 10.3.4+.
+func (m *MariaDBDialect) CreateSystemVersionedTable(table string, columnDefs string) string {
+	return fmt.Sprintf(
+		"CREATE TABLE IF NOT EXISTS %s (\n%s\n) WITH SYSTEM VERSIONING",
+		m.Quote(table), columnDefs,
+	)
+}
+
+// HistoryQuery returns SELECT … FOR SYSTEM_TIME ALL to query full row history.
+func (m *MariaDBDialect) HistoryQuery(table string) string {
+	return fmt.Sprintf("SELECT * FROM %s FOR SYSTEM_TIME ALL", m.Quote(table))
+}
+
+// HistoryBetween returns SELECT … FOR SYSTEM_TIME BETWEEN for a time range.
+func (m *MariaDBDialect) HistoryBetween(table, from, to string) string {
+	return fmt.Sprintf(
+		"SELECT * FROM %s FOR SYSTEM_TIME BETWEEN '%s' AND '%s'",
+		m.Quote(table), from, to,
+	)
+}
+
+// JSONTable returns a JSON_TABLE expression (MariaDB 10.6+).
+// source: SQL expression producing JSON; path: root path e.g. '$[*]';
+// columns: column definitions e.g. "id INT PATH '$.id'"
+func (m *MariaDBDialect) JSONTable(source, path string, columns ...string) string {
+	cols := strings.Join(columns, ",\n  ")
+	return fmt.Sprintf("JSON_TABLE(%s, '%s' COLUMNS (\n  %s\n))", source, path, cols)
+}
+
+// LimitOffset for MariaDB uses standard LIMIT … OFFSET … syntax
+// (unlike MySQL which uses LIMIT offset, count).
+func (m *MariaDBDialect) LimitOffset(limit, offset int) string {
+	if limit > 0 && offset > 0 {
+		return fmt.Sprintf("LIMIT %d OFFSET %d", limit, offset)
+	}
+	if limit > 0 {
+		return fmt.Sprintf("LIMIT %d", limit)
+	}
+	if offset > 0 {
+		return fmt.Sprintf("OFFSET %d", offset)
+	}
+	return ""
+}
+
+// RenameColumn uses the standard SQL syntax supported since MariaDB 10.4.2.
+func (m *MariaDBDialect) RenameColumn(table, oldName, newName string) string {
+	return fmt.Sprintf("ALTER TABLE %s RENAME COLUMN %s TO %s",
+		m.Quote(table), m.Quote(oldName), m.Quote(newName))
+}
+
+// AlterTableAlterColumn uses MODIFY COLUMN (same as MySQL).
+func (m *MariaDBDialect) AlterTableAlterColumn(table, column, newDataType string) string {
+	return fmt.Sprintf("ALTER TABLE %s MODIFY COLUMN %s %s",
+		m.Quote(table), m.Quote(column), newDataType)
+}
+
+// SupportsTransactionalDDL returns false — MariaDB (like MySQL) performs
+// implicit commits around DDL statements.
+func (m *MariaDBDialect) SupportsTransactionalDDL() bool {
+	return false
+}
+
 // customDialectRegistry holds user-registered dialects
 var customDialectRegistry = make(map[string]Dialect)
 
@@ -657,8 +789,10 @@ func DetectDialect(driverName string) (Dialect, error) {
 	switch driverName {
 	case "postgres", "pgx", "pgx/v5", "pq":
 		return PostgreSQL(), nil
-	case "mysql", "mariadb":
+	case "mysql":
 		return MySQL(), nil
+	case "mariadb":
+		return MariaDB(), nil
 	case "sqlite", "sqlite3", "modernc":
 		return SQLite(), nil
 	case "mssql", "sqlserver", "azuresql":
