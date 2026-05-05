@@ -1,75 +1,79 @@
 package main
 
 import (
+	"context"
 	"fmt"
+	"log"
+	"log/slog"
+	"net/http"
+	"os"
 
 	"example.com/showcase_clean/internal/controllers"
-	"example.com/showcase_clean/internal/db"
 	"example.com/showcase_clean/internal/models"
-	"github.com/jcsvwinston/GoFrame/pkg/app"
-	"github.com/jcsvwinston/GoFrame/pkg/model"
+	"example.com/showcase_clean/internal/quarkdb"
+	gfrender "github.com/jcsvwinston/GoFrame/pkg/router"
 )
 
 func main() {
-	// QuickStart handles configuration, signal handling, and graceful shutdown.
-	// It demonstrates how GoFrame can be as simple as Fiber/Gin while remaining Enterprise.
-	app.QuickStart(func(a *app.App) error {
-		// 1. Automatic Schema Management
-		// Extracts metadata from structs and ensures tables exist.
-		if err := a.AutoMigrate(
-			&models.Author{},
-			&models.Category{},
-			&models.Tag{},
-			&models.Article{},
-			&models.Comment{},
-		); err != nil {
-			return fmt.Errorf("migration failed: %w", err)
-		}
+	ctx := context.Background()
 
-		// 2. Data Seeding (if empty)
-		if err := db.Seed(a.DefaultDB()); err != nil {
-			a.Logger.Error("seeding failed", "error", err)
-		}
+	// 1. Initialize Quark ORM Client
+	client, err := quarkdb.NewClient("app.db")
+	if err != nil {
+		log.Fatalf("Failed to initialize Quark client: %v", err)
+	}
+	defer client.Close()
 
-		// 3. Declarative Admin Registration
-		// Icons and UI hints are part of the model configuration.
-		a.RegisterModel(&models.Article{}, model.ModelConfig{Icon: "📄", ListFields: []string{"Title", "Slug", "Published"}})
-		a.RegisterModel(&models.Category{}, model.ModelConfig{Icon: "📁"})
-		a.RegisterModel(&models.Author{}, model.ModelConfig{Icon: "👤"})
-		a.RegisterModel(&models.Tag{}, model.ModelConfig{Icon: "🏷️"})
-		a.RegisterModel(&models.Comment{}, model.ModelConfig{Icon: "💬"})
+	// 2. Auto-Migrate using Quark ORM
+	fmt.Println("🚀 Running Quark ORM migrations...")
+	if err := client.Migrate(ctx,
+		&models.Author{},
+		&models.Category{},
+		&models.Tag{},
+		&models.Article{},
+		&models.Comment{},
+	); err != nil {
+		log.Fatalf("Migration failed: %v", err)
+	}
+	fmt.Println("✅ Migrations completed")
 
-		// 4. Centralized Route Definition
-		setupRoutes(a)
+	// 3. Seed data using Quark ORM
+	fmt.Println("🌱 Seeding data with Quark ORM...")
+	if err := client.Seed(ctx); err != nil {
+		log.Printf("Seeding failed: %v", err)
+	} else {
+		fmt.Println("✅ Seeding completed")
+	}
 
-		a.Logger.Info("Showcase Demo is ready!", "url", "http://localhost:8080")
-		return nil
-	})
-}
-
-func setupRoutes(a *app.App) {
-	db := a.DefaultDB()
-	tpl := a.Templates
+	// 4. Setup Router with Quark-powered Controllers
+	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
+	router := gfrender.New(logger)
 
 	// Static Files
-	a.Router.Static("/static", "./internal/web/static")
+	router.Static("/static", "./internal/web/static")
 
-	// Public Web Pages
-	a.Router.Get("/", controllers.HomePage(tpl, db))
-	a.Router.Get("/blog", controllers.BlogPage(tpl, db))
-	a.Router.Get("/blog/{id}", controllers.ArticlePage(tpl, db))
-	a.Router.Get("/categories", controllers.CategoriesPage(tpl, db))
-	a.Router.Get("/about", controllers.AboutPage(tpl, db))
-	a.Router.Get("/contact", controllers.ContactPage(tpl))
-	a.Router.Post("/contact", controllers.ContactSubmit(db))
-	
-	// API Endpoints
-	a.Router.Get("/api/health", controllers.Health)
-	a.Router.Get("/api/stats", controllers.GetStatsAPI(db))
-	a.Router.Get("/api/categories", controllers.ListCategoriesAPI(db))
-	a.Router.Get("/api/authors", controllers.ListAuthorsAPI(db))
-	a.Router.Get("/api/articles", controllers.GetArticleBySlug(db)) // This actually returns one if slug provided, wait.
-	a.Router.Get("/api/articles/{slug}", controllers.GetArticleBySlug(db))
+	// Public Web Pages - Using Quark-powered controllers
+	router.Get("/", controllers.HomePageQuark(client))
+	router.Get("/blog", controllers.BlogPageQuark(client))
+	router.Get("/blog/{slug}", controllers.ArticlePageQuark(client))
+	router.Get("/categories", controllers.CategoriesPageQuark(client))
+	router.Get("/about", controllers.AboutPageQuark(client))
+	router.Get("/contact", controllers.ContactPageQuark(nil))
+	router.Post("/contact", controllers.ContactSubmitQuark(client))
 
-	a.Logger.Info("Routes registered", "count", 14)
+	// API Endpoints - Using Quark ORM
+	router.Get("/api/health", controllers.Health)
+	router.Get("/api/stats", controllers.GetStatsAPIQuark(client))
+	router.Get("/api/categories", controllers.ListCategoriesAPIQuark(client))
+	router.Get("/api/authors", controllers.ListAuthorsAPIQuark(client))
+	router.Get("/api/articles/{slug}", controllers.GetArticleBySlugQuark(client))
+
+	// 5. Start Server
+	fmt.Println("🌐 Showcase Demo with Quark ORM is ready!")
+	fmt.Println("   URL: http://localhost:8080")
+	fmt.Println("   Using: github.com/jcsvwinston/quark ORM")
+
+	if err := http.ListenAndServe(":8080", router); err != nil {
+		log.Fatalf("Server failed: %v", err)
+	}
 }
