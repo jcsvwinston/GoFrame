@@ -1,14 +1,31 @@
 package controllers
 
 import (
+	"bytes"
 	"context"
+	"html/template"
 	"net/http"
 
 	"example.com/showcase_clean/internal/models"
 	"example.com/showcase_clean/internal/quarkdb"
 	gfrender "github.com/jcsvwinston/GoFrame/pkg/router"
 	"github.com/jcsvwinston/quark"
+	"github.com/yuin/goldmark"
 )
+
+// Health returns a simple health check
+func Health(c *gfrender.Context) error {
+	return c.JSON(http.StatusOK, map[string]any{"status": "ok"})
+}
+
+// markdownToHTML converts markdown to HTML
+func markdownToHTML(content string) template.HTML {
+	var buf bytes.Buffer
+	if err := goldmark.Convert([]byte(content), &buf); err != nil {
+		return template.HTML(content)
+	}
+	return template.HTML(buf.String())
+}
 
 // HomePageQuark renders the home page using Quark ORM
 func HomePageQuark(client *quarkdb.Client) gfrender.Handler {
