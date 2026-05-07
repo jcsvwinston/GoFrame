@@ -165,7 +165,7 @@ func (p *Panel) handleListModels(c *router.Context) error {
 							mi.IsEstimated = estimated
 						}
 						mi.Counts[alias] = count
-						
+
 						// Add database alias if not already present
 						found := false
 						for _, dbName := range mi.Databases {
@@ -760,7 +760,7 @@ func (p *Panel) handleBulkAction(c *router.Context) error {
 		})
 
 	default:
-		return gferrors.BadRequest("unknown action: "+req.Action)
+		return gferrors.BadRequest("unknown action: " + req.Action)
 	}
 }
 
@@ -770,8 +770,8 @@ func writeJSON(w http.ResponseWriter, status int, data interface{}) {
 	json.NewEncoder(w).Encode(data)
 }
 
-func writeErr(w http.ResponseWriter, err error) {
-	gferrors.WriteError(w, err, nil)
+func writeErr(w http.ResponseWriter, r *http.Request, err error) {
+	gferrors.WriteError(w, r, err, nil)
 }
 
 func authErrorToDomain(err error) error {

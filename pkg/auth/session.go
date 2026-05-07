@@ -26,6 +26,11 @@ type SessionConfig struct {
 	SameSite    string        // Cookie SameSite: lax|strict|none (default: lax)
 }
 
+const (
+	flashDataKeyPrefix = "_flash:"
+	flashOldKeyPrefix  = "_flash_old:"
+)
+
 // NewSessionManager creates a session manager with the given configuration.
 // By default it uses in-memory storage. Call SetStore to use Redis, SQL, or another backend.
 func NewSessionManager(cfg SessionConfig) *SessionManager {
@@ -139,4 +144,104 @@ func (s *SessionManager) SetStore(store scs.Store) {
 // (e.g. setting a custom store for Redis).
 func (s *SessionManager) SCS() *scs.SessionManager {
 	return s.scs
+}
+
+// Flash stores a key-value pair in the session that will be available
+// in the next request only. After the next request, the data is automatically deleted.
+// This is useful for status messages (e.g., "Task completed successfully").
+func (s *SessionManager) Flash(ctx context.Context, key, value string) {
+	s.scs.Put(ctx, flashDataKeyPrefix+key, value)
+}
+
+// FlashInt stores an int value in flash data.
+func (s *SessionManager) FlashInt(ctx context.Context, key string, value int) {
+	s.scs.Put(ctx, flashDataKeyPrefix+key, value)
+}
+
+// FlashBool stores a bool value in flash data.
+func (s *SessionManager) FlashBool(ctx context.Context, key string, value bool) {
+	s.scs.Put(ctx, flashDataKeyPrefix+key, value)
+}
+
+// GetFlash retrieves a flash value for the current request.
+func (s *SessionManager) GetFlash(ctx context.Context, key string) string {
+	return s.scs.GetString(ctx, flashDataKeyPrefix+key)
+}
+
+// GetFlashInt retrieves a flash int value for the current request.
+func (s *SessionManager) GetFlashInt(ctx context.Context, key string) int {
+	return s.scs.GetInt(ctx, flashDataKeyPrefix+key)
+}
+
+// GetFlashBool retrieves a flash bool value for the current request.
+func (s *SessionManager) GetFlashBool(ctx context.Context, key string) bool {
+	return s.scs.GetBool(ctx, flashDataKeyPrefix+key)
+}
+
+// Reflash keeps all flash data for an additional request.
+func (s *SessionManager) Reflash(ctx context.Context) {
+	// Move current flash data to old flash data
+	for _, key := range s.scs.Keys(ctx) {
+		if strings.HasPrefix(key, flashDataKeyPrefix) {
+			value := s.scs.GetString(ctx, key)
+			oldKey := flashOldKeyPrefix + strings.TrimPrefix(key, flashDataKeyPrefix)
+			s.scs.Put(ctx, oldKey, value)
+		}
+	}
+}
+
+// Keep keeps specific flash data keys for an additional request.
+func (s *SessionManager) Keep(ctx context.Context, keys []string) {
+	for _, key := range keys {
+		if value := s.scs.GetString(ctx, flashDataKeyPrefix+key); value != "" {
+			s.scs.Put(ctx, flashOldKeyPrefix+key, value)
+		}
+	}
+}
+
+// Now stores a key-value pair that is only available in the current request.
+// This is similar to Flash but the data is not persisted to the next request.
+func (s *SessionManager) Now(ctx context.Context, key, value string) {
+	s.scs.Put(ctx, flashDataKeyPrefix+key, value)
+}
+
+// Pull retrieves a value from the session and deletes it in one operation.
+func (s *SessionManager) Pull(ctx context.Context, key string) string {
+	value := s.scs.GetString(ctx, key)
+	s.scs.Remove(ctx, key)
+	return value
+}
+
+// PullInt retrieves an int value from the session and deletes it in one operation.
+func (s *SessionManager) PullInt(ctx context.Context, key string) int {
+	value := s.scs.GetInt(ctx, key)
+	s.scs.Remove(ctx, key)
+	return value
+}
+
+// PullBool retrieves a bool value from the session and deletes it in one operation.
+func (s *SessionManager) PullBool(ctx context.Context, key string) bool {
+	value := s.scs.GetBool(ctx, key)
+	s.scs.Remove(ctx, key)
+	return value
+}
+
+// Forget removes multiple keys from the session in one operation.
+func (s *SessionManager) Forget(ctx context.Context, keys []string) {
+	for _, key := range keys {
+		s.scs.Remove(ctx, key)
+	}
+}
+
+// Invalidate regenerates the session ID and removes all data from the session.
+// This is useful for logout or when you want to completely reset the session.
+func (s *SessionManager) Invalidate(ctx context.Context) error {
+	if err := s.scs.RenewToken(ctx); err != nil {
+		return err
+	}
+	// Clear all session data
+	for _, key := range s.scs.Keys(ctx) {
+		s.scs.Remove(ctx, key)
+	}
+	return nil
 }

@@ -85,8 +85,9 @@ func TestWithDetails(t *testing.T) {
 
 func TestWriteError_DomainError(t *testing.T) {
 	w := httptest.NewRecorder()
+	r := httptest.NewRequest("GET", "/test", nil)
 	err := NotFound("User", "42")
-	WriteError(w, err, nil)
+	WriteError(w, r, err, nil)
 
 	if w.Code != 404 {
 		t.Errorf("expected 404, got %d", w.Code)
@@ -101,7 +102,8 @@ func TestWriteError_DomainError(t *testing.T) {
 
 func TestWriteError_GenericError(t *testing.T) {
 	w := httptest.NewRecorder()
-	WriteError(w, errors.New("oops"), nil)
+	r := httptest.NewRequest("GET", "/test", nil)
+	WriteError(w, r, errors.New("oops"), nil)
 
 	if w.Code != 500 {
 		t.Errorf("expected 500, got %d", w.Code)

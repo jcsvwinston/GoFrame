@@ -1,12 +1,49 @@
 // Package errors provides domain-specific error types for the GoFrame framework.
 // It defines a DomainError type with HTTP status codes and JSON serialization,
 // along with convenience constructors for common error cases.
+//
+// The package supports Laravel-style error handling with:
+// - Reportable exceptions (custom logging/reporting)
+// - Renderable exceptions (custom HTTP responses)
+// - Configurable log levels per error type
+// - Global error context
+// - Exception throttling
 package errors
 
 import (
+	"context"
 	"fmt"
+	"log/slog"
 	"net/http"
 )
+
+// Reportable is an interface that errors can implement to provide custom
+// reporting logic (e.g., sending to Sentry, Flare, or other external services).
+type Reportable interface {
+	// Report handles the error reporting. Return false to fall back to default logging.
+	Report(ctx context.Context, logger *slog.Logger) bool
+}
+
+// Renderable is an interface that errors can implement to provide custom
+// HTTP rendering logic.
+type Renderable interface {
+	// Render returns a custom HTTP response. Return false to fall back to default rendering.
+	Render(w http.ResponseWriter, r *http.Request) bool
+}
+
+// ContextProvider is an interface that errors can implement to provide
+// additional context for logging.
+type ContextProvider interface {
+	// Context returns additional context data for logging.
+	Context() map[string]any
+}
+
+// LogLevelProvider is an interface that errors can implement to specify
+// their log level.
+type LogLevelProvider interface {
+	// LogLevel returns the log level for this error.
+	LogLevel() slog.Level
+}
 
 // DomainError represents a structured application error with an HTTP status code,
 // a machine-readable code, a human-readable message, and optional details.
@@ -30,6 +67,39 @@ func (e *DomainError) WithDetails(details any) *DomainError {
 		StatusCode: e.StatusCode,
 		Details:    details,
 	}
+}
+
+// Report implements Reportable for DomainError.
+// By default, DomainErrors are not reported (returns false to use default logging).
+func (e *DomainError) Report(ctx context.Context, logger *slog.Logger) bool {
+	return false // Use default logging
+}
+
+// Render implements Renderable for DomainError.
+// By default, DomainErrors use the standard JSON rendering (returns false).
+func (e *DomainError) Render(w http.ResponseWriter, r *http.Request) bool {
+	return false // Use default rendering
+}
+
+// Context implements ContextProvider for DomainError.
+// Returns the details as context for logging.
+func (e *DomainError) Context() map[string]any {
+	if e.Details == nil {
+		return nil
+	}
+	if m, ok := e.Details.(map[string]any); ok {
+		return m
+	}
+	return map[string]any{"details": e.Details}
+}
+
+// LogLevel implements LogLevelProvider for DomainError.
+// Returns ERROR for 5xx, DEBUG for 4xx.
+func (e *DomainError) LogLevel() slog.Level {
+	if e.StatusCode >= 500 {
+		return slog.LevelError
+	}
+	return slog.LevelDebug
 }
 
 // NotFound creates a 404 error indicating a resource was not found.

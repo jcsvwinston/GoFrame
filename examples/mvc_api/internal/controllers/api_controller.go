@@ -20,7 +20,7 @@ func ListArticles(svc *services.Services) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		items, err := svc.ListArticles(r.Context(), false, 100)
 		if err != nil {
-			router.Error(w, err, nil)
+			router.Error(w, r, err, nil)
 			return
 		}
 		router.JSON(w, http.StatusOK, map[string]any{
@@ -35,7 +35,7 @@ func ListArticlesLiveFlag(a *app.App, svc *services.Services) http.HandlerFunc {
 		previewMode, _ := a.Admin.FeatureFlag("articles_preview_mode")
 		items, err := svc.ListArticles(r.Context(), !previewMode, 100)
 		if err != nil {
-			router.Error(w, err, nil)
+			router.Error(w, r, err, nil)
 			return
 		}
 		router.JSON(w, http.StatusOK, map[string]any{
@@ -52,7 +52,7 @@ func CreateArticle(svc *services.Services) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var in dtos.CreateArticleInput
 		if err := router.Bind(r, &in); err != nil {
-			router.Error(w, err, nil)
+			router.Error(w, r, err, nil)
 			return
 		}
 
@@ -73,7 +73,7 @@ func CreateArticle(svc *services.Services) http.HandlerFunc {
 			now, now, in.Title, in.Content, in.Published,
 		)
 		if err != nil {
-			router.Error(w, err, nil)
+			router.Error(w, r, err, nil)
 			return
 		}
 		id, _ := res.LastInsertId()
@@ -94,7 +94,7 @@ func ListLeads(svc *services.Services) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		items, err := svc.ListLeads(r.Context(), 100)
 		if err != nil {
-			router.Error(w, err, nil)
+			router.Error(w, r, err, nil)
 			return
 		}
 		router.JSON(w, http.StatusOK, map[string]any{
@@ -108,7 +108,7 @@ func CreateLead(svc *services.Services) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var in dtos.CreateLeadInput
 		if err := router.Bind(r, &in); err != nil {
-			router.Error(w, err, nil)
+			router.Error(w, r, err, nil)
 			return
 		}
 
@@ -133,7 +133,7 @@ func CreateLead(svc *services.Services) http.HandlerFunc {
 
 		item, err := svc.CreateLead(r.Context(), in)
 		if err != nil {
-			router.Error(w, err, nil)
+			router.Error(w, r, err, nil)
 			return
 		}
 		router.Created(w, map[string]any{"data": item})

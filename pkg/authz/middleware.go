@@ -33,7 +33,7 @@ func (e *Enforcer) Middleware() func(http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			claims, ok := auth.ClaimsFromContext(r.Context())
 			if !ok {
-				gferrors.WriteError(w, gferrors.Unauthorized("authentication required"), nil)
+				gferrors.WriteError(w, r, gferrors.Unauthorized("authentication required"), nil)
 				return
 			}
 
@@ -46,7 +46,7 @@ func (e *Enforcer) Middleware() func(http.Handler) http.Handler {
 					"resource", resource,
 					"action", action,
 				)
-				gferrors.WriteError(w, gferrors.Forbidden("you do not have permission to perform this action"), nil)
+				gferrors.WriteError(w, r, gferrors.Forbidden("you do not have permission to perform this action"), nil)
 				return
 			}
 
@@ -67,7 +67,7 @@ func (e *Enforcer) RequireRole(roles ...string) func(http.Handler) http.Handler 
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			claims, ok := auth.ClaimsFromContext(r.Context())
 			if !ok {
-				gferrors.WriteError(w, gferrors.Unauthorized("authentication required"), nil)
+				gferrors.WriteError(w, r, gferrors.Unauthorized("authentication required"), nil)
 				return
 			}
 
@@ -86,7 +86,7 @@ func (e *Enforcer) RequireRole(roles ...string) func(http.Handler) http.Handler 
 				}
 			}
 
-			gferrors.WriteError(w, gferrors.Forbidden("insufficient role"), nil)
+			gferrors.WriteError(w, r, gferrors.Forbidden("insufficient role"), nil)
 		})
 	}
 }

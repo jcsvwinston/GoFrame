@@ -106,7 +106,7 @@ func Recoverer(next http.Handler) http.Handler {
 	})
 }
 
-func headerWritten(w http.ResponseWriter) bool {
+func headerWritten(_ http.ResponseWriter) bool {
 	// If the header map has a status-related entry, consider it written.
 	// This is a best-effort check; if the handler has already called
 	// WriteHeader, we cannot call it again without triggering a superfluous
@@ -282,23 +282,4 @@ func IsWebSocketUpgrade(r *http.Request) bool {
 	connection := strings.ToLower(strings.TrimSpace(r.Header.Get("Connection")))
 	upgrade := strings.ToLower(strings.TrimSpace(r.Header.Get("Upgrade")))
 	return strings.Contains(connection, "upgrade") && upgrade == "websocket"
-}
-
-// clientIPFromRequest extracts the client IP. Exported for reuse across
-// packages, but also used internally by the rate limiter.
-func clientIPFromRequest(r *http.Request) string {
-	if xff := strings.TrimSpace(r.Header.Get("X-Forwarded-For")); xff != "" {
-		parts := strings.Split(xff, ",")
-		if ip := strings.TrimSpace(parts[0]); ip != "" {
-			return ip
-		}
-	}
-	if xrip := strings.TrimSpace(r.Header.Get("X-Real-IP")); xrip != "" {
-		return xrip
-	}
-	host, _, err := net.SplitHostPort(strings.TrimSpace(r.RemoteAddr))
-	if err == nil && host != "" {
-		return host
-	}
-	return strings.TrimSpace(r.RemoteAddr)
 }

@@ -55,16 +55,16 @@ type PanelConfig struct {
 	Prefix              string // URL prefix (default "/admin")
 	Title               string // Site title shown in the UI
 	Environment         string
-	OTLPEndpoint        string   // optional OTLP endpoint configured by the host app
-	RedisURL            string   // optional Redis URL for background jobs runtime snapshot
+	OTLPEndpoint        string          // optional OTLP endpoint configured by the host app
+	RedisURL            string          // optional Redis URL for background jobs runtime snapshot
 	TaskInspector       tasks.Inspector // optional configured queue inspector
-	LiveExcludePatterns []string // optional path patterns excluded from live HTTP capture
-	LiveClusterEnabled  bool     // when true, publish/subscribe live telemetry through Redis
-	LiveClusterRedisURL string   // optional Redis URL for live cluster relay (falls back to RedisURL)
-	LiveClusterChannel  string   // optional pub/sub channel (default goframe:admin:live:v1)
-	LiveClusterNodeID   string   // optional explicit node id (defaults to runtime identity)
-	LiveClusterToken    string   // optional shared token to reject untrusted relay messages
-	TraceURLTemplate    string   // optional trace explorer URL template (supports {trace_id})
+	LiveExcludePatterns []string        // optional path patterns excluded from live HTTP capture
+	LiveClusterEnabled  bool            // when true, publish/subscribe live telemetry through Redis
+	LiveClusterRedisURL string          // optional Redis URL for live cluster relay (falls back to RedisURL)
+	LiveClusterChannel  string          // optional pub/sub channel (default goframe:admin:live:v1)
+	LiveClusterNodeID   string          // optional explicit node id (defaults to runtime identity)
+	LiveClusterToken    string          // optional shared token to reject untrusted relay messages
+	TraceURLTemplate    string          // optional trace explorer URL template (supports {trace_id})
 	Databases           []DatabaseRuntimeInfo
 	DatabaseHandles     map[string]*db.DB // optional alias->db handle mapping for runtime stats
 	EnvironmentSnapshot []string          // optional env snapshot (defaults to os.Environ at startup)
@@ -503,7 +503,7 @@ func (p *Panel) authMiddleware(next http.Handler) http.Handler {
 		user, err := p.config.Auth.Authenticate(r)
 		if err != nil {
 			if isAdminAPIRequest(r) {
-				writeErr(w, authErrorToDomain(err))
+				writeErr(w, r, authErrorToDomain(err))
 				return
 			}
 			http.Redirect(w, r, p.adminLoginURL(r), http.StatusFound)

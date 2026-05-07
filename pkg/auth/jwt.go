@@ -92,19 +92,19 @@ func (m *JWTManager) Middleware() func(http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			authHeader := r.Header.Get("Authorization")
 			if authHeader == "" {
-				gferrors.WriteError(w, gferrors.Unauthorized("missing authorization header"), nil)
+				gferrors.WriteError(w, r, gferrors.Unauthorized("missing authorization header"), nil)
 				return
 			}
 
 			parts := strings.SplitN(authHeader, " ", 2)
 			if len(parts) != 2 || !strings.EqualFold(parts[0], "bearer") {
-				gferrors.WriteError(w, gferrors.Unauthorized("invalid authorization format, expected: Bearer <token>"), nil)
+				gferrors.WriteError(w, r, gferrors.Unauthorized("invalid authorization format, expected: Bearer <token>"), nil)
 				return
 			}
 
 			claims, err := m.Validate(parts[1])
 			if err != nil {
-				gferrors.WriteError(w, gferrors.Unauthorized("invalid or expired token"), nil)
+				gferrors.WriteError(w, r, gferrors.Unauthorized("invalid or expired token"), nil)
 				return
 			}
 

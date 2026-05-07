@@ -59,7 +59,7 @@ func EnqueueOutbox(a *app.App, svc *services.Services) http.HandlerFunc {
 			},
 		})
 		if err != nil {
-			router.Error(w, err, a.Logger)
+			router.Error(w, r, err, a.Logger)
 			return
 		}
 		router.Created(w, map[string]any{
@@ -82,7 +82,7 @@ func DrainOutbox(a *app.App, svc *services.Services) http.HandlerFunc {
 		}
 		result, err := svc.OutboxDispatcher.RunOnce(r.Context())
 		if err != nil {
-			router.Error(w, err, a.Logger)
+			router.Error(w, r, err, a.Logger)
 			return
 		}
 		router.JSON(w, http.StatusOK, map[string]any{
@@ -114,7 +114,7 @@ func EnqueueTask(a *app.App, svc *services.Services) http.HandlerFunc {
 			QueuedAt: time.Now().UTC().Format(time.RFC3339),
 		}, policy)
 		if err != nil {
-			router.Error(w, err, a.Logger)
+			router.Error(w, r, err, a.Logger)
 			return
 		}
 

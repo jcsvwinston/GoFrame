@@ -23,12 +23,12 @@ func JSON(w http.ResponseWriter, status int, data interface{}) {
 // Error writes an error as a structured JSON response. If the error is a
 // *DomainError, its status code and details are used; otherwise a generic 500
 // is returned.
-func Error(w http.ResponseWriter, err error, logger ...*slog.Logger) {
+func Error(w http.ResponseWriter, r *http.Request, err error, logger ...*slog.Logger) {
 	var l *slog.Logger
 	if len(logger) > 0 {
 		l = logger[0]
 	}
-	gferrors.WriteError(w, err, l)
+	gferrors.WriteError(w, r, err, l)
 }
 
 // NoContent writes a 204 No Content response.

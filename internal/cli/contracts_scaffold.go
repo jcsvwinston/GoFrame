@@ -73,7 +73,7 @@ func ensureContractsAggregator(outDir, title string) error {
 	path := filepath.Join(outDir, "internal", "contracts", "contracts.go")
 	if _, err := os.Stat(path); err == nil {
 		return nil
-	} else if err != nil && !os.IsNotExist(err) {
+	} else if !os.IsNotExist(err) {
 		return fmt.Errorf("stat contracts aggregator: %w", err)
 	}
 

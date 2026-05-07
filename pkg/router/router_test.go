@@ -38,8 +38,9 @@ func TestJSON(t *testing.T) {
 
 func TestError_DomainError(t *testing.T) {
 	w := httptest.NewRecorder()
+	r := httptest.NewRequest("GET", "/test", nil)
 	err := gferrors.NotFound("User", "42")
-	Error(w, err)
+	Error(w, r, err)
 
 	if w.Code != 404 {
 		t.Errorf("expected 404, got %d", w.Code)
@@ -178,8 +179,8 @@ func TestCSRFMiddleware_PostWithoutToken(t *testing.T) {
 	w := httptest.NewRecorder()
 	handler.ServeHTTP(w, r)
 
-	if w.Code != 403 {
-		t.Errorf("POST without token should be 403, got %d", w.Code)
+	if w.Code != 419 {
+		t.Errorf("POST without token should be 419, got %d", w.Code)
 	}
 }
 
@@ -229,8 +230,8 @@ func TestCSRFMiddleware_PostWithMismatchedToken(t *testing.T) {
 	w := httptest.NewRecorder()
 	handler.ServeHTTP(w, r)
 
-	if w.Code != http.StatusForbidden {
-		t.Fatalf("expected 403 for mismatched csrf token, got %d", w.Code)
+	if w.Code != 419 {
+		t.Errorf("expected 419 for mismatched csrf token, got %d", w.Code)
 	}
 }
 

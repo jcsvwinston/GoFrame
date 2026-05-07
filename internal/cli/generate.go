@@ -937,8 +937,8 @@ func parseResourceID(r *http.Request) (uint, error) {
 	return uint(id), nil
 }
 
-func writeError(w http.ResponseWriter, err error) {
-	router.Error(w, err)
+func writeError(w http.ResponseWriter, r *http.Request, err error) {
+	router.Error(w, r, err)
 }
 
 func writeJSON(w http.ResponseWriter, status int, payload any) {
@@ -1320,8 +1320,8 @@ func parseResourceID(r *http.Request) (uint, error) {
 	return uint(id), nil
 }
 
-func writeError(w http.ResponseWriter, err error) {
-	router.Error(w, err)
+func writeError(w http.ResponseWriter, r *http.Request, err error) {
+	router.Error(w, r, err)
 }
 
 func writeJSON(w http.ResponseWriter, status int, payload any) {
