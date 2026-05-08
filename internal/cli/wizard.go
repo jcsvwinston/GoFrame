@@ -18,11 +18,6 @@ type wizardPrompt struct {
 	multiSelect bool
 }
 
-type wizardStep struct {
-	name    string
-	prompts []wizardPrompt
-}
-
 func runWizard(args []string, _ io.Reader, stdout, stderr io.Writer) error {
 	fs := flag.NewFlagSet("wizard", flag.ContinueOnError)
 	fs.SetOutput(stderr)
@@ -216,7 +211,7 @@ func runInspectDBWizard(configPath string, stdin io.Reader, stdout, stderr io.Wr
 	fmt.Fprintf(stdout, "Naming convention: %s\n", namingConvention)
 
 	// TODO: Actually run inspectdb with these parameters
-	fmt.Fprintf(stdout, "\nWizard mode is a framework placeholder. Use: goframe inspectdb --config %s\n", configPath)
+	fmt.Fprintf(stdout, "\nWizard mode is a framework placeholder. Use: goframe inspectdb --config goframe.yaml\n")
 
 	return nil
 }
