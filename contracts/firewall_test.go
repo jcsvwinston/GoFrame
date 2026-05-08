@@ -14,7 +14,7 @@ import (
 // TestFirewall_NoThirdPartyTypesInStableAPIs ensures that third-party concrete types
 // do not leak into stable public API surfaces. This is a critical Track C deliverable.
 func TestFirewall_NoThirdPartyTypesInStableAPIs(t *testing.T) {
-	repoRoot := filepath.Join(filepath.Dir(baselinePath(t)), "..")
+	repoRoot := filepath.Dir(baselinePath(t))
 
 	packages := []struct {
 		importPath string

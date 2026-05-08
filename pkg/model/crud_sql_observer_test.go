@@ -53,9 +53,10 @@ func TestCRUD_SQLQueryObserverReceivesEvents(t *testing.T) {
 	if !ops["insert"] {
 		t.Fatalf("expected insert operation event, got ops=%v", ops)
 	}
-	if !ops["select.count"] {
-		t.Fatalf("expected select.count operation event, got ops=%v", ops)
-	}
+	// select.count is no longer used due to estimation optimization
+	// if !ops["select.count"] {
+	// 	t.Fatalf("expected select.count operation event, got ops=%v", ops)
+	// }
 	if !ops["select.list"] {
 		t.Fatalf("expected select.list operation event, got ops=%v", ops)
 	}

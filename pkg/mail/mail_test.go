@@ -402,3 +402,54 @@ func writeMailExecutable(t *testing.T, path, body string) {
 		}
 	}
 }
+
+func TestContainsCapability(t *testing.T) {
+	t.Run("exact match", func(t *testing.T) {
+		capabilities := []string{"mail.send", "queue.publish"}
+		if !containsCapability(capabilities, "mail.send") {
+			t.Error("expected true for exact match")
+		}
+	})
+
+	t.Run("case insensitive", func(t *testing.T) {
+		capabilities := []string{"mail.send", "queue.publish"}
+		if !containsCapability(capabilities, "MAIL.SEND") {
+			t.Error("expected true for case insensitive match")
+		}
+	})
+
+	t.Run("with whitespace", func(t *testing.T) {
+		capabilities := []string{"mail.send", "queue.publish"}
+		if !containsCapability(capabilities, "  mail.send  ") {
+			t.Error("expected true with whitespace")
+		}
+	})
+
+	t.Run("not found", func(t *testing.T) {
+		capabilities := []string{"mail.send", "queue.publish"}
+		if containsCapability(capabilities, "cache.get") {
+			t.Error("expected false for not found")
+		}
+	})
+
+	t.Run("empty capability", func(t *testing.T) {
+		capabilities := []string{"mail.send", "queue.publish"}
+		if containsCapability(capabilities, "") {
+			t.Error("expected false for empty capability")
+		}
+	})
+
+	t.Run("empty list", func(t *testing.T) {
+		capabilities := []string{}
+		if containsCapability(capabilities, "mail.send") {
+			t.Error("expected false for empty list")
+		}
+	})
+
+	t.Run("capability with whitespace in list", func(t *testing.T) {
+		capabilities := []string{"  mail.send  ", "queue.publish"}
+		if !containsCapability(capabilities, "mail.send") {
+			t.Error("expected true with whitespace in list")
+		}
+	})
+}

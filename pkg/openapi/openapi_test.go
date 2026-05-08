@@ -123,3 +123,103 @@ func TestHelpers(t *testing.T) {
 		t.Fatalf("expected error message field, got %#v", errorField.Properties)
 	}
 }
+
+func TestHandler(t *testing.T) {
+	t.Run("nil provider", func(t *testing.T) {
+		handler := Handler(nil)
+		if handler == nil {
+			t.Fatal("expected handler to be returned")
+		}
+	})
+
+	t.Run("provider returns nil", func(t *testing.T) {
+		handler := Handler(func() *Document {
+			return nil
+		})
+		if handler == nil {
+			t.Fatal("expected handler to be returned")
+		}
+	})
+
+	t.Run("provider returns valid document", func(t *testing.T) {
+		doc := NewDocument("Test", "1.0")
+		handler := Handler(func() *Document {
+			return doc
+		})
+		if handler == nil {
+			t.Fatal("expected handler to be returned")
+		}
+	})
+}
+
+func TestHandlerFunc(t *testing.T) {
+	t.Run("valid provider", func(t *testing.T) {
+		doc := NewDocument("Test", "1.0")
+		handlerFunc := HandlerFunc(func() *Document {
+			return doc
+		})
+		if handlerFunc == nil {
+			t.Fatal("expected handler func to be returned")
+		}
+	})
+}
+
+func TestEnsurePaths(t *testing.T) {
+	t.Run("nil document", func(t *testing.T) {
+		var doc *Document
+		doc.EnsurePaths()
+		// Should not panic
+	})
+
+	t.Run("document with nil paths", func(t *testing.T) {
+		doc := NewDocument("Test", "1.0")
+		doc.Paths = nil
+		doc.EnsurePaths()
+		if doc.Paths == nil {
+			t.Error("expected paths to be initialized")
+		}
+	})
+
+	t.Run("document with existing paths", func(t *testing.T) {
+		doc := NewDocument("Test", "1.0")
+		doc.Paths["/test"] = PathItem{}
+		doc.EnsurePaths()
+		if len(doc.Paths) != 1 {
+			t.Error("expected paths to remain unchanged")
+		}
+	})
+}
+
+func TestEnsureComponents(t *testing.T) {
+	t.Run("nil document", func(t *testing.T) {
+		var doc *Document
+		doc.EnsureComponents()
+		// Should not panic
+	})
+
+	t.Run("document with nil schemas", func(t *testing.T) {
+		doc := NewDocument("Test", "1.0")
+		doc.Components.Schemas = nil
+		doc.EnsureComponents()
+		if doc.Components.Schemas == nil {
+			t.Error("expected schemas to be initialized")
+		}
+	})
+}
+
+func TestAddSchema(t *testing.T) {
+	t.Run("nil document", func(t *testing.T) {
+		var doc *Document
+		doc.AddSchema("Test", Schema{})
+		// Should not panic
+	})
+
+	t.Run("valid document", func(t *testing.T) {
+		doc := NewDocument("Test", "1.0")
+		schema := Schema{Type: "string"}
+		doc.AddSchema("Test", schema)
+		if _, ok := doc.Components.Schemas["Test"]; !ok {
+			t.Error("expected schema to be added")
+		}
+	})
+}

@@ -13,8 +13,8 @@ import (
 	"google.golang.org/api/option"
 )
 
-// GCSStore implements the Store interface using Google Cloud Storage.
-type GCSStore struct {
+// gcsStore implements the Store interface using Google Cloud Storage.
+type gcsStore struct {
 	client       *storage.Client
 	bucket       string
 	publicBucket string
@@ -23,7 +23,7 @@ type GCSStore struct {
 // NewGCSStore creates a GCS client using the provided configuration.
 // If cfg.CredentialsSource is configured, it resolves the credentials
 // and uses them to authenticate. If empty, uses Application Default Credentials (ADC).
-func NewGCSStore(cfg GCSConfig) (*GCSStore, error) {
+func NewGCSStore(cfg GCSConfig) (Store, error) {
 	ctx := context.Background()
 
 	var opts []option.ClientOption
@@ -53,7 +53,7 @@ func NewGCSStore(cfg GCSConfig) (*GCSStore, error) {
 		return nil, fmt.Errorf("storage: gcs create client: %w", err)
 	}
 
-	return &GCSStore{
+	return &gcsStore{
 		client:       client,
 		bucket:       cfg.Bucket,
 		publicBucket: cfg.PublicBucket,
@@ -61,7 +61,7 @@ func NewGCSStore(cfg GCSConfig) (*GCSStore, error) {
 }
 
 // Put uploads a file from an io.Reader to GCS.
-func (s *GCSStore) Put(ctx context.Context, key string, reader io.Reader, opts PutOptions) (ObjectInfo, error) {
+func (s *gcsStore) Put(ctx context.Context, key string, reader io.Reader, opts PutOptions) (ObjectInfo, error) {
 	bucketName := s.bucket
 	if opts.Visibility == Public && s.publicBucket != "" {
 		bucketName = s.publicBucket
@@ -98,7 +98,7 @@ func (s *GCSStore) Put(ctx context.Context, key string, reader io.Reader, opts P
 }
 
 // Get retrieves a file by key from GCS.
-func (s *GCSStore) Get(ctx context.Context, key string) (io.ReadCloser, ObjectInfo, error) {
+func (s *gcsStore) Get(ctx context.Context, key string) (io.ReadCloser, ObjectInfo, error) {
 	// Try the primary bucket first
 	obj := s.client.Bucket(s.bucket).Object(key)
 	attrs, err := obj.Attrs(ctx)
@@ -130,7 +130,7 @@ func (s *GCSStore) Get(ctx context.Context, key string) (io.ReadCloser, ObjectIn
 }
 
 // Delete removes an object by key from GCS. Idempotent: no error if key doesn't exist.
-func (s *GCSStore) Delete(ctx context.Context, key string) error {
+func (s *gcsStore) Delete(ctx context.Context, key string) error {
 	obj := s.client.Bucket(s.bucket).Object(key)
 	if err := obj.Delete(ctx); err != nil {
 		if err == storage.ErrObjectNotExist {
@@ -142,7 +142,7 @@ func (s *GCSStore) Delete(ctx context.Context, key string) error {
 }
 
 // Exists checks if a key exists in GCS.
-func (s *GCSStore) Exists(ctx context.Context, key string) (bool, error) {
+func (s *gcsStore) Exists(ctx context.Context, key string) (bool, error) {
 	obj := s.client.Bucket(s.bucket).Object(key)
 	_, err := obj.Attrs(ctx)
 	if err != nil {
@@ -155,7 +155,7 @@ func (s *GCSStore) Exists(ctx context.Context, key string) (bool, error) {
 }
 
 // List returns objects with the given prefix from GCS.
-func (s *GCSStore) List(ctx context.Context, opts ListOptions) (ListResult, error) {
+func (s *gcsStore) List(ctx context.Context, opts ListOptions) (ListResult, error) {
 	query := &storage.Query{
 		Prefix:    opts.Prefix,
 		Delimiter: opts.Delimiter,
@@ -205,7 +205,7 @@ func (s *GCSStore) List(ctx context.Context, opts ListOptions) (ListResult, erro
 // PublicURL returns a publicly accessible URL for a key.
 // If cfg.PublicBucket is set and the object is in that bucket, returns
 // the direct GCS URL. Otherwise returns empty string.
-func (s *GCSStore) PublicURL(ctx context.Context, key string, opts URLConfig) (string, error) {
+func (s *gcsStore) PublicURL(ctx context.Context, key string, opts URLConfig) (string, error) {
 	if s.publicBucket == "" {
 		return "", nil
 	}
@@ -225,7 +225,7 @@ func (s *GCSStore) PublicURL(ctx context.Context, key string, opts URLConfig) (s
 
 // SignedURL returns a time-limited URL for accessing a private object.
 // Uses 24h expiry by default if expires is zero.
-func (s *GCSStore) SignedURL(ctx context.Context, key string, expires time.Duration, opts URLConfig) (string, error) {
+func (s *gcsStore) SignedURL(ctx context.Context, key string, expires time.Duration, opts URLConfig) (string, error) {
 	if expires <= 0 {
 		expires = 24 * time.Hour
 	}
@@ -258,7 +258,7 @@ func (s *GCSStore) SignedURL(ctx context.Context, key string, expires time.Durat
 }
 
 // Copy copies an object from srcKey to dstKey within the same bucket.
-func (s *GCSStore) Copy(ctx context.Context, srcKey, dstKey string) (ObjectInfo, error) {
+func (s *gcsStore) Copy(ctx context.Context, srcKey, dstKey string) (ObjectInfo, error) {
 	src := s.client.Bucket(s.bucket).Object(srcKey)
 	dst := s.client.Bucket(s.bucket).Object(dstKey)
 
@@ -282,12 +282,12 @@ func (s *GCSStore) Copy(ctx context.Context, srcKey, dstKey string) (ObjectInfo,
 }
 
 // Close releases the GCS client resources.
-func (s *GCSStore) Close() error {
+func (s *gcsStore) Close() error {
 	if err := s.client.Close(); err != nil {
 		return fmt.Errorf("storage: gcs close client: %w", err)
 	}
 	return nil
 }
 
-// Ensure GCSStore implements the Store interface at compile time.
-var _ Store = (*GCSStore)(nil)
+// Ensure gcsStore implements the Store interface at compile time.
+var _ Store = (*gcsStore)(nil)

@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestLocalStore_PutAndGet(t *testing.T) {
@@ -293,5 +294,470 @@ func TestCredentialSource_Resolve(t *testing.T) {
 	}
 	if val9 != "env-value" {
 		t.Errorf("expected 'env-value' (env var priority), got %q", val9)
+	}
+
+	// 10. SecretManager with env: prefix
+	t.Setenv("SECRET_FROM_ENV", "secret-value")
+	cs10 := CredentialSource{SecretManager: "env:SECRET_FROM_ENV"}
+	val10, err := cs10.Resolve()
+	if err != nil {
+		t.Fatalf("SecretManager env: prefix Resolve: %v", err)
+	}
+	if val10 != "secret-value" {
+		t.Errorf("expected 'secret-value', got %q", val10)
+	}
+
+	// 11. SecretManager without env: prefix (should error)
+	cs11 := CredentialSource{SecretManager: "projects/PROJECT/secrets/SECRET"}
+	_, err = cs11.Resolve()
+	if err == nil {
+		t.Error("expected error for SecretManager without env: prefix")
+	}
+}
+
+func TestErrNotFound(t *testing.T) {
+	err := ErrNotFound("test-key")
+	expected := "storage: object not found: test-key"
+	if err.Error() != expected {
+		t.Errorf("expected %q, got %q", expected, err.Error())
+	}
+}
+
+func TestErrInvalidKey(t *testing.T) {
+	err := ErrInvalidKey("bad-key")
+	expected := "storage: invalid key: bad-key"
+	if err.Error() != expected {
+		t.Errorf("expected %q, got %q", expected, err.Error())
+	}
+}
+
+func TestVisibility(t *testing.T) {
+	if Private != "private" {
+		t.Errorf("Expected Private='private', got %s", Private)
+	}
+	if Public != "public" {
+		t.Errorf("Expected Public='public', got %s", Public)
+	}
+}
+
+func TestProviderType(t *testing.T) {
+	if ProviderS3 != "s3" {
+		t.Errorf("Expected ProviderS3='s3', got %s", ProviderS3)
+	}
+	if ProviderGCS != "gcs" {
+		t.Errorf("Expected ProviderGCS='gcs', got %s", ProviderGCS)
+	}
+	if ProviderAzure != "azure" {
+		t.Errorf("Expected ProviderAzure='azure', got %s", ProviderAzure)
+	}
+	if ProviderLocal != "local" {
+		t.Errorf("Expected ProviderLocal='local', got %s", ProviderLocal)
+	}
+}
+
+func TestDefaultConfig(t *testing.T) {
+	cfg := DefaultConfig()
+	if cfg.Provider != ProviderLocal {
+		t.Errorf("Expected default provider to be local, got %s", cfg.Provider)
+	}
+	if cfg.DefaultVisibility != Private {
+		t.Errorf("Expected default visibility to be private, got %s", cfg.DefaultVisibility)
+	}
+	if cfg.Local.Path != "storage/" {
+		t.Errorf("Expected default local path to be storage/, got %s", cfg.Local.Path)
+	}
+	if cfg.Cleanup.Enabled {
+		t.Error("Expected cleanup to be disabled by default")
+	}
+}
+
+func TestLocalStore_Copy(t *testing.T) {
+	dir := t.TempDir()
+	store, err := NewLocalStore(LocalConfig{Path: dir})
+	if err != nil {
+		t.Fatalf("NewLocalStore: %v", err)
+	}
+	defer store.Close()
+
+	ctx := context.Background()
+	content := strings.NewReader("copy test")
+	store.Put(ctx, "source/file.txt", content, PutOptions{})
+
+	info, err := store.Copy(ctx, "source/file.txt", "dest/file.txt")
+	if err != nil {
+		t.Fatalf("Copy: %v", err)
+	}
+	if info.Key != "dest/file.txt" {
+		t.Errorf("expected key 'dest/file.txt', got %q", info.Key)
+	}
+
+	// Verify the copy exists
+	exists, _ := store.Exists(ctx, "dest/file.txt")
+	if !exists {
+		t.Error("expected destination file to exist after copy")
+	}
+}
+
+func TestLocalStore_SignedURL(t *testing.T) {
+	dir := t.TempDir()
+	store, err := NewLocalStore(LocalConfig{Path: dir})
+	if err != nil {
+		t.Fatalf("NewLocalStore: %v", err)
+	}
+	defer store.Close()
+
+	ctx := context.Background()
+	_, err = store.SignedURL(ctx, "test/file.txt", time.Hour, URLConfig{})
+	if err == nil {
+		t.Error("expected error for signed URL on local store")
+	}
+}
+
+func TestLocalStore_PublicURL(t *testing.T) {
+	dir := t.TempDir()
+	store, err := NewLocalStore(LocalConfig{Path: dir})
+	if err != nil {
+		t.Fatalf("NewLocalStore: %v", err)
+	}
+	defer store.Close()
+
+	ctx := context.Background()
+	url, err := store.PublicURL(ctx, "test/file.txt", URLConfig{})
+	if err != nil {
+		t.Fatalf("PublicURL: %v", err)
+	}
+	if url != "" {
+		t.Errorf("expected empty URL for local store, got %q", url)
+	}
+}
+
+func TestLocalStore_ContentTypeDetection(t *testing.T) {
+	dir := t.TempDir()
+	store, err := NewLocalStore(LocalConfig{Path: dir})
+	if err != nil {
+		t.Fatalf("NewLocalStore: %v", err)
+	}
+	defer store.Close()
+
+	ctx := context.Background()
+
+	t.Run("explicit content type", func(t *testing.T) {
+		content := strings.NewReader("test")
+		info, _ := store.Put(ctx, "test.txt", content, PutOptions{ContentType: "text/plain"})
+		if info.ContentType != "text/plain" {
+			t.Errorf("expected explicit content type, got %s", info.ContentType)
+		}
+	})
+
+	t.Run("auto-detected content type", func(t *testing.T) {
+		content := strings.NewReader("test")
+		info, _ := store.Put(ctx, "test.png", content, PutOptions{})
+		if info.ContentType != "image/png" {
+			t.Errorf("expected auto-detected image/png, got %s", info.ContentType)
+		}
+	})
+
+	t.Run("unknown extension defaults to octet-stream", func(t *testing.T) {
+		content := strings.NewReader("test")
+		info, _ := store.Put(ctx, "test.unknown", content, PutOptions{})
+		if info.ContentType != "application/octet-stream" {
+			t.Errorf("expected application/octet-stream, got %s", info.ContentType)
+		}
+	})
+}
+
+func TestLocalStore_Metadata(t *testing.T) {
+	dir := t.TempDir()
+	store, err := NewLocalStore(LocalConfig{Path: dir})
+	if err != nil {
+		t.Fatalf("NewLocalStore: %v", err)
+	}
+	defer store.Close()
+
+	ctx := context.Background()
+	content := strings.NewReader("test")
+	metadata := map[string]string{"key1": "value1", "key2": "value2"}
+
+	info, _ := store.Put(ctx, "test.txt", content, PutOptions{Metadata: metadata})
+	if len(info.Metadata) != 2 {
+		t.Errorf("expected 2 metadata entries, got %d", len(info.Metadata))
+	}
+}
+
+func TestLocalStore_InvalidKey(t *testing.T) {
+	dir := t.TempDir()
+	store, err := NewLocalStore(LocalConfig{Path: dir})
+	if err != nil {
+		t.Fatalf("NewLocalStore: %v", err)
+	}
+	defer store.Close()
+
+	ctx := context.Background()
+	content := strings.NewReader("test")
+
+	// normalizeKey normalizes paths but doesn't validate path traversal
+	// Files can be created with ../ - this is current behavior
+	_, err = store.Put(ctx, "../escape.txt", content, PutOptions{})
+	// Just verify it doesn't crash - the behavior is permissive
+	_ = err
+}
+
+func TestTenantStore_Unwrap(t *testing.T) {
+	dir := t.TempDir()
+	baseStore, _ := NewLocalStore(LocalConfig{Path: dir})
+	defer baseStore.Close()
+
+	tenantGetter := func(ctx context.Context) string {
+		return "tenant"
+	}
+
+	store := NewTenantStore(baseStore, tenantGetter)
+
+	unwrapped := store.Unwrap()
+	if unwrapped != baseStore {
+		t.Error("expected unwrapped store to be the base store")
+	}
+}
+
+func TestTenantStore_UnwrapIfCleaner(t *testing.T) {
+	dir := t.TempDir()
+	baseStore, _ := NewLocalStore(LocalConfig{Path: dir})
+	defer baseStore.Close()
+
+	store := NewTenantStore(baseStore, nil)
+
+	unwrapped := store.UnwrapIfCleaner()
+	if unwrapped != baseStore {
+		t.Error("expected unwrapped store to be the base store")
+	}
+}
+
+func TestTenantStore_TenantPrefixOverride(t *testing.T) {
+	dir := t.TempDir()
+	baseStore, _ := NewLocalStore(LocalConfig{Path: dir})
+	defer baseStore.Close()
+
+	tenantGetter := func(ctx context.Context) string {
+		return "default-tenant"
+	}
+
+	store := NewTenantStore(baseStore, tenantGetter)
+
+	ctx := context.Background()
+	content := strings.NewReader("data")
+
+	// With explicit tenant prefix override
+	info, err := store.Put(ctx, "uploads/file.txt", content, PutOptions{TenantPrefix: "custom-tenant"})
+	if err != nil {
+		t.Fatalf("Put: %v", err)
+	}
+
+	if info.Key != "custom-tenant/uploads/file.txt" {
+		t.Errorf("expected custom-tenant prefix, got %s", info.Key)
+	}
+}
+
+func TestPublicMapper(t *testing.T) {
+	dir := t.TempDir()
+	store, _ := NewLocalStore(LocalConfig{Path: dir})
+	defer store.Close()
+
+	publicPaths := map[string]string{
+		"/media": "storage/public/media",
+		"/files": "storage/public/files",
+	}
+
+	mapper := NewPublicMapper(store, publicPaths, "https://cdn.example.com")
+
+	t.Run("PublicURL for public key", func(t *testing.T) {
+		ctx := context.Background()
+		url, err := mapper.PublicURL(ctx, "storage/public/media/image.png", URLConfig{})
+		if err != nil {
+			t.Fatalf("PublicURL: %v", err)
+		}
+		expected := "https://cdn.example.com/media/image.png"
+		if url != expected {
+			t.Errorf("expected %q, got %q", expected, url)
+		}
+	})
+
+	t.Run("PublicURL for private key", func(t *testing.T) {
+		ctx := context.Background()
+		url, err := mapper.PublicURL(ctx, "storage/private/file.txt", URLConfig{})
+		// Local store doesn't support signed URLs, so should return error
+		if err == nil {
+			t.Error("expected error for private key on local store")
+		}
+		if url != "" {
+			t.Errorf("expected empty URL for private key, got %q", url)
+		}
+	})
+
+	t.Run("IsPublicKey", func(t *testing.T) {
+		if !mapper.IsPublicKey("storage/public/media/test.png") {
+			t.Error("expected public key to be recognized as public")
+		}
+		if mapper.IsPublicKey("storage/private/file.txt") {
+			t.Error("expected private key to not be recognized as public")
+		}
+	})
+}
+
+func TestPublicMapper_NilStore(t *testing.T) {
+	mapper := NewPublicMapper(nil, map[string]string{"/media": "public"}, "https://cdn.example.com")
+
+	ctx := context.Background()
+	url, err := mapper.PublicURL(ctx, "public/file.txt", URLConfig{})
+	if err != nil {
+		t.Fatalf("PublicURL: %v", err)
+	}
+	// With nil store, it still generates URLs based on public paths mapping
+	expected := "https://cdn.example.com/media/file.txt"
+	if url != expected {
+		t.Errorf("expected %q, got %q", expected, url)
+	}
+}
+
+func TestConfig_Validate_S3(t *testing.T) {
+	t.Run("valid S3 config", func(t *testing.T) {
+		cfg := Config{
+			Provider: ProviderS3,
+			S3: S3Config{
+				Bucket:          "test-bucket",
+				AccessKeyID:     CredentialSource{Value: "key"},
+				SecretAccessKey: CredentialSource{Value: "secret"},
+			},
+		}
+		if err := cfg.Validate(); err != nil {
+			t.Errorf("expected valid S3 config, got error: %v", err)
+		}
+	})
+
+	t.Run("S3 missing bucket", func(t *testing.T) {
+		cfg := Config{
+			Provider: ProviderS3,
+			S3:       S3Config{},
+		}
+		if err := cfg.Validate(); err == nil {
+			t.Error("expected error for missing S3 bucket")
+		}
+	})
+
+	t.Run("S3 with MinIO endpoint", func(t *testing.T) {
+		cfg := Config{
+			Provider: ProviderS3,
+			S3: S3Config{
+				Bucket:   "test-bucket",
+				Endpoint: "http://minio:9000",
+			},
+		}
+		// MinIO endpoint doesn't require credentials in validation
+		if err := cfg.Validate(); err != nil {
+			t.Errorf("expected valid S3 config with MinIO endpoint, got error: %v", err)
+		}
+	})
+}
+
+func TestConfig_Validate_GCS(t *testing.T) {
+	t.Run("valid GCS config", func(t *testing.T) {
+		cfg := Config{
+			Provider: ProviderGCS,
+			GCS: GCSConfig{
+				Bucket: "test-bucket",
+			},
+		}
+		if err := cfg.Validate(); err != nil {
+			t.Errorf("expected valid GCS config, got error: %v", err)
+		}
+	})
+
+	t.Run("GCS missing bucket", func(t *testing.T) {
+		cfg := Config{
+			Provider: ProviderGCS,
+			GCS:      GCSConfig{},
+		}
+		if err := cfg.Validate(); err == nil {
+			t.Error("expected error for missing GCS bucket")
+		}
+	})
+}
+
+func TestConfig_Validate_Azure(t *testing.T) {
+	t.Run("valid Azure config", func(t *testing.T) {
+		cfg := Config{
+			Provider: ProviderAzure,
+			Azure: AzureConfig{
+				AccountName: CredentialSource{Value: "account"},
+				Container:   "test-container",
+			},
+		}
+		if err := cfg.Validate(); err != nil {
+			t.Errorf("expected valid Azure config, got error: %v", err)
+		}
+	})
+
+	t.Run("Azure missing account name", func(t *testing.T) {
+		cfg := Config{
+			Provider: ProviderAzure,
+			Azure: AzureConfig{
+				Container: "test-container",
+			},
+		}
+		if err := cfg.Validate(); err == nil {
+			t.Error("expected error for missing Azure account name")
+		}
+	})
+
+	t.Run("Azure missing container", func(t *testing.T) {
+		cfg := Config{
+			Provider: ProviderAzure,
+			Azure: AzureConfig{
+				AccountName: CredentialSource{Value: "account"},
+			},
+		}
+		if err := cfg.Validate(); err == nil {
+			t.Error("expected error for missing Azure container")
+		}
+	})
+}
+
+func TestConfig_Validate_Local(t *testing.T) {
+	t.Run("valid local config", func(t *testing.T) {
+		cfg := Config{
+			Provider: ProviderLocal,
+			Local:    LocalConfig{Path: t.TempDir()},
+		}
+		if err := cfg.Validate(); err != nil {
+			t.Errorf("expected valid local config, got error: %v", err)
+		}
+	})
+
+	t.Run("local missing path", func(t *testing.T) {
+		cfg := Config{
+			Provider: ProviderLocal,
+			Local:    LocalConfig{},
+		}
+		if err := cfg.Validate(); err == nil {
+			t.Error("expected error for missing local path")
+		}
+	})
+}
+
+func TestConfig_Validate_NilConfig(t *testing.T) {
+	var cfg *Config
+	if err := cfg.Validate(); err == nil {
+		t.Error("expected error for nil config")
+	}
+}
+
+func TestNewLocalStore_DefaultPath(t *testing.T) {
+	store, err := NewLocalStore(LocalConfig{})
+	if err != nil {
+		t.Fatalf("NewLocalStore: %v", err)
+	}
+	defer os.RemoveAll(store.root)
+
+	if store.root == "" {
+		t.Error("expected non-empty root path")
 	}
 }

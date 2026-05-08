@@ -491,3 +491,69 @@ func TestTelemetryMiddleware_InjectsSpanIntoContext(t *testing.T) {
 		t.Fatal("expected trace id in observe context")
 	}
 }
+
+func TestWithCSRF(t *testing.T) {
+	opts := []Option{WithCSRF("/api/")}
+	o := &routerOpts{}
+	for _, opt := range opts {
+		opt(o)
+	}
+	if !o.enableCSRF {
+		t.Error("expected CSRF to be enabled")
+	}
+	if len(o.csrfExempt) != 1 || o.csrfExempt[0] != "/api/" {
+		t.Errorf("expected exempt path /api/, got %v", o.csrfExempt)
+	}
+}
+
+func TestWithTimeout(t *testing.T) {
+	opts := []Option{WithTimeout(60)}
+	o := &routerOpts{}
+	for _, opt := range opts {
+		opt(o)
+	}
+	if o.timeoutSeconds != 60 {
+		t.Errorf("expected timeout 60, got %d", o.timeoutSeconds)
+	}
+}
+
+func TestWithRateLimit(t *testing.T) {
+	opts := []Option{WithRateLimit(100, time.Minute)}
+	o := &routerOpts{}
+	for _, opt := range opts {
+		opt(o)
+	}
+	if o.rateLimitReqs != 100 {
+		t.Errorf("expected 100 requests, got %d", o.rateLimitReqs)
+	}
+	if o.rateLimitWin != time.Minute {
+		t.Errorf("expected 1 minute window, got %v", o.rateLimitWin)
+	}
+}
+
+func TestWithRateLimitPolicy(t *testing.T) {
+	policy := RateLimitPolicy{
+		Requests: 50,
+		Window:   time.Minute,
+		Burst:    10,
+		ByRoute:  true,
+		ByRole:   true,
+	}
+	opts := []Option{WithRateLimitPolicy(policy)}
+	o := &routerOpts{}
+	for _, opt := range opts {
+		opt(o)
+	}
+	if o.rateLimitReqs != 50 {
+		t.Errorf("expected 50 requests, got %d", o.rateLimitReqs)
+	}
+	if o.rateLimitBurst != 10 {
+		t.Errorf("expected burst 10, got %d", o.rateLimitBurst)
+	}
+	if !o.rateLimitRoute {
+		t.Error("expected ByRoute to be true")
+	}
+	if !o.rateLimitRole {
+		t.Error("expected ByRole to be true")
+	}
+}

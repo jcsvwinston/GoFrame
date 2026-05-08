@@ -238,6 +238,39 @@ func TestSetupAdminPolicies(t *testing.T) {
 	}
 }
 
+func TestAllowAll(t *testing.T) {
+	e := newTestEnforcer(t)
+	err := e.AllowAll("admin")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if !e.Can("admin", "/any/resource", "any-action") {
+		t.Error("admin should have full access after AllowAll")
+	}
+}
+
+func TestAllowResource(t *testing.T) {
+	e := newTestEnforcer(t)
+	err := e.AllowResource("editor", "/api/posts/*", "read", "create", "update")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if !e.Can("editor", "/api/posts/1", "read") {
+		t.Error("editor should have read access")
+	}
+	if !e.Can("editor", "/api/posts/1", "create") {
+		t.Error("editor should have create access")
+	}
+	if !e.Can("editor", "/api/posts/1", "update") {
+		t.Error("editor should have update access")
+	}
+	if e.Can("editor", "/api/posts/1", "delete") {
+		t.Error("editor should NOT have delete access")
+	}
+}
+
 func TestHttpMethodToAction(t *testing.T) {
 	tests := map[string]string{
 		"GET": "read", "HEAD": "read", "POST": "create",

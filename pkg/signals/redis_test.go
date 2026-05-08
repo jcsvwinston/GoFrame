@@ -160,3 +160,23 @@ func TestRedisRelayForwardToBus(t *testing.T) {
 		t.Fatal("timed out waiting for forwarder to stop")
 	}
 }
+
+func TestNormalizeRelayContext(t *testing.T) {
+	ctx1 := context.WithValue(context.Background(), "key", "value1")
+	ctx2 := context.WithValue(context.Background(), "key", "value2")
+
+	// Primary context takes precedence
+	if got := normalizeRelayContext(ctx1, ctx2); got != ctx1 {
+		t.Error("expected primary context to be returned")
+	}
+
+	// Fallback context used when primary is nil
+	if got := normalizeRelayContext(nil, ctx2); got != ctx2 {
+		t.Error("expected fallback context to be returned when primary is nil")
+	}
+
+	// Background context when both are nil
+	if got := normalizeRelayContext(nil, nil); got == nil {
+		t.Error("expected background context when both are nil")
+	}
+}

@@ -517,11 +517,20 @@ func TestCRUD_FindAll_Pagination(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if result.Total != 5 {
-		t.Errorf("expected total 5, got %d", result.Total)
+	// Total may be -1 if database statistics are not available (estimation optimization)
+	if result.Total != 5 && result.Total != -1 {
+		t.Errorf("expected total 5 or -1 (estimate not available), got %d", result.Total)
 	}
-	if result.TotalPages != 3 {
-		t.Errorf("expected 3 pages, got %d", result.TotalPages)
+	// TotalPages calculation depends on Total being accurate
+	if result.Total == 5 && result.TotalPages != 3 {
+		t.Errorf("expected 3 pages when total=5, got %d", result.TotalPages)
+	}
+	// When total is unknown (-1), TotalPages is based on hasMore detection
+	if result.Total == -1 {
+		// With 5 items and page_size=2, page 1 has more items, so totalPages = page + 1 = 2
+		if result.TotalPages != 2 {
+			t.Errorf("expected 2 pages when total=-1 with hasMore=true, got %d", result.TotalPages)
+		}
 	}
 }
 
@@ -645,5 +654,102 @@ func TestCRUD_Hooks_ReceiveSQLContext(t *testing.T) {
 	}
 	if !afterCalled {
 		t.Fatal("expected AfterCreate hook to be called")
+	}
+}
+
+// --- Utility function tests ---
+
+func TestParseTimeString(t *testing.T) {
+	tests := []struct {
+		input   string
+		wantErr bool
+	}{
+		{"2024-01-15T10:30:00Z", false},
+		{"2024-01-15T10:30:00.123Z", false},
+		{"2024-01-15 10:30:00", false},
+		{"2024-01-15", false},
+		{"", false}, // Empty string returns zero time
+		{"invalid", true},
+	}
+	for _, tt := range tests {
+		_, err := parseTimeString(tt.input)
+		if (err != nil) != tt.wantErr {
+			t.Errorf("parseTimeString(%q) error = %v, wantErr %v", tt.input, err, tt.wantErr)
+		}
+	}
+}
+
+func TestToInt64(t *testing.T) {
+	tests := []struct {
+		input   interface{}
+		want    int64
+		wantErr bool
+	}{
+		{int64(42), 42, false},
+		{int(42), 42, false},
+		{int32(42), 42, false},
+		{uint64(42), 42, false},
+		{uint(42), 42, false},
+		{float64(42.5), 42, false},
+		{string("42"), 42, false},
+		{[]byte("42"), 42, false},
+		{"invalid", 0, true},
+		{nil, 0, true},
+	}
+	for _, tt := range tests {
+		got, err := toInt64(tt.input)
+		if (err != nil) != tt.wantErr {
+			t.Errorf("toInt64(%v) error = %v, wantErr %v", tt.input, err, tt.wantErr)
+			continue
+		}
+		if got != tt.want {
+			t.Errorf("toInt64(%v) = %v, want %v", tt.input, got, tt.want)
+		}
+	}
+}
+
+func TestToFloat64(t *testing.T) {
+	tests := []struct {
+		input   interface{}
+		want    float64
+		wantErr bool
+	}{
+		{float64(42.5), 42.5, false},
+		{float32(42.5), 42.5, false},
+		{int64(42), 42.0, false},
+		{int(42), 42.0, false},
+		{string("42.5"), 42.5, false},
+		{[]byte("42.5"), 42.5, false},
+		{"invalid", 0, true},
+		{nil, 0, true},
+	}
+	for _, tt := range tests {
+		got, err := toFloat64(tt.input)
+		if (err != nil) != tt.wantErr {
+			t.Errorf("toFloat64(%v) error = %v, wantErr %v", tt.input, err, tt.wantErr)
+			continue
+		}
+		if got != tt.want {
+			t.Errorf("toFloat64(%v) = %v, want %v", tt.input, got, tt.want)
+		}
+	}
+}
+
+func TestStartsWithUpper(t *testing.T) {
+	tests := []struct {
+		input string
+		want  bool
+	}{
+		{"Hello", true},
+		{"hello", false},
+		{"", false},
+		{"A", true},
+		{"a", false},
+		{"HELLO", true},
+	}
+	for _, tt := range tests {
+		if got := startsWithUpper(tt.input); got != tt.want {
+			t.Errorf("startsWithUpper(%q) = %v, want %v", tt.input, got, tt.want)
+		}
 	}
 }

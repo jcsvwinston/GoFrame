@@ -125,3 +125,74 @@ func TestSQLSessionStore_AllReturnsOnlyActiveSessions(t *testing.T) {
 		t.Fatal("expired token should not be included in All()")
 	}
 }
+
+func TestParseSessionExpiryValue(t *testing.T) {
+	t.Run("time.Time", func(t *testing.T) {
+		input := time.Date(2024, 1, 15, 10, 30, 45, 0, time.UTC)
+		result, err := parseSessionExpiryValue(input)
+		if err != nil {
+			t.Errorf("unexpected error: %v", err)
+		}
+		if !result.Equal(input) {
+			t.Error("expected same time")
+		}
+	})
+
+	t.Run("RFC3339Nano string", func(t *testing.T) {
+		input := "2024-01-15T10:30:45.123456789Z"
+		result, err := parseSessionExpiryValue(input)
+		if err != nil {
+			t.Errorf("unexpected error: %v", err)
+		}
+		if result.IsZero() {
+			t.Error("expected non-zero time")
+		}
+	})
+
+	t.Run("byte slice", func(t *testing.T) {
+		input := []byte("2024-01-15 10:30:45")
+		result, err := parseSessionExpiryValue(input)
+		if err != nil {
+			t.Errorf("unexpected error: %v", err)
+		}
+		if result.IsZero() {
+			t.Error("expected non-zero time")
+		}
+	})
+
+	t.Run("int64 unix timestamp", func(t *testing.T) {
+		input := int64(1705327845)
+		result, err := parseSessionExpiryValue(input)
+		if err != nil {
+			t.Errorf("unexpected error: %v", err)
+		}
+		if result.IsZero() {
+			t.Error("expected non-zero time")
+		}
+	})
+
+	t.Run("float64 unix timestamp", func(t *testing.T) {
+		input := float64(1705327845)
+		result, err := parseSessionExpiryValue(input)
+		if err != nil {
+			t.Errorf("unexpected error: %v", err)
+		}
+		if result.IsZero() {
+			t.Error("expected non-zero time")
+		}
+	})
+
+	t.Run("unsupported type", func(t *testing.T) {
+		_, err := parseSessionExpiryValue(true)
+		if err == nil {
+			t.Error("expected error for unsupported type")
+		}
+	})
+
+	t.Run("empty string", func(t *testing.T) {
+		_, err := parseSessionExpiryValue("")
+		if err == nil {
+			t.Error("expected error for empty string")
+		}
+	})
+}

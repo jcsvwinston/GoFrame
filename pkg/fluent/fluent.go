@@ -271,6 +271,13 @@ func (b *AppBuilder) WithConfig(fn func(*app.Config)) *AppBuilder {
 	return b
 }
 
+// WithConfigAny provides direct access to app.Config for advanced configuration.
+// This accepts any function signature for testing purposes.
+func (b *AppBuilder) WithConfigAny(fn func(interface{})) *AppBuilder {
+	fn(&b.config)
+	return b
+}
+
 // Config returns the underlying app.Config for read access or advanced mutation.
 // Prefer WithConfig() for modifications to maintain fluent chaining.
 func (b *AppBuilder) Config() *app.Config {

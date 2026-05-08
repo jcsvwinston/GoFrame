@@ -3,6 +3,7 @@ package plugins
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -207,4 +208,243 @@ func writePluginRuntimeExecutable(t *testing.T, path, body string) {
 			t.Fatalf("chmod plugin executable failed: %v", err)
 		}
 	}
+}
+
+func TestExecutionError(t *testing.T) {
+	t.Run("Error method", func(t *testing.T) {
+		err := &ExecutionError{
+			ExitCode:  20,
+			Retriable: true,
+			Code:      "TEST_ERROR",
+			Message:   "test message",
+			Stderr:    "test stderr",
+			Cause:     nil,
+		}
+
+		msg := err.Error()
+		if !strings.Contains(msg, "exit=20") {
+			t.Errorf("Expected exit code in error message: %s", msg)
+		}
+		if !strings.Contains(msg, "code=TEST_ERROR") {
+			t.Errorf("Expected code in error message: %s", msg)
+		}
+		if !strings.Contains(msg, "message=test message") {
+			t.Errorf("Expected message in error message: %s", msg)
+		}
+		if !strings.Contains(msg, "stderr=test stderr") {
+			t.Errorf("Expected stderr in error message: %s", msg)
+		}
+	})
+
+	t.Run("Error method with nil receiver", func(t *testing.T) {
+		var err *ExecutionError
+		msg := err.Error()
+		if msg != "" {
+			t.Errorf("Expected empty string for nil receiver, got: %s", msg)
+		}
+	})
+
+	t.Run("Unwrap method", func(t *testing.T) {
+		cause := &testError{msg: "underlying error"}
+		err := &ExecutionError{
+			Cause: cause,
+		}
+
+		unwrapped := err.Unwrap()
+		if unwrapped != cause {
+			t.Errorf("Expected unwrapped cause, got: %v", unwrapped)
+		}
+	})
+
+	t.Run("Unwrap method with nil receiver", func(t *testing.T) {
+		var err *ExecutionError
+		unwrapped := err.Unwrap()
+		if unwrapped != nil {
+			t.Errorf("Expected nil for nil receiver, got: %v", unwrapped)
+		}
+	})
+}
+
+func TestDecodeResponseEnvelope(t *testing.T) {
+	t.Run("valid envelope", func(t *testing.T) {
+		raw := `{"version":"v1","ok":true,"output":{"result":"success"}}`
+		envelope, err := decodeResponseEnvelope(raw)
+		if err != nil {
+			t.Fatalf("decodeResponseEnvelope failed: %v", err)
+		}
+		if !envelope.OK {
+			t.Error("Expected OK=true")
+		}
+		if envelope.Version != "v1" {
+			t.Errorf("Expected version v1, got %s", envelope.Version)
+		}
+	})
+
+	t.Run("empty response", func(t *testing.T) {
+		_, err := decodeResponseEnvelope("")
+		if err == nil {
+			t.Error("Expected error for empty response")
+		}
+	})
+
+	t.Run("invalid JSON", func(t *testing.T) {
+		_, err := decodeResponseEnvelope("{invalid json}")
+		if err == nil {
+			t.Error("Expected error for invalid JSON")
+		}
+	})
+
+	t.Run("whitespace only", func(t *testing.T) {
+		_, err := decodeResponseEnvelope("   ")
+		if err == nil {
+			t.Error("Expected error for whitespace only")
+		}
+	})
+}
+
+func TestExtractExitCode(t *testing.T) {
+	t.Run("nil error", func(t *testing.T) {
+		code := extractExitCode(nil)
+		if code != ExitCodeSuccess {
+			t.Errorf("Expected ExitCodeSuccess (0), got %d", code)
+		}
+	})
+
+	t.Run("non-exit error", func(t *testing.T) {
+		err := &testError{msg: "some error"}
+		code := extractExitCode(err)
+		if code != -1 {
+			t.Errorf("Expected -1 for non-exit error, got %d", code)
+		}
+	})
+}
+
+func TestRetriableByExitCode(t *testing.T) {
+	tests := []struct {
+		code     int
+		expected bool
+	}{
+		{ExitCodeTransient, true},
+		{ExitCodeTimeout, true},
+		{ExitCodeInternal, true},
+		{ExitCodeSuccess, false},
+		{ExitCodeValidation, false},
+		{ExitCodeRejected, false},
+		{99, false},
+		{-1, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(fmt.Sprintf("exit code %d", tt.code), func(t *testing.T) {
+			result := retriableByExitCode(tt.code)
+			if result != tt.expected {
+				t.Errorf("Expected retriable=%v for exit code %d, got %v", tt.expected, tt.code, result)
+			}
+		})
+	}
+}
+
+func TestMergeMessage(t *testing.T) {
+	tests := []struct {
+		name     string
+		current  string
+		next     string
+		expected string
+	}{
+		{"both non-empty", "first error", "second error", "first error; second error"},
+		{"current empty", "", "second error", "second error"},
+		{"next empty", "first error", "", "first error"},
+		{"both empty", "", "", ""},
+		{"whitespace handling", "  first  ", "  second  ", "first; second"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := mergeMessage(tt.current, tt.next)
+			if result != tt.expected {
+				t.Errorf("Expected %q, got %q", tt.expected, result)
+			}
+		})
+	}
+}
+
+func TestExecuteRequestValidation(t *testing.T) {
+	t.Run("empty binary path", func(t *testing.T) {
+		request := RequestEnvelope{Version: EnvelopeVersionV1}
+		_, err := ExecuteRequest(context.Background(), "", request, 5*time.Second)
+		if err == nil {
+			t.Error("Expected error for empty binary path")
+		}
+	})
+
+	t.Run("default timeout", func(t *testing.T) {
+		request := RequestEnvelope{Version: EnvelopeVersionV1}
+		// This will fail with "no such file" but should not fail on timeout validation
+		_, err := ExecuteRequest(context.Background(), "/nonexistent", request, 0)
+		if err == nil {
+			t.Error("Expected error for nonexistent binary")
+		}
+	})
+
+	t.Run("default version", func(t *testing.T) {
+		request := RequestEnvelope{}
+		// This will fail with "no such file" but should not fail on version validation
+		_, err := ExecuteRequest(context.Background(), "/nonexistent", request, 5*time.Second)
+		if err == nil {
+			t.Error("Expected error for nonexistent binary")
+		}
+	})
+
+	t.Run("nil context", func(t *testing.T) {
+		request := RequestEnvelope{Version: EnvelopeVersionV1}
+		_, err := ExecuteRequest(context.TODO(), "/nonexistent", request, 5*time.Second)
+		if err == nil {
+			t.Error("Expected error for nonexistent binary")
+		}
+	})
+}
+
+func TestExecuteRequestResponseOKFalse(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("shell-based executable test is unix-only")
+	}
+
+	if runtime.GOOS == "darwin" && os.Getenv("CI") != "true" {
+		t.Skip("skipping on macOS outside CI due to process execution restrictions")
+	}
+
+	dir := t.TempDir()
+	pluginPath := filepath.Join(dir, "goframe-plugin-false")
+	writePluginRuntimeExecutable(t, pluginPath, `#!/bin/sh
+cat >/dev/null
+echo '{"version":"v1","ok":false,"error":{"code":"REJECTED","message":"validation failed"}}'
+exit 0
+`)
+
+	request, err := NewRequestEnvelope("test", "mail.send", 5*time.Second, nil, nil)
+	if err != nil {
+		t.Fatalf("NewRequestEnvelope failed: %v", err)
+	}
+
+	_, err = ExecuteRequest(context.Background(), pluginPath, request, 5*time.Second)
+	if err == nil {
+		t.Fatal("expected error when ok=false")
+	}
+
+	execErr, ok := err.(*ExecutionError)
+	if !ok {
+		t.Fatalf("expected ExecutionError, got: %T", err)
+	}
+	if execErr.Code != "REJECTED" {
+		t.Errorf("Expected code REJECTED, got %s", execErr.Code)
+	}
+}
+
+// testError is a simple error type for testing
+type testError struct {
+	msg string
+}
+
+func (e *testError) Error() string {
+	return e.msg
 }

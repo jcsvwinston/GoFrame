@@ -82,8 +82,8 @@ func TestAppNew_WithoutDefaults_CoreOnly(t *testing.T) {
 func TestAppNew_WithExtensions(t *testing.T) {
 	var attached, shutdown bool
 	ext := &testExtension{
-		name:       "test-ext",
-		attachFunc: func(a *App) error { attached = true; return nil },
+		name:         "test-ext",
+		attachFunc:   func(a *App) error { attached = true; return nil },
 		shutdownFunc: func(ctx context.Context) error { shutdown = true; return nil },
 	}
 
@@ -103,8 +103,8 @@ func TestAppNew_WithExtensions(t *testing.T) {
 
 func TestAppNew_WithExtensions_Error(t *testing.T) {
 	ext := &testExtension{
-		name:       "failing-ext",
-		attachFunc: func(a *App) error { return errors.New("extension init failed") },
+		name:         "failing-ext",
+		attachFunc:   func(a *App) error { return errors.New("extension init failed") },
 		shutdownFunc: func(ctx context.Context) error { return nil },
 	}
 
@@ -124,10 +124,9 @@ type testExtension struct {
 	shutdownFunc func(ctx context.Context) error
 }
 
-func (e *testExtension) Name() string                          { return e.name }
-func (e *testExtension) Attach(a *App) error                   { return e.attachFunc(a) }
-func (e *testExtension) Shutdown(ctx context.Context) error     { return e.shutdownFunc(ctx) }
-
+func (e *testExtension) Name() string                       { return e.name }
+func (e *testExtension) Attach(a *App) error                { return e.attachFunc(a) }
+func (e *testExtension) Shutdown(ctx context.Context) error { return e.shutdownFunc(ctx) }
 
 func TestAppNew_InitializesCoreComponents(t *testing.T) {
 	a, err := New(testAppConfig())
@@ -789,4 +788,49 @@ func TestDetectDatabaseDialect(t *testing.T) {
 			t.Fatalf("detectDatabaseDialect(%q)=%q want=%q", tc.raw, got, tc.want)
 		}
 	}
+}
+
+func TestSiteFromContext(t *testing.T) {
+	t.Run("with valid scope", func(t *testing.T) {
+		ctx := context.WithValue(context.Background(), requestScopeCtxKey{}, RequestScope{Site: "main"})
+		if got := SiteFromContext(ctx); got != "main" {
+			t.Errorf("expected main, got %s", got)
+		}
+	})
+
+	t.Run("without scope", func(t *testing.T) {
+		if got := SiteFromContext(context.Background()); got != "" {
+			t.Errorf("expected empty string, got %s", got)
+		}
+	})
+}
+
+func TestTenantFromContext(t *testing.T) {
+	t.Run("with valid scope", func(t *testing.T) {
+		ctx := context.WithValue(context.Background(), requestScopeCtxKey{}, RequestScope{Tenant: "tenant1"})
+		if got := TenantFromContext(ctx); got != "tenant1" {
+			t.Errorf("expected tenant1, got %s", got)
+		}
+	})
+
+	t.Run("without scope", func(t *testing.T) {
+		if got := TenantFromContext(context.Background()); got != "" {
+			t.Errorf("expected empty string, got %s", got)
+		}
+	})
+}
+
+func TestDatabaseAliasFromContext(t *testing.T) {
+	t.Run("with valid scope", func(t *testing.T) {
+		ctx := context.WithValue(context.Background(), requestScopeCtxKey{}, RequestScope{DatabaseAlias: "analytics"})
+		if got := DatabaseAliasFromContext(ctx); got != "analytics" {
+			t.Errorf("expected analytics, got %s", got)
+		}
+	})
+
+	t.Run("without scope", func(t *testing.T) {
+		if got := DatabaseAliasFromContext(context.Background()); got != "" {
+			t.Errorf("expected empty string, got %s", got)
+		}
+	})
 }

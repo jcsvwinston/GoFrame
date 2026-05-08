@@ -43,7 +43,7 @@ exit 1
 
 	var out bytes.Buffer
 	var errOut bytes.Buffer
-	if err := runPlugin([]string{"list", "--config", cfgPath}, strings.NewReader(""), &out, &errOut); err != nil {
+	if err := runPlugin([]string{"list", "--config", cfgPath, "--timeout", "10s"}, strings.NewReader(""), &out, &errOut); err != nil {
 		t.Fatalf("runPlugin list failed: %v (stderr=%s)", err, errOut.String())
 	}
 

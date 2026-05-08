@@ -16,8 +16,8 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/sas"
 )
 
-// AzureStore implements the Store interface for Azure Blob Storage.
-type AzureStore struct {
+// azureStore implements the Store interface for Azure Blob Storage.
+type azureStore struct {
 	client          *azblob.Client
 	sharedKeyCred   *azblob.SharedKeyCredential
 	containerName   string
@@ -25,11 +25,11 @@ type AzureStore struct {
 	accountName     string
 }
 
-// Compile-time check that AzureStore implements Store.
-var _ Store = (*AzureStore)(nil)
+// Compile-time check that azureStore implements Store.
+var _ Store = (*azureStore)(nil)
 
 // NewAzureStore creates an Azure Blob client using shared key authentication.
-func NewAzureStore(cfg AzureConfig) (*AzureStore, error) {
+func NewAzureStore(cfg AzureConfig) (Store, error) {
 	accountName, err := cfg.AccountName.Resolve()
 	if err != nil {
 		return nil, fmt.Errorf("storage: resolve Azure account name: %w", err)
@@ -58,7 +58,7 @@ func NewAzureStore(cfg AzureConfig) (*AzureStore, error) {
 		return nil, fmt.Errorf("storage: create Azure service client: %w", err)
 	}
 
-	return &AzureStore{
+	return &azureStore{
 		client:          client,
 		sharedKeyCred:   credential,
 		containerName:   cfg.Container,
@@ -87,7 +87,7 @@ func normalizeError(key string, err error) error {
 }
 
 // targetContainer determines which container to use based on visibility.
-func (s *AzureStore) targetContainer(opts PutOptions) string {
+func (s *azureStore) targetContainer(opts PutOptions) string {
 	if opts.Visibility == Public && s.publicContainer != "" {
 		return s.publicContainer
 	}
@@ -95,7 +95,7 @@ func (s *AzureStore) targetContainer(opts PutOptions) string {
 }
 
 // Put uploads a file from an io.Reader to Azure Blob Storage.
-func (s *AzureStore) Put(ctx context.Context, key string, reader io.Reader, opts PutOptions) (ObjectInfo, error) {
+func (s *azureStore) Put(ctx context.Context, key string, reader io.Reader, opts PutOptions) (ObjectInfo, error) {
 	containerName := s.targetContainer(opts)
 
 	data, err := io.ReadAll(reader)
@@ -139,7 +139,7 @@ func (s *AzureStore) Put(ctx context.Context, key string, reader io.Reader, opts
 }
 
 // Get retrieves a file by key from Azure Blob Storage.
-func (s *AzureStore) Get(ctx context.Context, key string) (io.ReadCloser, ObjectInfo, error) {
+func (s *azureStore) Get(ctx context.Context, key string) (io.ReadCloser, ObjectInfo, error) {
 	downloadResp, err := s.client.DownloadStream(ctx, s.containerName, key, nil)
 	if err != nil {
 		return nil, ObjectInfo{}, normalizeError(key, err)
@@ -164,7 +164,7 @@ func (s *AzureStore) Get(ctx context.Context, key string) (io.ReadCloser, Object
 }
 
 // Delete removes an object by key. Idempotent: no error if key doesn't exist.
-func (s *AzureStore) Delete(ctx context.Context, key string) error {
+func (s *azureStore) Delete(ctx context.Context, key string) error {
 	_, err := s.client.DeleteBlob(ctx, s.containerName, key, nil)
 	if err != nil {
 		if isNotFoundError(err) {
@@ -176,7 +176,7 @@ func (s *AzureStore) Delete(ctx context.Context, key string) error {
 }
 
 // Exists checks if a key exists in Azure Blob Storage.
-func (s *AzureStore) Exists(ctx context.Context, key string) (bool, error) {
+func (s *azureStore) Exists(ctx context.Context, key string) (bool, error) {
 	_, err := s.client.DownloadStream(ctx, s.containerName, key, &azblob.DownloadStreamOptions{
 		Range: blob.HTTPRange{Count: 0},
 	})
@@ -190,7 +190,7 @@ func (s *AzureStore) Exists(ctx context.Context, key string) (bool, error) {
 }
 
 // List returns objects with the given prefix and delimiter support.
-func (s *AzureStore) List(ctx context.Context, opts ListOptions) (ListResult, error) {
+func (s *azureStore) List(ctx context.Context, opts ListOptions) (ListResult, error) {
 	var result ListResult
 
 	if opts.Delimiter != "" {
@@ -283,7 +283,7 @@ func strPtr(s string) *string {
 }
 
 // PublicURL returns a publicly accessible URL for a key.
-func (s *AzureStore) PublicURL(ctx context.Context, key string, opts URLConfig) (string, error) {
+func (s *azureStore) PublicURL(ctx context.Context, key string, opts URLConfig) (string, error) {
 	if s.publicContainer == "" {
 		return "", nil
 	}
@@ -304,7 +304,7 @@ func (s *AzureStore) PublicURL(ctx context.Context, key string, opts URLConfig) 
 }
 
 // SignedURL returns a time-limited URL for accessing a private object.
-func (s *AzureStore) SignedURL(ctx context.Context, key string, expires time.Duration, opts URLConfig) (string, error) {
+func (s *azureStore) SignedURL(ctx context.Context, key string, expires time.Duration, opts URLConfig) (string, error) {
 	if expires <= 0 {
 		expires = 24 * time.Hour
 	}
@@ -328,7 +328,7 @@ func (s *AzureStore) SignedURL(ctx context.Context, key string, expires time.Dur
 }
 
 // Copy copies an object from srcKey to dstKey within the same container.
-func (s *AzureStore) Copy(ctx context.Context, srcKey, dstKey string) (ObjectInfo, error) {
+func (s *azureStore) Copy(ctx context.Context, srcKey, dstKey string) (ObjectInfo, error) {
 	srcContainerClient := s.client.ServiceClient().NewContainerClient(s.containerName)
 	srcBlobClient := srcContainerClient.NewBlobClient(srcKey)
 	srcURL := srcBlobClient.URL()
@@ -366,7 +366,7 @@ func (s *AzureStore) Copy(ctx context.Context, srcKey, dstKey string) (ObjectInf
 }
 
 // Close releases resources held by the Azure store.
-func (s *AzureStore) Close() error {
+func (s *azureStore) Close() error {
 	s.client = nil
 	s.sharedKeyCred = nil
 	return nil

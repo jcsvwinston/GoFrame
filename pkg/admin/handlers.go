@@ -84,12 +84,16 @@ func (p *Panel) handleListModels(c *router.Context) error {
 	result := make([]modelInfo, 0, len(models))
 	modelByName := make(map[string]*modelInfo, len(models))
 	for _, m := range models {
+		count := int64(0)
+		if !includeCounts {
+			count = -1
+		}
 		info := modelInfo{
 			Name:       m.Name,
 			Plural:     m.Plural,
 			Table:      m.Table,
 			Icon:       m.Config.Icon,
-			Count:      0,
+			Count:      count,
 			CountKnown: false,
 			Counts:     map[string]int64{},
 			Databases:  []string{m.DatabaseAlias},

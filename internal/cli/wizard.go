@@ -60,6 +60,10 @@ func promptUser(reader io.Reader, writer io.Writer, p wizardPrompt) (string, err
 		return promptSelect(scanner, writer, p)
 	}
 
+	return promptUserWithScanner(scanner, writer, p)
+}
+
+func promptUserWithScanner(scanner *bufio.Scanner, writer io.Writer, p wizardPrompt) (string, error) {
 	defaultStr := ""
 	if p.defaultVal != "" {
 		defaultStr = fmt.Sprintf(" [%s]", p.defaultVal)
@@ -83,7 +87,7 @@ func promptUser(reader io.Reader, writer io.Writer, p wizardPrompt) (string, err
 	if p.validate != nil {
 		if err := p.validate(input); err != nil {
 			fmt.Fprintf(writer, "Error: %v\n", err)
-			return promptUser(reader, writer, p)
+			return promptUserWithScanner(scanner, writer, p)
 		}
 	}
 

@@ -121,3 +121,44 @@ func TestSchedulerNilReceiver(t *testing.T) {
 		t.Fatalf("expected ErrNilScheduler from RegisterJSON, got %v", err)
 	}
 }
+
+func TestSchedulerPing(t *testing.T) {
+	redisServer := miniredis.RunT(t)
+
+	scheduler, err := NewScheduler(SchedulerConfig{
+		RedisURL: "redis://" + redisServer.Addr(),
+	})
+	if err != nil {
+		t.Fatalf("NewScheduler failed: %v", err)
+	}
+	defer scheduler.Close()
+
+	if err := scheduler.Ping(); err != nil {
+		t.Fatalf("Ping failed: %v", err)
+	}
+}
+
+func TestSchedulerRunAndShutdown(t *testing.T) {
+	redisServer := miniredis.RunT(t)
+
+	scheduler, err := NewScheduler(SchedulerConfig{
+		RedisURL: "redis://" + redisServer.Addr(),
+	})
+	if err != nil {
+		t.Fatalf("NewScheduler failed: %v", err)
+	}
+	defer scheduler.Close()
+
+	// Run in background
+	go func() {
+		if err := scheduler.Run(); err != nil {
+			t.Errorf("Run failed: %v", err)
+		}
+	}()
+
+	// Give it a moment to start
+	time.Sleep(50 * time.Millisecond)
+
+	// Shutdown
+	scheduler.Shutdown()
+}

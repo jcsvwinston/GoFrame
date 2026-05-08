@@ -78,3 +78,41 @@ func TestRegisterDBPoolTelemetry(t *testing.T) {
 		t.Fatalf("expected dbPools size %d after cleanup, got %d", before, afterCleanup)
 	}
 }
+
+func TestNormalizeSQLOperation(t *testing.T) {
+	tests := []struct {
+		raw  string
+		want string
+	}{
+		{"select", "select"},
+		{"INSERT", "insert"},
+		{"  UPDATE  ", "update"},
+		{"delete", "delete"},
+		{"create", "create"},
+		{"drop", "drop"},
+		{"alter", "alter"},
+		{"truncate", "truncate"},
+		{"with", "with"},
+		{"explain", "explain"},
+		{"show", "show"},
+		{"pragma", "pragma"},
+		{"", "unknown"},
+		{"  ", "unknown"},
+		{"custom_op", "other"},
+	}
+
+	for _, tc := range tests {
+		if got := normalizeSQLOperation(tc.raw); got != tc.want {
+			t.Errorf("normalizeSQLOperation(%q) = %q, want %q", tc.raw, got, tc.want)
+		}
+	}
+}
+
+func TestRecordDBQueryTelemetry(t *testing.T) {
+	// This test ensures the function doesn't panic when called
+	// The actual metrics are tested by the OpenTelemetry library
+	recordDBQueryTelemetry(nil, "sqlite", "sql", "select", 0, nil)
+	recordDBQueryTelemetry(nil, "postgresql", "sql", "insert", 100, nil)
+	recordDBQueryTelemetry(nil, "mysql", "sql", "update", 50, nil)
+	recordDBQueryTelemetry(nil, "unknown", "sql", "delete", 75, nil)
+}
