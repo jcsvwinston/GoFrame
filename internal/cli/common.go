@@ -113,14 +113,6 @@ func newMigratorWithAlias(configPath, migrationsPath, databaseAlias string) (*db
 	return db.NewMigrator(database, migrationsPath, logger), resolvedAlias, cleanup, nil
 }
 
-func newMigrator(configPath, migrationsPath string) (*db.Migrator, func(), error) {
-	migrator, _, cleanup, err := newMigratorWithAlias(configPath, migrationsPath, "")
-	if err != nil {
-		return nil, nil, err
-	}
-	return migrator, cleanup, nil
-}
-
 func toSnakeCase(input string) string {
 	trimmed := strings.TrimSpace(input)
 	if trimmed == "" {

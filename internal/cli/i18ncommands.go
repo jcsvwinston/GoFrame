@@ -569,9 +569,10 @@ func parsePOCatalog(raw []byte) (map[string]string, error) {
 			if !haveEntry {
 				continue
 			}
-			if mode == "id" {
+			switch mode {
+			case "id":
 				currentID += value
-			} else if mode == "str" {
+			case "str":
 				currentStr += value
 			}
 		default:
