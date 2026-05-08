@@ -25,6 +25,7 @@ var commandSpecs = []commandSpec{
 	{name: "diffsettings", summary: "Show configuration differences from defaults", run: runDiffSettings},
 	{name: "doctor", summary: "Run diagnostic checks for framework subsystems", run: runDoctor},
 	{name: "dumpdata", summary: "Export DB rows as JSON fixtures", run: runDumpData},
+	{name: "wizard", summary: "Interactive wizard for complex commands", run: runWizard},
 	{name: "findstatic", summary: "Find static assets across discovered source directories", run: runFindStatic},
 	{name: "flush", summary: "Delete all data from database tables (keeps migration history)", run: runFlush},
 	{name: "generate", summary: "Generate model, handler, or migration scaffolds", run: runGenerate},
@@ -189,6 +190,9 @@ func printRootUsage(w io.Writer) {
 	fmt.Fprintln(w, "  goframe doctor --config goframe.yaml")
 	fmt.Fprintln(w, "  goframe doctor --config goframe.yaml --check tasks")
 	fmt.Fprintln(w, "  goframe doctor --config goframe.yaml --json")
+	fmt.Fprintln(w, "  goframe wizard --type inspectdb")
+	fmt.Fprintln(w, "  goframe wizard --type new")
+	fmt.Fprintln(w, "  goframe wizard --type startapp")
 	fmt.Fprintln(w, "  goframe createcachetable --config goframe.yaml")
 	fmt.Fprintln(w, "  goframe clearsessions --config goframe.yaml")
 	fmt.Fprintln(w, "  goframe remove_stale_contenttypes --config goframe.yaml --dry-run")
