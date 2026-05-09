@@ -11,17 +11,17 @@ import (
 )
 
 func TestParseProviderFromBinary(t *testing.T) {
-	provider, ok := ParseProviderFromBinary("goframe-plugin-twilio", GenericBinaryPrefix)
+	provider, ok := ParseProviderFromBinary("nucleus-plugin-twilio", GenericBinaryPrefix)
 	if !ok || provider != "twilio" {
 		t.Fatalf("unexpected generic parse result: ok=%v provider=%q", ok, provider)
 	}
 
-	provider, ok = ParseProviderFromBinary("goframe-mail-mailgun", LegacyMailBinaryPrefix)
+	provider, ok = ParseProviderFromBinary("nucleus-mail-mailgun", LegacyMailBinaryPrefix)
 	if !ok || provider != "mailgun" {
 		t.Fatalf("unexpected legacy parse result: ok=%v provider=%q", ok, provider)
 	}
 
-	if _, ok := ParseProviderFromBinary("goframe-hello", GenericBinaryPrefix); ok {
+	if _, ok := ParseProviderFromBinary("nucleus-hello", GenericBinaryPrefix); ok {
 		t.Fatal("expected invalid binary name to be rejected")
 	}
 }
@@ -60,7 +60,7 @@ func TestProbeCapabilities(t *testing.T) {
 	}
 
 	dir := t.TempDir()
-	pluginPath := filepath.Join(dir, "goframe-plugin-acme")
+	pluginPath := filepath.Join(dir, "nucleus-plugin-acme")
 	writeExecutable(t, pluginPath, `#!/bin/sh
 if [ "$1" = "capabilities" ] && [ "$2" = "--json" ]; then
   echo '{"capabilities":["queue.publish","mail.send"]}'
@@ -93,7 +93,7 @@ func TestProbeCapabilitiesFallbackToPlainText(t *testing.T) {
 	}
 
 	dir := t.TempDir()
-	pluginPath := filepath.Join(dir, "goframe-plugin-textonly")
+	pluginPath := filepath.Join(dir, "nucleus-plugin-textonly")
 	writeExecutable(t, pluginPath, `#!/bin/sh
 if [ "$1" = "capabilities" ] && [ "$2" = "--json" ]; then
   echo "not-json"
@@ -126,7 +126,7 @@ func TestDiscoverExternal(t *testing.T) {
 	}
 
 	dir := t.TempDir()
-	genericPath := filepath.Join(dir, "goframe-plugin-twilio")
+	genericPath := filepath.Join(dir, "nucleus-plugin-twilio")
 	writeExecutable(t, genericPath, `#!/bin/sh
 if [ "$1" = "capabilities" ] && [ "$2" = "--json" ]; then
   echo '{"capabilities":["webhook.deliver","queue.publish"]}'
@@ -139,7 +139,7 @@ fi
 exit 1
 `)
 
-	legacyPath := filepath.Join(dir, "goframe-mail-mailgun")
+	legacyPath := filepath.Join(dir, "nucleus-mail-mailgun")
 	writeExecutable(t, legacyPath, "#!/bin/sh\necho 'capabilities: mail.send'\nexit 0\n")
 
 	discovered := DiscoverExternal(dir, 5*time.Second)
@@ -185,7 +185,7 @@ func TestCollectInventory(t *testing.T) {
 	}
 
 	dir := t.TempDir()
-	pluginPath := filepath.Join(dir, "goframe-plugin-demo")
+	pluginPath := filepath.Join(dir, "nucleus-plugin-demo")
 	writeExecutable(t, pluginPath, `#!/bin/sh
 if [ "$1" = "capabilities" ] && [ "$2" = "--json" ]; then
   echo '{"capabilities":["queue.publish"]}'

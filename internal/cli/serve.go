@@ -14,7 +14,7 @@ func runServe(args []string, _ io.Reader, stdout, stderr io.Writer) error {
 	fs := flag.NewFlagSet("serve", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 
-	configPath := fs.String("config", "", "Path to goframe config file")
+	configPath := fs.String("config", "", "Path to nucleus config file")
 	host := fs.String("host", "", "Override host")
 	port := fs.Int("port", 0, "Override port")
 
@@ -44,6 +44,6 @@ func runServe(args []string, _ io.Reader, stdout, stderr io.Writer) error {
 		return fmt.Errorf("create app: %w", err)
 	}
 
-	fmt.Fprintf(stdout, "GoFrame server listening on http://%s\n", cfg.Addr())
+	fmt.Fprintf(stdout, "Nucleus server listening on http://%s\n", cfg.Addr())
 	return a.Run(context.Background())
 }

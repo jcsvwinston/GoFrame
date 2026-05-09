@@ -26,7 +26,7 @@ Current GoFrame scope includes:
 - `pkg/outbox`: SQL-backed transactional outbox runtime
 - `pkg/observe`: structured logging + OpenTelemetry bootstrap (OTLP traces/metrics)
 - `pkg/router`: HTTP guardrails (`CSRF`, security headers, configurable rate limiting)
-- `cmd/goframe`: modular CLI
+- `cmd/nucleus`: modular CLI
 - official runnable example: `examples/mvc_api`
 
 Related documents:
@@ -99,7 +99,7 @@ Recommended validation:
 ```bash
 git clone https://github.com/jcsvwinston/nucleus.git
 cd GoFrame
-go build -o goframe ./cmd/goframe
+go build -o goframe ./cmd/nucleus
 ./goframe version
 ```
 

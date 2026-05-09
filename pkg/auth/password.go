@@ -1,4 +1,4 @@
-// Package auth provides authentication utilities for the GoFrame framework,
+// Package auth provides authentication utilities for the Nucleus framework,
 // including password hashing, JWT management, and session handling.
 package auth
 

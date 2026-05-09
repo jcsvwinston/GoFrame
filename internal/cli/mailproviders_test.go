@@ -10,26 +10,26 @@ import (
 )
 
 func TestParseMailPluginDriver(t *testing.T) {
-	driver, ok := parseMailPluginDriver("goframe-mail-sendgrid")
+	driver, ok := parseMailPluginDriver("nucleus-mail-sendgrid")
 	if !ok || driver != "sendgrid" {
 		t.Fatalf("unexpected parse result: ok=%v driver=%q", ok, driver)
 	}
 
 	if runtime.GOOS == "windows" {
-		driver, ok = parseMailPluginDriver("goframe-mail-mailgun.exe")
+		driver, ok = parseMailPluginDriver("nucleus-mail-mailgun.exe")
 		if !ok || driver != "mailgun" {
 			t.Fatalf("unexpected windows parse result: ok=%v driver=%q", ok, driver)
 		}
 	}
 
-	if _, ok := parseMailPluginDriver("goframe-other-sendgrid"); ok {
+	if _, ok := parseMailPluginDriver("nucleus-other-sendgrid"); ok {
 		t.Fatal("expected invalid plugin name to be rejected")
 	}
 }
 
 func TestDiscoverExternalMailPlugins(t *testing.T) {
 	dir := t.TempDir()
-	pluginName := "goframe-mail-mailgun"
+	pluginName := "nucleus-mail-mailgun"
 	if runtime.GOOS == "windows" {
 		pluginName += ".exe"
 	}
@@ -66,7 +66,7 @@ func TestRunMailProviders(t *testing.T) {
 		t.Fatalf("write config failed: %v", err)
 	}
 
-	pluginName := "goframe-mail-mailgun"
+	pluginName := "nucleus-mail-mailgun"
 	if runtime.GOOS == "windows" {
 		pluginName += ".exe"
 	}

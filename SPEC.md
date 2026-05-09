@@ -360,7 +360,7 @@ Isolation guardrail behavior:
 - startup validation rejects multi-tenant mappings that would share the same DB alias
 - request routing rejects shared site DB alias fallback when tenant isolation is required
 
-## 7. CLI Contract Baseline (`cmd/goframe`, `internal/cli`)
+## 7. CLI Contract Baseline (`cmd/nucleus`, `internal/cli`)
 
 GoFrame ships stable operational CLI coverage for:
 

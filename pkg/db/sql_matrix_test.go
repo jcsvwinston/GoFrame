@@ -12,14 +12,14 @@ import (
 )
 
 func TestSQLMatrix_ConnectAndPing(t *testing.T) {
-	rawURL := strings.TrimSpace(os.Getenv("GOFRAME_SQL_MATRIX_URL"))
+	rawURL := strings.TrimSpace(os.Getenv("NUCLEUS_SQL_MATRIX_URL"))
 	if rawURL == "" {
-		t.Skip("GOFRAME_SQL_MATRIX_URL is not set; skipping SQL matrix integration test")
+		t.Skip("NUCLEUS_SQL_MATRIX_URL is not set; skipping SQL matrix integration test")
 	}
 
 	lower := strings.ToLower(rawURL)
 	if !strings.HasPrefix(lower, "postgres://") && !strings.HasPrefix(lower, "postgresql://") && !strings.HasPrefix(lower, "mysql://") {
-		t.Skipf("GOFRAME_SQL_MATRIX_URL=%q is not a required SQL matrix profile", rawURL)
+		t.Skipf("NUCLEUS_SQL_MATRIX_URL=%q is not a required SQL matrix profile", rawURL)
 	}
 
 	logger := observe.NewLogger("error", "text")
@@ -51,9 +51,9 @@ func TestSQLMatrix_ConnectAndPing(t *testing.T) {
 }
 
 func TestSQLMatrix_ExploratoryURLCompatibility(t *testing.T) {
-	rawURL := strings.TrimSpace(os.Getenv("GOFRAME_SQL_EXPLORATORY_URL"))
+	rawURL := strings.TrimSpace(os.Getenv("NUCLEUS_SQL_EXPLORATORY_URL"))
 	if rawURL == "" {
-		t.Skip("GOFRAME_SQL_EXPLORATORY_URL is not set; skipping exploratory compatibility test")
+		t.Skip("NUCLEUS_SQL_EXPLORATORY_URL is not set; skipping exploratory compatibility test")
 	}
 
 	logger := observe.NewLogger("error", "text")
@@ -87,15 +87,15 @@ func TestSQLMatrix_ExploratoryURLCompatibility(t *testing.T) {
 }
 
 func TestSQLMatrix_ExploratoryLiveConnectAndPing(t *testing.T) {
-	rawURL := strings.TrimSpace(os.Getenv("GOFRAME_SQL_EXPLORATORY_URL"))
+	rawURL := strings.TrimSpace(os.Getenv("NUCLEUS_SQL_EXPLORATORY_URL"))
 	if rawURL == "" {
-		t.Skip("GOFRAME_SQL_EXPLORATORY_URL is not set; skipping exploratory live connectivity test")
+		t.Skip("NUCLEUS_SQL_EXPLORATORY_URL is not set; skipping exploratory live connectivity test")
 	}
 
 	lower := strings.ToLower(rawURL)
 	isEnterpriseProfile := strings.HasPrefix(lower, "sqlserver://") || strings.HasPrefix(lower, "mssql://") || strings.HasPrefix(lower, "oracle://")
 	if !isEnterpriseProfile {
-		t.Skipf("GOFRAME_SQL_EXPLORATORY_URL=%q is not an enterprise exploratory profile", rawURL)
+		t.Skipf("NUCLEUS_SQL_EXPLORATORY_URL=%q is not an enterprise exploratory profile", rawURL)
 	}
 
 	database, err := waitForExploratorySQLReady(rawURL, 4*time.Minute)

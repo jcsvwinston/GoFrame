@@ -14,7 +14,7 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
-const defaultRedisChannelPrefix = "goframe:signals:"
+const defaultRedisChannelPrefix = "nucleus:signals:"
 
 var (
 	ErrRedisURLRequired = errors.New("signals: redis url is required")

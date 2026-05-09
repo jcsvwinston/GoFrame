@@ -87,7 +87,7 @@ func (s *Services) ensureSeed() error {
 	now := time.Now().UTC()
 	_, err := s.SQLDB.Exec(
 		"INSERT INTO articles (created_at, updated_at, title, content, published) VALUES (?, ?, ?, ?, ?)",
-		now, now, "Welcome to GoFrame", "This record is editable from /admin and visible via /api/articles.", true,
+		now, now, "Welcome to Nucleus", "This record is editable from /admin and visible via /api/articles.", true,
 	)
 	return err
 }

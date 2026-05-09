@@ -39,7 +39,7 @@ func runNew(args []string, _ io.Reader, stdout, stderr io.Writer) error {
 		rest = append([]string{projectFirst}, rest...)
 	}
 	if len(rest) != 1 {
-		return fmt.Errorf("usage: goframe new <project_name> [--module example.com/name] [--out .] [--port 8080] [--template mvc]")
+		return fmt.Errorf("usage: nucleus new <project_name> [--module example.com/name] [--out .] [--port 8080] [--template mvc]")
 	}
 	if *port <= 0 {
 		return fmt.Errorf("port must be greater than 0")
@@ -71,7 +71,7 @@ func runNew(args []string, _ io.Reader, stdout, stderr io.Writer) error {
 
 	slug := toSnakeCase(projectName)
 	if slug == "" {
-		slug = "goframe_app"
+		slug = "nucleus_app"
 	}
 
 	frameworkVersion := resolveFrameworkVersion()
@@ -160,9 +160,9 @@ func runNew(args []string, _ io.Reader, stdout, stderr io.Writer) error {
 		fmt.Fprintf(stdout, "  go run ./cmd/worker\n")
 	}
 	fmt.Fprintf(stdout, "\n")
-	fmt.Fprintf(stdout, "Maintenance (no local GoFrame source needed):\n")
-	fmt.Fprintf(stdout, "  go run github.com/jcsvwinston/nucleus/cmd/goframe@latest migrate --config goframe.yaml\n")
-	fmt.Fprintf(stdout, "  go run github.com/jcsvwinston/nucleus/cmd/goframe@latest seed --config goframe.yaml --seeds seeds\n")
+	fmt.Fprintf(stdout, "Maintenance (no local Nucleus source needed):\n")
+	fmt.Fprintf(stdout, "  go run github.com/jcsvwinston/nucleus/cmd/nucleus@latest migrate --config goframe.yaml\n")
+	fmt.Fprintf(stdout, "  go run github.com/jcsvwinston/nucleus/cmd/nucleus@latest seed --config goframe.yaml --seeds seeds\n")
 	fmt.Fprintf(stdout, "\n")
 	fmt.Fprintf(stdout, "Access:\n")
 	if tmpl == "api" {
@@ -184,7 +184,7 @@ func runNew(args []string, _ io.Reader, stdout, stderr io.Writer) error {
 func defaultModulePath(projectName string) string {
 	slug := toSnakeCase(projectName)
 	if slug == "" {
-		slug = "goframe_app"
+		slug = "nucleus_app"
 	}
 	return "example.com/" + slug
 }
@@ -232,7 +232,7 @@ rate_limit_burst: 0
 rate_limit_by_route: false
 rate_limit_by_role: false
 admin_prefix: /admin
-admin_title: GoFrame Admin
+admin_title: Nucleus Admin
 admin_auth_database: default
 admin_bootstrap_username: admin
 admin_bootstrap_email: admin@example.com
@@ -258,7 +258,7 @@ const newGitignoreTemplate = `app.db
 
 const newReadmeTemplate = `# %s
 
-Proyecto generado con goframe CLI.
+Proyecto generado con nucleus CLI.
 
 ## Arranque rapido
 
@@ -380,7 +380,7 @@ func ensureSeed(sqlDB *sql.DB) error {
 	now := time.Now().UTC()
 	_, err := sqlDB.Exec(
 		"INSERT INTO articles (created_at, updated_at, title, content, published) VALUES (?, ?, ?, ?, ?)",
-		now, now, "Welcome to GoFrame", "This record is editable from /admin and visible via /api/articles.", true,
+		now, now, "Welcome to Nucleus", "This record is editable from /admin and visible via /api/articles.", true,
 	)
 	return err
 }
@@ -467,7 +467,7 @@ import (
 func HomePage(tpl *template.Template) gfrender.Handler {
 	return func(c *gfrender.Context) error {
 		return c.HTML(http.StatusOK, "home.html", map[string]any{
-			"Title": "GoFrame Starter",
+			"Title": "Nucleus Starter",
 		})
 	}
 }
@@ -857,7 +857,7 @@ const newHomeHTMLTemplate = `<!DOCTYPE html>
   <main class="wrap">
     <section class="card">
       <h1>{{ .Title }}</h1>
-      <p>Starter GoFrame generado por CLI.</p>
+      <p>Starter Nucleus generado por CLI.</p>
       <div class="links">
         <a href="/admin">Abrir Admin</a>
         <a href="/api/articles">GET /api/articles</a>
@@ -881,7 +881,7 @@ const newMigrationUpTemplate = `CREATE TABLE IF NOT EXISTS articles (
 const newMigrationDownTemplate = `DROP TABLE IF EXISTS articles;`
 
 const newSeedTemplate = `INSERT INTO articles (created_at, updated_at, title, content, published)
-VALUES (CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 'Seed Article', 'Seed inserted by goframe starter', 1);`
+VALUES (CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 'Seed Article', 'Seed inserted by nucleus starter', 1);`
 
 const newAPIConfigTemplate = `database_default: default
 databases:

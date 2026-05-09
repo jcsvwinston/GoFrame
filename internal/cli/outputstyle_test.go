@@ -9,18 +9,18 @@ import (
 
 func TestDefaultOutputOptions_EnvVars(t *testing.T) {
 	// Save and restore env vars
-	prevOutput := os.Getenv("GOFRAME_OUTPUT")
-	prevColor := os.Getenv("GOFRAME_COLOR")
-	prevSymbols := os.Getenv("GOFRAME_SYMBOLS")
+	prevOutput := os.Getenv("NUCLEUS_OUTPUT")
+	prevColor := os.Getenv("NUCLEUS_COLOR")
+	prevSymbols := os.Getenv("NUCLEUS_SYMBOLS")
 	defer func() {
-		os.Setenv("GOFRAME_OUTPUT", prevOutput)
-		os.Setenv("GOFRAME_COLOR", prevColor)
-		os.Setenv("GOFRAME_SYMBOLS", prevSymbols)
+		os.Setenv("NUCLEUS_OUTPUT", prevOutput)
+		os.Setenv("NUCLEUS_COLOR", prevColor)
+		os.Setenv("NUCLEUS_SYMBOLS", prevSymbols)
 	}()
 
-	os.Setenv("GOFRAME_OUTPUT", "json")
-	os.Setenv("GOFRAME_COLOR", "always")
-	os.Setenv("GOFRAME_SYMBOLS", "false")
+	os.Setenv("NUCLEUS_OUTPUT", "json")
+	os.Setenv("NUCLEUS_COLOR", "always")
+	os.Setenv("NUCLEUS_SYMBOLS", "false")
 
 	opts := defaultOutputOptions()
 	if opts.Format != outputFormatJSON {

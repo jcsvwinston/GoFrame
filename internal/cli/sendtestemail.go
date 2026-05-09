@@ -17,12 +17,12 @@ func runSendTestEmail(args []string, _ io.Reader, stdout, stderr io.Writer) erro
 	fs := flag.NewFlagSet("sendtestemail", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 
-	configPath := fs.String("config", "", "Path to goframe config file")
+	configPath := fs.String("config", "", "Path to nucleus config file")
 	toRaw := fs.String("to", "", "Comma-separated recipient emails")
 	from := fs.String("from", "", "Sender email (defaults to config mail_from)")
 	driverOverride := fs.String("driver", "", "Mail driver override (defaults to config mail_driver)")
-	subject := fs.String("subject", "GoFrame test email", "Subject line")
-	body := fs.String("body", "This is a test email sent by goframe sendtestemail.", "Email body")
+	subject := fs.String("subject", "Nucleus test email", "Subject line")
+	body := fs.String("body", "This is a test email sent by nucleus sendtestemail.", "Email body")
 	timeout := fs.Duration("timeout", 10*time.Second, "Mail provider operation timeout")
 	dryRun := fs.Bool("dry-run", false, "Print send plan without contacting the mail provider")
 
@@ -96,7 +96,7 @@ func runSendTestEmail(args []string, _ io.Reader, stdout, stderr io.Writer) erro
 	}
 
 	if driver == "noop" {
-		return fmt.Errorf("mail_driver is noop; configure smtp/sendgrid or install goframe-plugin-<driver> (legacy: goframe-mail-<driver>) on PATH")
+		return fmt.Errorf("mail_driver is noop; configure smtp/sendgrid or install nucleus-plugin-<driver> (legacy: nucleus-mail-<driver>) on PATH")
 	}
 
 	sender, err := mail.NewSender(mail.Config{
@@ -181,6 +181,6 @@ func sendTestEmailProviderDetails(driver string, cfg *app.Config) string {
 		}
 		return fmt.Sprintf("sendgrid_endpoint=%s", endpoint)
 	default:
-		return fmt.Sprintf("plugin=goframe-plugin-%s (legacy: goframe-mail-%s)", driver, driver)
+		return fmt.Sprintf("plugin=nucleus-plugin-%s (legacy: nucleus-mail-%s)", driver, driver)
 	}
 }

@@ -22,7 +22,7 @@ import (
 //
 //	managed, err := outbox.NewManagedOutbox(outbox.ManagedConfig{
 //	    DB:        sqlDB,
-//	    TableName: "goframe_outbox",
+//	    TableName: "nucleus_outbox",
 //	    Flavor:    outbox.FlavorSQLite,
 //	    Logger:    logger,
 //	})
@@ -59,7 +59,7 @@ type ManagedOutbox struct {
 // ManagedConfig configures a managed outbox instance.
 //
 // DB is the SQL database connection used for the outbox table.
-// TableName is the name of the outbox table (defaults to "goframe_outbox").
+// TableName is the name of the outbox table (defaults to "nucleus_outbox").
 // Flavor is the database flavor (SQLite, Postgres, MySQL) for SQL dialect differences.
 // LeaseOwner is a unique identifier for this instance (used for distributed locking).
 // LeaseDuration is how long a message lease is held before it can be claimed by another instance.

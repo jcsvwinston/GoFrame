@@ -12,7 +12,7 @@ import (
 	"strings"
 )
 
-const schemaMigrationsTable = "goframe_schema_migrations"
+const schemaMigrationsTable = "nucleus_schema_migrations"
 
 type dbFlavor string
 
@@ -47,7 +47,7 @@ func runSQLMigrate(args []string, _ io.Reader, stdout, stderr io.Writer) error {
 
 	rest := fs.Args()
 	if len(rest) != 1 {
-		return fmt.Errorf("usage: goframe sqlmigrate [--migrations migrations] [--down] <migration_id_or_name>")
+		return fmt.Errorf("usage: nucleus sqlmigrate [--migrations migrations] [--down] <migration_id_or_name>")
 	}
 
 	pairs, err := loadMigrationPairs(*migrationsPath)
@@ -83,7 +83,7 @@ func runSQLFlush(args []string, _ io.Reader, stdout, stderr io.Writer) error {
 	fs := flag.NewFlagSet("sqlflush", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 
-	configPath := fs.String("config", "", "Path to goframe config file")
+	configPath := fs.String("config", "", "Path to nucleus config file")
 	databaseAlias := fs.String("database", "", "Database alias to use (defaults to database_default)")
 
 	if err := fs.Parse(args); err != nil {
@@ -121,7 +121,7 @@ func runFlush(args []string, stdin io.Reader, stdout, stderr io.Writer) error {
 	fs := flag.NewFlagSet("flush", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 
-	configPath := fs.String("config", "", "Path to goframe config file")
+	configPath := fs.String("config", "", "Path to nucleus config file")
 	databaseAlias := fs.String("database", "", "Database alias to use (defaults to database_default)")
 	force := fs.Bool("force", false, "Force destructive actions (recommended in CI)")
 	yes := fs.Bool("yes", false, "Auto-confirm destructive actions without prompt")
@@ -175,7 +175,7 @@ func runSQLSequenceReset(args []string, _ io.Reader, stdout, stderr io.Writer) e
 	fs := flag.NewFlagSet("sqlsequencereset", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 
-	configPath := fs.String("config", "", "Path to goframe config file")
+	configPath := fs.String("config", "", "Path to nucleus config file")
 	databaseAlias := fs.String("database", "", "Database alias to use (defaults to database_default)")
 
 	if err := fs.Parse(args); err != nil {

@@ -21,11 +21,11 @@ func TestParseNormalizedNameSet(t *testing.T) {
 }
 
 func TestBuildRemoveStaleContentTypeStatements(t *testing.T) {
-	stmts := buildRemoveStaleContentTypeStatements(dbFlavorSQLite, "goframe_content_types", "model", []string{"ghost"})
+	stmts := buildRemoveStaleContentTypeStatements(dbFlavorSQLite, "nucleus_content_types", "model", []string{"ghost"})
 	if len(stmts) != 1 {
 		t.Fatalf("expected one statement, got %d", len(stmts))
 	}
-	want := `DELETE FROM "goframe_content_types" WHERE LOWER(TRIM("model")) = 'ghost'`
+	want := `DELETE FROM "nucleus_content_types" WHERE LOWER(TRIM("model")) = 'ghost'`
 	if stmts[0] != want {
 		t.Fatalf("unexpected statement:\n got: %s\nwant: %s", stmts[0], want)
 	}

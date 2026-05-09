@@ -1,4 +1,4 @@
-// Package admin provides an auto-generated administration panel for GoFrame,
+// Package admin provides an auto-generated administration panel for Nucleus,
 // similar to Django's contrib.admin. It exposes a REST API for CRUD operations
 // on registered models and serves an embedded SPA frontend.
 package admin
@@ -29,7 +29,7 @@ import (
 
 type adminAuthContextKey struct{}
 
-const adminSessionTouchKey = "__goframe_admin_seen_at"
+const adminSessionTouchKey = "__nucleus_admin_seen_at"
 
 // DatabaseRuntimeInfo describes one configured DB alias for admin observability.
 type DatabaseRuntimeInfo struct {
@@ -57,7 +57,7 @@ type PanelConfig struct {
 	LiveExcludePatterns []string        // optional path patterns excluded from live HTTP capture
 	LiveClusterEnabled  bool            // when true, publish/subscribe live telemetry through Redis
 	LiveClusterRedisURL string          // optional Redis URL for live cluster relay (falls back to RedisURL)
-	LiveClusterChannel  string          // optional pub/sub channel (default goframe:admin:live:v1)
+	LiveClusterChannel  string          // optional pub/sub channel (default nucleus:admin:live:v1)
 	LiveClusterNodeID   string          // optional explicit node id (defaults to runtime identity)
 	LiveClusterToken    string          // optional shared token to reject untrusted relay messages
 	TraceURLTemplate    string          // optional trace explorer URL template (supports {trace_id})
@@ -137,7 +137,7 @@ type Panel struct {
 func NewPanel(database *db.DB, registry *model.Registry, logger *slog.Logger, cfg PanelConfig) *Panel {
 	cfg.Prefix = NormalizePrefix(cfg.Prefix)
 	if cfg.Title == "" {
-		cfg.Title = "GoFrame Admin"
+		cfg.Title = "Nucleus Admin"
 	}
 	env := cfg.EnvironmentSnapshot
 	if len(env) == 0 {

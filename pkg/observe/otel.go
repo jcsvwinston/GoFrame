@@ -40,7 +40,7 @@ func SetupOpenTelemetry(ctx context.Context, cfg TelemetryConfig, logger *slog.L
 
 	serviceName := strings.TrimSpace(cfg.ServiceName)
 	if serviceName == "" {
-		serviceName = "goframe"
+		serviceName = "nucleus"
 	}
 
 	endpoint, insecure, err := parseOTLPEndpoint(cfg.OTLPEndpoint)

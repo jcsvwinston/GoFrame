@@ -8,7 +8,7 @@ import (
 	"github.com/jcsvwinston/nucleus/pkg/observe"
 )
 
-// DefaultStack returns the standard middleware chain for GoFrame applications.
+// DefaultStack returns the standard middleware chain for Nucleus applications.
 func DefaultStack(logger *slog.Logger, opts *routerOpts) []func(http.Handler) http.Handler {
 	stack := []func(http.Handler) http.Handler{
 		RequestID,

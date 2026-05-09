@@ -11,14 +11,14 @@ import (
 )
 
 func TestSQLMatrix_CriticalCommands(t *testing.T) {
-	rawURL := strings.TrimSpace(os.Getenv("GOFRAME_SQL_MATRIX_URL"))
+	rawURL := strings.TrimSpace(os.Getenv("NUCLEUS_SQL_MATRIX_URL"))
 	if rawURL == "" {
-		t.Skip("GOFRAME_SQL_MATRIX_URL is not set; skipping SQL matrix CLI integration test")
+		t.Skip("NUCLEUS_SQL_MATRIX_URL is not set; skipping SQL matrix CLI integration test")
 	}
 
 	flavor := detectDBFlavor(rawURL)
 	if flavor != dbFlavorPostgres && flavor != dbFlavorMySQL {
-		t.Skipf("GOFRAME_SQL_MATRIX_URL=%q is not a PostgreSQL/MySQL profile", rawURL)
+		t.Skipf("NUCLEUS_SQL_MATRIX_URL=%q is not a PostgreSQL/MySQL profile", rawURL)
 	}
 
 	dir := t.TempDir()
@@ -109,14 +109,14 @@ func TestSQLMatrix_CriticalCommands(t *testing.T) {
 }
 
 func TestSQLMatrix_ExploratoryCriticalCommands(t *testing.T) {
-	rawURL := strings.TrimSpace(os.Getenv("GOFRAME_SQL_EXPLORATORY_URL"))
+	rawURL := strings.TrimSpace(os.Getenv("NUCLEUS_SQL_EXPLORATORY_URL"))
 	if rawURL == "" {
-		t.Skip("GOFRAME_SQL_EXPLORATORY_URL is not set; skipping exploratory SQL matrix CLI integration test")
+		t.Skip("NUCLEUS_SQL_EXPLORATORY_URL is not set; skipping exploratory SQL matrix CLI integration test")
 	}
 
 	flavor := detectDBFlavor(rawURL)
 	if flavor != dbFlavorMSSQL && flavor != dbFlavorOracle {
-		t.Skipf("GOFRAME_SQL_EXPLORATORY_URL=%q is not an MSSQL/Oracle profile", rawURL)
+		t.Skipf("NUCLEUS_SQL_EXPLORATORY_URL=%q is not an MSSQL/Oracle profile", rawURL)
 	}
 
 	dir := t.TempDir()

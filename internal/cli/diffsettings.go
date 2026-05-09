@@ -30,7 +30,7 @@ func runDiffSettings(args []string, _ io.Reader, stdout, stderr io.Writer) error
 	fs := flag.NewFlagSet("diffsettings", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 
-	configPath := fs.String("config", "", "Path to goframe config file")
+	configPath := fs.String("config", "", "Path to nucleus config file")
 	showAll := fs.Bool("all", false, "Show all settings (including unchanged defaults)")
 	asJSON := fs.Bool("json", false, "Print output as JSON")
 

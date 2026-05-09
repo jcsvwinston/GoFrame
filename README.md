@@ -18,7 +18,7 @@
 ### Install CLI
 
 ```bash
-go install github.com/jcsvwinston/nucleus/cmd/goframe@latest
+go install github.com/jcsvwinston/nucleus/cmd/nucleus@latest
 ```
 
 ### Create Project

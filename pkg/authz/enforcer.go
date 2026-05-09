@@ -1,4 +1,4 @@
-// Package authz provides authorization for the GoFrame framework using Casbin.
+// Package authz provides authorization for the Nucleus framework using Casbin.
 // It wraps Casbin's enforcer with sensible RBAC defaults and provides Chi
 // middleware for route-level access control.
 package authz

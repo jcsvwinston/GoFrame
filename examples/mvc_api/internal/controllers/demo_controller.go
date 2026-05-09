@@ -28,7 +28,7 @@ func DemoRuntime(a *app.App, svc *services.Services) http.HandlerFunc {
 
 		previewMode, _ := a.Admin.FeatureFlag("articles_preview_mode")
 		router.JSON(w, http.StatusOK, map[string]any{
-			"name":                  "goframe-mvc-api-showcase",
+			"name":                  "nucleus-mvc-api-showcase",
 			"admin_prefix":          a.Config.AdminPrefix,
 			"openapi_path":          "/openapi.json",
 			"feature_flags":         map[string]bool{"articles_preview_mode": previewMode},
@@ -98,7 +98,7 @@ func EnqueueTask(a *app.App, svc *services.Services) http.HandlerFunc {
 			router.JSON(w, http.StatusBadRequest, map[string]any{
 				"error": map[string]any{
 					"code":    "TASKS_DISABLED",
-					"message": "set GOFRAME_EXAMPLE_REDIS_URL to enable task demo endpoints",
+					"message": "set NUCLEUS_EXAMPLE_REDIS_URL to enable task demo endpoints",
 				},
 			})
 			return

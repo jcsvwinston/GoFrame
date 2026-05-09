@@ -1,5 +1,5 @@
 // Package storage provides a durable, provider-agnostic file storage interface
-// for GoFrame applications. It abstracts S3, GCS, Azure Blob, and local
+// for Nucleus applications. It abstracts S3, GCS, Azure Blob, and local
 // filesystem behind a single stable API designed to last through v1.x.
 //
 // The interface is streaming-native (io.Reader/io.ReadCloser) so large files
@@ -92,7 +92,7 @@ type URLConfig struct {
 	Disposition string
 }
 
-// Store is the durable interface for file storage in GoFrame.
+// Store is the durable interface for file storage in Nucleus.
 // All implementations (S3, GCS, Azure, local) must satisfy this interface.
 // It is intentionally minimal: add provider-specific features through
 // type assertions when absolutely necessary.

@@ -63,7 +63,7 @@ func TestBuildSequenceResetStatementsPostgres(t *testing.T) {
 }
 
 func TestNormalizeTableList(t *testing.T) {
-	tables := normalizeTableList([]string{" users ", "users", "goframe_schema_migrations", "posts"})
+	tables := normalizeTableList([]string{" users ", "users", "nucleus_schema_migrations", "posts"})
 	got := strings.Join(tables, ",")
 	if got != "posts,users" {
 		t.Fatalf("unexpected normalized tables: %s", got)

@@ -31,7 +31,7 @@ type JWTManager struct {
 
 // NewJWTManager creates a JWT manager with the given secret and token expiry duration.
 func NewJWTManager(secret string, expiry time.Duration, issuer ...string) *JWTManager {
-	iss := "goframe"
+	iss := "nucleus"
 	if len(issuer) > 0 && issuer[0] != "" {
 		iss = issuer[0]
 	}

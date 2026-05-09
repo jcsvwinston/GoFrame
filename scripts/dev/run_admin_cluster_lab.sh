@@ -13,7 +13,7 @@ Options:
   --lb-port <port>           Local load balancer port (default: 8090)
   --node-a-db <url>          Node A DB URL (default: sqlite://examples_mvc_api_node_a.db)
   --node-b-db <url>          Node B DB URL (default: sqlite://examples_mvc_api_node_b.db)
-  --cluster-channel <name>   Admin live relay channel (default: goframe:admin:live:v1)
+  --cluster-channel <name>   Admin live relay channel (default: nucleus:admin:live:v1)
   --cluster-token <token>    Admin live relay token (default: dev-cluster-token)
   --trace-url-template <u>   Optional trace explorer template ({trace_id})
   --workdir <path>           Working directory for logs and pid file (default: .tmp/admin_cluster_lab)
@@ -35,7 +35,7 @@ NODE_B_PORT=8092
 LB_PORT=8090
 NODE_A_DB_URL="sqlite://examples_mvc_api_node_a.db"
 NODE_B_DB_URL="sqlite://examples_mvc_api_node_b.db"
-CLUSTER_CHANNEL="goframe:admin:live:v1"
+CLUSTER_CHANNEL="nucleus:admin:live:v1"
 CLUSTER_TOKEN="dev-cluster-token"
 TRACE_URL_TEMPLATE=""
 WORK_DIR="${ROOT_DIR}/.tmp/admin_cluster_lab"
@@ -125,7 +125,7 @@ LB_LOG="${WORK_DIR}/lb.log"
 PIDS_FILE="${WORK_DIR}/pids.env"
 NODE_BIN="${WORK_DIR}/mvc_api.bin"
 LB_BIN="${WORK_DIR}/local_lb.bin"
-REDIS_CONTAINER_NAME="goframe-admin-cluster-redis"
+REDIS_CONTAINER_NAME="nucleus-admin-cluster-redis"
 REDIS_STARTED_BY_SCRIPT=0
 
 redis_is_ready() {
@@ -215,18 +215,18 @@ start_node() {
   local title="$4"
   local log_file="$5"
   local -a env_vars=(
-    "GOFRAME_EXAMPLE_PORT=${port}"
-    "GOFRAME_EXAMPLE_DB_URL=${db_url}"
-    "GOFRAME_EXAMPLE_REDIS_URL=${REDIS_URL}"
-    "GOFRAME_EXAMPLE_SESSION_STORE=redis"
-    "GOFRAME_EXAMPLE_SESSION_REDIS_URL=${REDIS_URL}"
-    "GOFRAME_EXAMPLE_ADMIN_CLUSTER_ENABLED=true"
-    "GOFRAME_EXAMPLE_ADMIN_CLUSTER_REDIS_URL=${REDIS_URL}"
-    "GOFRAME_EXAMPLE_ADMIN_CLUSTER_CHANNEL=${CLUSTER_CHANNEL}"
-    "GOFRAME_EXAMPLE_ADMIN_CLUSTER_NODE_ID=${node_id}"
-    "GOFRAME_EXAMPLE_ADMIN_CLUSTER_TOKEN=${CLUSTER_TOKEN}"
-    "GOFRAME_EXAMPLE_ADMIN_TRACE_URL_TEMPLATE=${TRACE_URL_TEMPLATE}"
-    "GOFRAME_EXAMPLE_ADMIN_TITLE=${title}"
+    "NUCLEUS_EXAMPLE_PORT=${port}"
+    "NUCLEUS_EXAMPLE_DB_URL=${db_url}"
+    "NUCLEUS_EXAMPLE_REDIS_URL=${REDIS_URL}"
+    "NUCLEUS_EXAMPLE_SESSION_STORE=redis"
+    "NUCLEUS_EXAMPLE_SESSION_REDIS_URL=${REDIS_URL}"
+    "NUCLEUS_EXAMPLE_ADMIN_CLUSTER_ENABLED=true"
+    "NUCLEUS_EXAMPLE_ADMIN_CLUSTER_REDIS_URL=${REDIS_URL}"
+    "NUCLEUS_EXAMPLE_ADMIN_CLUSTER_CHANNEL=${CLUSTER_CHANNEL}"
+    "NUCLEUS_EXAMPLE_ADMIN_CLUSTER_NODE_ID=${node_id}"
+    "NUCLEUS_EXAMPLE_ADMIN_CLUSTER_TOKEN=${CLUSTER_TOKEN}"
+    "NUCLEUS_EXAMPLE_ADMIN_TRACE_URL_TEMPLATE=${TRACE_URL_TEMPLATE}"
+    "NUCLEUS_EXAMPLE_ADMIN_TITLE=${title}"
   )
 
   if [[ "${DETACH}" -eq 1 ]]; then
@@ -238,9 +238,9 @@ start_node() {
 }
 
 STARTED_PID=""
-start_node "node-a" "${NODE_A_PORT}" "${NODE_A_DB_URL}" "GoFrame Admin Node A" "${NODE_A_LOG}"
+start_node "node-a" "${NODE_A_PORT}" "${NODE_A_DB_URL}" "Nucleus Admin Node A" "${NODE_A_LOG}"
 NODE_A_PID="${STARTED_PID}"
-start_node "node-b" "${NODE_B_PORT}" "${NODE_B_DB_URL}" "GoFrame Admin Node B" "${NODE_B_LOG}"
+start_node "node-b" "${NODE_B_PORT}" "${NODE_B_DB_URL}" "Nucleus Admin Node B" "${NODE_B_LOG}"
 NODE_B_PID="${STARTED_PID}"
 
 start_lb() {

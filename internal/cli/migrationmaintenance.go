@@ -32,7 +32,7 @@ func runOptimizeMigration(args []string, _ io.Reader, stdout, stderr io.Writer) 
 		return err
 	}
 	if len(fs.Args()) != 1 {
-		return fmt.Errorf("usage: goframe optimizemigration [--migrations migrations] [--down] [--write] <migration_id_or_name>")
+		return fmt.Errorf("usage: nucleus optimizemigration [--migrations migrations] [--down] [--write] <migration_id_or_name>")
 	}
 
 	pairs, err := loadMigrationPairs(*migrationsPath)

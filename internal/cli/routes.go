@@ -25,7 +25,7 @@ func runRoutes(args []string, _ io.Reader, stdout, stderr io.Writer) error {
 	fs := flag.NewFlagSet("routes", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 
-	configPath := fs.String("config", "", "Path to goframe config file")
+	configPath := fs.String("config", "", "Path to nucleus config file")
 	pathPrefix := fs.String("path", "", "Filter routes by prefix")
 	asJSON := fs.Bool("json", false, "Print routes as JSON")
 	verbose := fs.Bool("verbose", false, "Include middleware count")

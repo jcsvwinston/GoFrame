@@ -19,7 +19,7 @@ func newTestSQLSessionStore(t *testing.T) (*SQLSessionStore, *sql.DB) {
 
 	store, err := NewSQLSessionStore(dbConn, SQLSessionStoreConfig{
 		DatabaseURL: "sqlite://:memory:",
-		TableName:   "goframe_sessions",
+		TableName:   "nucleus_sessions",
 	})
 	if err != nil {
 		t.Fatalf("new sql session store: %v", err)
@@ -93,7 +93,7 @@ func TestSQLSessionStore_ExpiredTokenReturnsMissingAndIsRemoved(t *testing.T) {
 	}
 
 	var count int
-	if err := dbConn.QueryRow(`SELECT COUNT(*) FROM "goframe_sessions" WHERE token = ?`, "token-expired").Scan(&count); err != nil {
+	if err := dbConn.QueryRow(`SELECT COUNT(*) FROM "nucleus_sessions" WHERE token = ?`, "token-expired").Scan(&count); err != nil {
 		t.Fatalf("count expired rows failed: %v", err)
 	}
 	if count != 0 {

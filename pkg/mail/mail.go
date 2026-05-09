@@ -118,8 +118,8 @@ func currentPluginHost() plugins.Host {
 //
 // Resolution order:
 // 1) built-in or registered provider
-// 2) executable plugin on PATH named goframe-plugin-<driver> with capability mail.send
-// 3) executable legacy plugin on PATH named goframe-mail-<driver>
+// 2) executable plugin on PATH named nucleus-plugin-<driver> with capability mail.send
+// 3) executable legacy plugin on PATH named nucleus-mail-<driver>
 func NewSender(cfg Config) (Sender, error) {
 	normalized := strings.ToLower(strings.TrimSpace(cfg.Driver))
 	if normalized == "" {

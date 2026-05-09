@@ -235,7 +235,7 @@ func TestNewSender_UsesCapabilityPluginForMailSend(t *testing.T) {
 	}
 
 	dir := t.TempDir()
-	pluginPath := filepath.Join(dir, "goframe-plugin-mailgun")
+	pluginPath := filepath.Join(dir, "nucleus-plugin-mailgun")
 	writeMailExecutable(t, pluginPath, "#!/bin/sh\nexit 0\n")
 
 	previousPath := os.Getenv("PATH")
@@ -281,7 +281,7 @@ func TestNewSender_FallsBackToLegacyPluginWhenCapabilityMissing(t *testing.T) {
 	}
 
 	dir := t.TempDir()
-	genericPath := filepath.Join(dir, "goframe-plugin-mailgun")
+	genericPath := filepath.Join(dir, "nucleus-plugin-mailgun")
 	writeMailExecutable(t, genericPath, `#!/bin/sh
 if [ "$1" = "capabilities" ] && [ "$2" = "--json" ]; then
   echo '{"capabilities":["queue.publish"]}'
@@ -294,7 +294,7 @@ fi
 exit 42
 `)
 
-	legacyPath := filepath.Join(dir, "goframe-mail-mailgun")
+	legacyPath := filepath.Join(dir, "nucleus-mail-mailgun")
 	writeMailExecutable(t, legacyPath, "#!/bin/sh\nexit 0\n")
 
 	previousPath := os.Getenv("PATH")
@@ -354,7 +354,7 @@ func TestSetPluginHost_AllowsRuntimeOverride(t *testing.T) {
 	}
 
 	dir := t.TempDir()
-	pluginPath := filepath.Join(dir, "goframe-plugin-mailgun")
+	pluginPath := filepath.Join(dir, "nucleus-plugin-mailgun")
 	writeMailExecutable(t, pluginPath, "#!/bin/sh\nexit 0\n")
 
 	previousPath := os.Getenv("PATH")

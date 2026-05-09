@@ -23,14 +23,14 @@ rate_limit_burst: 0
 rate_limit_by_route: false
 rate_limit_by_role: false
 admin_prefix: /admin
-admin_title: GoFrame Admin
+admin_title: Nucleus Admin
 admin_auth_database: default
 admin_bootstrap_username: admin
 admin_bootstrap_email: admin@example.com
 admin_bootstrap_password: admin123
 admin_trace_url_template: ""
 session_store: sql
-session_table: goframe_sessions
+session_table: nucleus_sessions
 multisite:
   enabled: false
   default_site: default

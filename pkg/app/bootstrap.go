@@ -34,13 +34,13 @@ func Bootstrap(configPath string, opts ...Option) (*App, error) {
 //	func main() {
 //	    app.QuickStart(func(a *app.App) error {
 //	        a.Router.Get("/", func(c *router.Context) error {
-//	            return c.String(200, "Hello GoFrame")
+//	            return c.String(200, "Hello Nucleus")
 //	        })
 //	        return nil
 //	    })
 //	}
 func QuickStart(fn func(a *App) error, opts ...Option) {
-	configPath := os.Getenv("GOFRAME_CONFIG")
+	configPath := os.Getenv("NUCLEUS_CONFIG")
 	if configPath == "" {
 		configPath = "goframe.yaml"
 	}

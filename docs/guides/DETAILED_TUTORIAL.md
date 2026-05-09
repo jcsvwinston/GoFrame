@@ -60,7 +60,7 @@ Notes:
 Generate a base resource (model + scaffold CRUD handler + test + migration):
 
 ```bash
-go run ./cmd/goframe generate resource Project
+go run ./cmd/nucleus generate resource Project
 ```
 
 This creates, among others:
@@ -113,8 +113,8 @@ DROP TABLE IF EXISTS projects;
 ## 5) Apply migrations and load seed data
 
 ```bash
-go run ./cmd/goframe migrate --config goframe.yaml
-go run ./cmd/goframe migrate --config goframe.yaml status
+go run ./cmd/nucleus migrate --config goframe.yaml
+go run ./cmd/nucleus migrate --config goframe.yaml status
 ```
 
 Create `seeds/001_projects.sql`:
@@ -127,7 +127,7 @@ VALUES ('Roadmap 2026', 'Main product plan', 1);
 Run:
 
 ```bash
-go run ./cmd/goframe seed --config goframe.yaml --seeds seeds
+go run ./cmd/nucleus seed --config goframe.yaml --seeds seeds
 ```
 
 ## 6) App bootstrap and model registration
@@ -214,7 +214,7 @@ func registerMVCRoutes(a *app.App) {
 Create admin:
 
 ```bash
-go run ./cmd/goframe createuser \
+go run ./cmd/nucleus createuser \
   --config goframe.yaml \
   --no-input \
   --username admin \
@@ -240,16 +240,16 @@ Recommended commands:
 
 ```bash
 # Show effective routes
-go run ./cmd/goframe routes --config goframe.yaml
+go run ./cmd/nucleus routes --config goframe.yaml
 
 # Dependency health check
-go run ./cmd/goframe health --config goframe.yaml --json
+go run ./cmd/nucleus health --config goframe.yaml --json
 
 # Create a new migration
-go run ./cmd/goframe migrate --config goframe.yaml create add_project_owner
+go run ./cmd/nucleus migrate --config goframe.yaml create add_project_owner
 
 # Run an ad-hoc SQL query
-go run ./cmd/goframe shell --config goframe.yaml -c "SELECT count(*) FROM projects"
+go run ./cmd/nucleus shell --config goframe.yaml -c "SELECT count(*) FROM projects"
 ```
 
 ## 9) Production guardrails
@@ -262,8 +262,8 @@ With `env: production`, GoFrame protects sensitive actions (`seed`, `migrate dow
 Examples:
 
 ```bash
-go run ./cmd/goframe seed --config goframe.yaml --seeds seeds --force
-go run ./cmd/goframe migrate --config goframe.yaml reset --force
+go run ./cmd/nucleus seed --config goframe.yaml --seeds seeds --force
+go run ./cmd/nucleus migrate --config goframe.yaml reset --force
 ```
 
 ## 10) Extend CLI per project
@@ -275,7 +275,7 @@ Example:
 - If `goframe-report` exists in `PATH`, then:
 
 ```bash
-go run ./cmd/goframe report --from 2026-01-01
+go run ./cmd/nucleus report --from 2026-01-01
 ```
 
 GoFrame automatically delegates to that external command.

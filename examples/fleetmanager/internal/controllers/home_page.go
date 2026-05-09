@@ -10,7 +10,7 @@ import (
 func HomePage(tpl *template.Template) gfrender.Handler {
 	return func(c *gfrender.Context) error {
 		return c.HTML(http.StatusOK, "home.html", map[string]any{
-			"Title": "GoFrame Starter",
+			"Title": "Nucleus Starter",
 		})
 	}
 }

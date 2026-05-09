@@ -12,7 +12,7 @@ import (
 
 func Health() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		router.JSON(w, http.StatusOK, map[string]any{"status": "ok", "service": "goframe-mvc-api"})
+		router.JSON(w, http.StatusOK, map[string]any{"status": "ok", "service": "nucleus-mvc-api"})
 	}
 }
 

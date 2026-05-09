@@ -12,7 +12,7 @@ type User struct {
 }
 
 // UserProvider is the interface that applications must implement to integrate
-// their user model with GoFrame's authentication system.
+// their user model with Nucleus's authentication system.
 type UserProvider interface {
 	// FindByID retrieves a user by their unique identifier.
 	FindByID(ctx context.Context, id string) (*User, error)

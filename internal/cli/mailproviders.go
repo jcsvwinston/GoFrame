@@ -31,7 +31,7 @@ func runMailProviders(args []string, _ io.Reader, stdout, stderr io.Writer) erro
 	fs := flag.NewFlagSet("mailproviders", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 
-	configPath := fs.String("config", "", "Path to goframe config file")
+	configPath := fs.String("config", "", "Path to nucleus config file")
 	asJSON := fs.Bool("json", false, "Print output as JSON")
 
 	if err := fs.Parse(args); err != nil {

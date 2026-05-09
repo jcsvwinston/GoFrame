@@ -30,7 +30,7 @@ This document defines the CLI quality bar for GoFrame as an enterprise and long-
 
 ## Current GoFrame CLI Baseline
 
-Implemented areas in `cmd/goframe` + `internal/cli`:
+Implemented areas in `cmd/nucleus` + `internal/cli`:
 
 - Runtime and diagnostics: `serve`, `routes`, `health`, `check --deploy`, `diffsettings`
 - Scaffolding and generation: `new`, `startapp`, `generate`

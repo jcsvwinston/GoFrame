@@ -49,7 +49,7 @@ func TestRunWizard(t *testing.T) {
 		if err == nil {
 			t.Fatal("expected experimental wizard error")
 		}
-		if !strings.Contains(out.String(), "GoFrame inspectdb Wizard") {
+		if !strings.Contains(out.String(), "Nucleus inspectdb Wizard") {
 			t.Fatalf("expected wizard title, got: %s", out.String())
 		}
 	})
@@ -61,7 +61,7 @@ func TestRunWizard(t *testing.T) {
 		if err == nil {
 			t.Fatal("expected experimental wizard error")
 		}
-		if !strings.Contains(out.String(), "GoFrame new Wizard") {
+		if !strings.Contains(out.String(), "Nucleus new Wizard") {
 			t.Fatalf("expected wizard title, got: %s", out.String())
 		}
 	})
@@ -73,7 +73,7 @@ func TestRunWizard(t *testing.T) {
 		if err == nil {
 			t.Fatal("expected experimental wizard error")
 		}
-		if !strings.Contains(out.String(), "GoFrame startapp Wizard") {
+		if !strings.Contains(out.String(), "Nucleus startapp Wizard") {
 			t.Fatalf("expected wizard title, got: %s", out.String())
 		}
 	})
@@ -286,7 +286,7 @@ func TestRunInspectDBWizard(t *testing.T) {
 		if err == nil {
 			t.Fatal("expected experimental wizard error")
 		}
-		if !strings.Contains(out.String(), "GoFrame inspectdb Wizard") {
+		if !strings.Contains(out.String(), "Nucleus inspectdb Wizard") {
 			t.Fatalf("expected wizard title, got: %s", out.String())
 		}
 	})
@@ -302,7 +302,7 @@ func TestRunNewWizard(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected experimental wizard error")
 	}
-	if !strings.Contains(out.String(), "GoFrame new Wizard") {
+	if !strings.Contains(out.String(), "Nucleus new Wizard") {
 		t.Fatalf("expected wizard title, got: %s", out.String())
 	}
 }
@@ -314,7 +314,7 @@ func TestRunStartAppWizard(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected experimental wizard error")
 	}
-	if !strings.Contains(out.String(), "GoFrame startapp Wizard") {
+	if !strings.Contains(out.String(), "Nucleus startapp Wizard") {
 		t.Fatalf("expected wizard title, got: %s", out.String())
 	}
 }

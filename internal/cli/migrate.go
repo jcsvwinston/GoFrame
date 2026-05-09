@@ -15,7 +15,7 @@ func runMigrate(args []string, stdin io.Reader, stdout, stderr io.Writer) error 
 	fs := flag.NewFlagSet("migrate", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 
-	configPath := fs.String("config", "", "Path to goframe config file")
+	configPath := fs.String("config", "", "Path to nucleus config file")
 	databaseAlias := fs.String("database", "", "Database alias to use (defaults to database_default)")
 	migrationsPath := fs.String("migrations", "migrations", "Migrations directory")
 	force := fs.Bool("force", false, "Force destructive actions (recommended in CI)")

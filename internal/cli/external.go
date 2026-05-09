@@ -7,7 +7,7 @@ import (
 )
 
 func runExternalCommand(name string, args []string, stdin io.Reader, stdout, stderr io.Writer) (handled bool, exitCode int, err error) {
-	binary := "goframe-" + name
+	binary := "nucleus-" + name
 	path, lookErr := exec.LookPath(binary)
 	if lookErr != nil {
 		return false, 0, nil

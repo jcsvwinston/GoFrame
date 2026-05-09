@@ -20,7 +20,7 @@ func TestRunPluginList(t *testing.T) {
 		t.Fatalf("write config failed: %v", err)
 	}
 
-	writePluginExecutable(t, filepath.Join(dir, "goframe-plugin-twilio"), `#!/bin/sh
+	writePluginExecutable(t, filepath.Join(dir, "nucleus-plugin-twilio"), `#!/bin/sh
 if [ "$1" = "capabilities" ] && [ "$2" = "--json" ]; then
   echo '{"capabilities":["queue.publish","webhook.deliver"]}'
   exit 0
@@ -31,7 +31,7 @@ if [ "$1" = "capabilities" ]; then
 fi
 exit 1
 `)
-	writePluginExecutable(t, filepath.Join(dir, "goframe-mail-mailgun"), "#!/bin/sh\nexit 0\n")
+	writePluginExecutable(t, filepath.Join(dir, "nucleus-mail-mailgun"), "#!/bin/sh\nexit 0\n")
 
 	previousPath := os.Getenv("PATH")
 	if err := os.Setenv("PATH", dir+string(os.PathListSeparator)+previousPath); err != nil {
@@ -88,7 +88,7 @@ func TestRunPluginTestDiscovery(t *testing.T) {
 		t.Fatalf("write config failed: %v", err)
 	}
 
-	writePluginExecutable(t, filepath.Join(dir, "goframe-plugin-acme"), `#!/bin/sh
+	writePluginExecutable(t, filepath.Join(dir, "nucleus-plugin-acme"), `#!/bin/sh
 if [ "$1" = "capabilities" ] && [ "$2" = "--json" ]; then
   echo '{"capabilities":["queue.publish"]}'
   exit 0
@@ -139,7 +139,7 @@ func TestRunPluginTestExecuteLegacyWarning(t *testing.T) {
 		t.Fatalf("write config failed: %v", err)
 	}
 
-	writePluginExecutable(t, filepath.Join(dir, "goframe-mail-mailgun"), "#!/bin/sh\nexit 0\n")
+	writePluginExecutable(t, filepath.Join(dir, "nucleus-mail-mailgun"), "#!/bin/sh\nexit 0\n")
 
 	previousPath := os.Getenv("PATH")
 	if err := os.Setenv("PATH", dir+string(os.PathListSeparator)+previousPath); err != nil {

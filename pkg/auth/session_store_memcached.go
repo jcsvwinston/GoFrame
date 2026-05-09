@@ -8,7 +8,7 @@ import (
 	"github.com/bradfitz/gomemcache/memcache"
 )
 
-const defaultSessionMemcachedPrefix = "goframe:sessions:"
+const defaultSessionMemcachedPrefix = "nucleus:sessions:"
 
 // MemcachedSessionStore persists sessions in Memcached with key TTL.
 type MemcachedSessionStore struct {

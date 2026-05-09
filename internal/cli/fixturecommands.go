@@ -31,7 +31,7 @@ func runDumpData(args []string, _ io.Reader, stdout, stderr io.Writer) error {
 	fs := flag.NewFlagSet("dumpdata", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 
-	configPath := fs.String("config", "", "Path to goframe config file")
+	configPath := fs.String("config", "", "Path to nucleus config file")
 	databaseAlias := fs.String("database", "", "Database alias to use (defaults to database_default)")
 	tablesRaw := fs.String("tables", "", "Comma-separated table list to export (default: all user tables)")
 	excludeRaw := fs.String("exclude", "", "Comma-separated table list to exclude")
@@ -119,7 +119,7 @@ func runLoadData(args []string, stdin io.Reader, stdout, stderr io.Writer) error
 	fs := flag.NewFlagSet("loaddata", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 
-	configPath := fs.String("config", "", "Path to goframe config file")
+	configPath := fs.String("config", "", "Path to nucleus config file")
 	databaseAlias := fs.String("database", "", "Database alias to use (defaults to database_default)")
 	filePath := fs.String("file", "", "Path to fixture JSON file")
 	tablesRaw := fs.String("tables", "", "Comma-separated subset of fixture tables to load")
@@ -150,7 +150,7 @@ func runLoadData(args []string, stdin io.Reader, stdout, stderr io.Writer) error
 	path := strings.TrimSpace(*filePath)
 	if path == "" {
 		if len(rest) != 1 {
-			return fmt.Errorf("usage: goframe loaddata [--config goframe.yaml] [--truncate] [--dry-run] <fixture.json>")
+			return fmt.Errorf("usage: nucleus loaddata [--config goframe.yaml] [--truncate] [--dry-run] <fixture.json>")
 		}
 		path = rest[0]
 	} else if len(rest) > 0 {

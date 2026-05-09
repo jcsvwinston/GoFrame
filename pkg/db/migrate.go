@@ -11,7 +11,7 @@ import (
 	"time"
 )
 
-const migrationsTable = "goframe_schema_migrations"
+const migrationsTable = "nucleus_schema_migrations"
 
 // MigrationStatus describes the migration state for one migration ID.
 type MigrationStatus struct {

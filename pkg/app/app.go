@@ -29,7 +29,7 @@ import (
 	"github.com/jcsvwinston/nucleus/pkg/storage"
 )
 
-// App is the main GoFrame application container. It wires the minimum runtime
+// App is the main Nucleus application container. It wires the minimum runtime
 // dependencies (config, logger, router, DB, model registry, and admin panel).
 //
 // By default, app.New(cfg) initializes all subsystems (admin, storage, mail, authz).
@@ -157,7 +157,7 @@ func New(cfg *Config, opts ...Option) (*App, error) {
 	logger := observe.NewLogger(effective.LogLevel, effective.LogFormat)
 
 	telemetryShutdown, err := observe.SetupOpenTelemetry(context.Background(), observe.TelemetryConfig{
-		ServiceName:  "goframe-app",
+		ServiceName:  "nucleus-app",
 		OTLPEndpoint: effective.OTLPEndpoint,
 	}, logger)
 	if err != nil {
@@ -337,7 +337,7 @@ func attachOutbox(a *App, cfg *Config, dbConn *db.DB) error {
 		DB:            sqlDB,
 		TableName:     cfg.Outbox.TableName,
 		Flavor:        outboxFlavorForConfig(cfg),
-		LeaseOwner:    "goframe-app",
+		LeaseOwner:    "nucleus-app",
 		LeaseDuration: cfg.Outbox.LeaseDuration,
 		PollInterval:  time.Second,
 		BatchSize:     10,

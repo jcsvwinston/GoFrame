@@ -50,7 +50,7 @@ jobs:
         run: go build ./...
 
       - name: Run Core Race Tests
-        run: go test -race ./pkg/... ./internal/cli ./cmd/goframe ./examples/mvc_api/... ./examples/plugins/...
+        run: go test -race ./pkg/... ./internal/cli ./cmd/nucleus ./examples/mvc_api/... ./examples/plugins/...
 
       - name: Run Example Smoke
         run: go test ./examples/mvc_api/cmd/server -run '^TestExampleMVCAPIAdmin_Smoke$' -count=1 -v
@@ -73,28 +73,28 @@ jobs:
       matrix:
         include:
           - profile: postgresql
-            database_url: postgres://postgres:postgres@127.0.0.1:5432/goframe?sslmode=disable
+            database_url: postgres://postgres:postgres@127.0.0.1:5432/nucleus?sslmode=disable
           - profile: mysql
-            database_url: mysql://root:root@127.0.0.1:3306/goframe
+            database_url: mysql://root:root@127.0.0.1:3306/nucleus
 
     services:
       postgres:
         image: postgres:16
         env:
-          POSTGRES_DB: goframe
+          POSTGRES_DB: nucleus
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
         ports:
           - 5432:5432
         options: >-
-          --health-cmd "pg_isready -U postgres -d goframe"
+          --health-cmd "pg_isready -U postgres -d nucleus"
           --health-interval 10s
           --health-timeout 5s
           --health-retries 20
       mysql:
         image: mysql:8.4
         env:
-          MYSQL_DATABASE: goframe
+          MYSQL_DATABASE: nucleus
           MYSQL_ROOT_PASSWORD: root
         ports:
           - 3306:3306
@@ -116,12 +116,12 @@ jobs:
 
       - name: Run DB runtime smoke
         env:
-          GOFRAME_SQL_MATRIX_URL: ${{ matrix.database_url }}
+          NUCLEUS_SQL_MATRIX_URL: ${{ matrix.database_url }}
         run: go test ./pkg/db -run '^TestSQLMatrix_ConnectAndPing$' -v
 
       - name: Run CLI critical command smoke
         env:
-          GOFRAME_SQL_MATRIX_URL: ${{ matrix.database_url }}
+          NUCLEUS_SQL_MATRIX_URL: ${{ matrix.database_url }}
         run: go test ./internal/cli -run '^TestSQLMatrix_CriticalCommands$' -v
 
   db-matrix-exploratory-mssql:
@@ -162,7 +162,7 @@ jobs:
 
       - name: Run exploratory live smoke (MSSQL)
         env:
-          GOFRAME_SQL_EXPLORATORY_URL: 'sqlserver://sa:StrongPassw0rd!@127.0.0.1:1433/master'
+          NUCLEUS_SQL_EXPLORATORY_URL: 'sqlserver://sa:StrongPassw0rd!@127.0.0.1:1433/master'
         run: |
           go test ./pkg/db -run '^TestSQLMatrix_ExploratoryLiveConnectAndPing$' -v
           go test ./internal/cli -run '^TestSQLMatrix_ExploratoryCriticalCommands$' -v
@@ -207,7 +207,7 @@ jobs:
 
       - name: Run exploratory live smoke (Oracle)
         env:
-          GOFRAME_SQL_EXPLORATORY_URL: 'oracle://system:oracle@127.0.0.1:1521/FREEPDB1'
+          NUCLEUS_SQL_EXPLORATORY_URL: 'oracle://system:oracle@127.0.0.1:1521/FREEPDB1'
         run: |
           go test ./pkg/db -run '^TestSQLMatrix_ExploratoryLiveConnectAndPing$' -v
           go test ./internal/cli -run '^TestSQLMatrix_ExploratoryCriticalCommands$' -v

@@ -18,7 +18,7 @@ func HomePage(tpl *template.Template, cfg *app.Config) http.HandlerFunc {
 		}
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		_ = tpl.ExecuteTemplate(w, "home.html", map[string]any{
-			"Title":         "GoFrame Showcase",
+			"Title":         "Nucleus Showcase",
 			"AdminPassword": adminPassword,
 			"DemoUser":      config.DemoAppUsername,
 			"DemoPassword":  config.DemoAppPassword,

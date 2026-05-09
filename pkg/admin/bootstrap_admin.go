@@ -143,9 +143,9 @@ func countBootstrapAdminUsers(ctx context.Context, sqlDB *sql.DB) (int, error) {
 func newBootstrapAdminPassword() string {
 	buf := make([]byte, 14)
 	if _, err := rand.Read(buf); err != nil {
-		return fmt.Sprintf("goframe-%d", time.Now().UnixNano())
+		return fmt.Sprintf("nucleus-%d", time.Now().UnixNano())
 	}
-	return "goframe-" + hex.EncodeToString(buf)
+	return "nucleus-" + hex.EncodeToString(buf)
 }
 
 func newBootstrapAdminUserID() string {

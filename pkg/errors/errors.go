@@ -1,4 +1,4 @@
-// Package errors provides domain-specific error types for the GoFrame framework.
+// Package errors provides domain-specific error types for the Nucleus framework.
 // It defines a DomainError type with HTTP status codes and JSON serialization,
 // along with convenience constructors for common error cases.
 //

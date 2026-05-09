@@ -89,7 +89,7 @@ func rewriteRunserverArgs(args []string) ([]string, error) {
 	fs := flag.NewFlagSet("runserver", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 
-	configPath := fs.String("config", "", "Path to goframe config file")
+	configPath := fs.String("config", "", "Path to nucleus config file")
 	hostFlag := fs.String("host", "", "Override host")
 	portFlag := fs.Int("port", 0, "Override port")
 
@@ -187,7 +187,7 @@ func rewriteMakeMigrationsArgs(args []string) ([]string, error) {
 	fs := flag.NewFlagSet("makemigrations", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 
-	configPath := fs.String("config", "", "Path to goframe config file")
+	configPath := fs.String("config", "", "Path to nucleus config file")
 	migrationsPath := fs.String("migrations", "migrations", "Migrations directory")
 	name := fs.String("name", "", "Migration name")
 
@@ -229,7 +229,7 @@ func rewriteShowMigrationsArgs(args []string) ([]string, error) {
 	fs := flag.NewFlagSet("showmigrations", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 
-	configPath := fs.String("config", "", "Path to goframe config file")
+	configPath := fs.String("config", "", "Path to nucleus config file")
 	migrationsPath := fs.String("migrations", "migrations", "Migrations directory")
 
 	if err := fs.Parse(args); err != nil {

@@ -10,7 +10,7 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
-const defaultSessionRedisPrefix = "goframe:sessions:"
+const defaultSessionRedisPrefix = "nucleus:sessions:"
 const defaultRedisSessionScanCount = 500
 
 // RedisSessionStore persists sessions in Redis with key TTL.

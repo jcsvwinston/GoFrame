@@ -1,6 +1,6 @@
-// Package app provides the application configuration and bootstrap for GoFrame.
+// Package app provides the application configuration and bootstrap for Nucleus.
 // Configuration is loaded from multiple sources with increasing precedence:
-// struct defaults < YAML file < environment variables (prefix GOFRAME_).
+// struct defaults < YAML file < environment variables (prefix NUCLEUS_).
 package app
 
 import (
@@ -241,7 +241,7 @@ type TenantConfig struct {
 // defaults returns a Config populated with sensible development defaults.
 func defaults() Config {
 	defaultDB := DatabaseConfig{
-		URL:         "sqlite://goframe.db",
+		URL:         "sqlite://nucleus.db",
 		MaxOpen:     25,
 		MaxIdle:     5,
 		MaxLifetime: 5 * time.Minute,
@@ -278,15 +278,15 @@ func defaults() Config {
 		JWTExpiry:       24 * time.Hour,
 		SessionLifetime: 72 * time.Hour,
 		SessionStore:    "memory",
-		SessionTable:    "goframe_sessions",
+		SessionTable:    "nucleus_sessions",
 
 		SessionCookieName:     "session",
 		SessionCookiePath:     "/",
 		SessionCookieSameSite: "lax",
-		SessionRedisPrefix:    "goframe:sessions:",
+		SessionRedisPrefix:    "nucleus:sessions:",
 
 		AdminPrefix:            "/admin",
-		AdminTitle:             "GoFrame Admin",
+		AdminTitle:             "Nucleus Admin",
 		AdminAuthDatabase:      "",
 		AdminBootstrapUsername: "admin",
 		AdminBootstrapEmail:    "admin@localhost",
@@ -295,7 +295,7 @@ func defaults() Config {
 			"/admin",
 		},
 		AdminClusterEnabled: false,
-		AdminClusterChannel: "goframe:admin:live:v1",
+		AdminClusterChannel: "nucleus:admin:live:v1",
 
 		MailDriver:       "noop",
 		SMTPPort:         587,
@@ -365,7 +365,7 @@ func defaults() Config {
 
 		Outbox: OutboxConfig{
 			Enabled:       false,
-			TableName:     "goframe_outbox",
+			TableName:     "nucleus_outbox",
 			LeaseDuration: 30 * time.Second,
 			MaxRetries:    5,
 			RetryBackoff:  time.Second,
@@ -386,7 +386,7 @@ func DefaultConfig() Config {
 // LoadConfig loads configuration from multiple sources with increasing precedence:
 // 1. Struct defaults
 // 2. YAML file (optional — path argument or "goframe.yaml" in current directory)
-// 3. Environment variables with prefix GOFRAME_
+// 3. Environment variables with prefix NUCLEUS_
 //
 // If no path is provided and "goframe.yaml" does not exist, only defaults and
 // env vars are used.
@@ -409,11 +409,11 @@ func LoadConfig(path ...string) (*Config, error) {
 		}
 	}
 
-	// 3. Load environment variables (GOFRAME_PORT -> port)
-	if err := k.Load(env.Provider("GOFRAME_", ".", func(s string) string {
-		key := strings.TrimPrefix(s, "GOFRAME_")
+	// 3. Load environment variables (NUCLEUS_PORT -> port)
+	if err := k.Load(env.Provider("NUCLEUS_", ".", func(s string) string {
+		key := strings.TrimPrefix(s, "NUCLEUS_")
 		// Use double underscore for nested keys:
-		// GOFRAME_DATABASES__ANALYTICS__URL -> databases.analytics.url
+		// NUCLEUS_DATABASES__ANALYTICS__URL -> databases.analytics.url
 		key = strings.ReplaceAll(key, "__", ".")
 		return strings.ToLower(key)
 	}), nil); err != nil {
@@ -715,7 +715,7 @@ func normalizeAdminConfig(cfg *Config) {
 	cfg.AdminClusterRedisURL = strings.TrimSpace(cfg.AdminClusterRedisURL)
 	cfg.AdminClusterChannel = strings.TrimSpace(cfg.AdminClusterChannel)
 	if cfg.AdminClusterChannel == "" {
-		cfg.AdminClusterChannel = "goframe:admin:live:v1"
+		cfg.AdminClusterChannel = "nucleus:admin:live:v1"
 	}
 	if len(cfg.AdminLiveExcludePatterns) == 0 {
 		cfg.AdminLiveExcludePatterns = []string{cfg.AdminPrefix}

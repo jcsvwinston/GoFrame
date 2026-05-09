@@ -23,7 +23,7 @@ var (
 // TelemetryMiddleware records OpenTelemetry spans and metrics for HTTP requests.
 func TelemetryMiddleware(next http.Handler) http.Handler {
 	initTelemetryInstruments()
-	tracer := otel.Tracer("goframe/router")
+	tracer := otel.Tracer("nucleus/router")
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
@@ -66,7 +66,7 @@ func TelemetryMiddleware(next http.Handler) http.Handler {
 
 func initTelemetryInstruments() {
 	telemetryOnce.Do(func() {
-		m := otel.Meter("goframe/router")
+		m := otel.Meter("nucleus/router")
 		reqCounter, _ = m.Int64Counter("http.server.requests")
 		reqDurationMs, _ = m.Float64Histogram("http.server.request.duration.ms")
 		inFlight, _ = m.Int64UpDownCounter("http.server.in_flight")

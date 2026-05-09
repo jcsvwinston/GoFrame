@@ -15,8 +15,8 @@ import (
 )
 
 const (
-	GenericBinaryPrefix    = "goframe-plugin-"
-	LegacyMailBinaryPrefix = "goframe-mail-"
+	GenericBinaryPrefix    = "nucleus-plugin-"
+	LegacyMailBinaryPrefix = "nucleus-mail-"
 	DefaultProbeTimeout    = 2 * time.Second
 )
 

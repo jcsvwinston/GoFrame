@@ -92,7 +92,7 @@ func TestSetupOpenTelemetry_DefaultServiceName(t *testing.T) {
 	// Empty endpoint returns noop, but we can test the config path
 	shutdown, err := SetupOpenTelemetry(context.Background(), TelemetryConfig{
 		OTLPEndpoint: "",
-		ServiceName:  "", // Should default to "goframe"
+		ServiceName:  "", // Should default to "nucleus"
 	}, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)

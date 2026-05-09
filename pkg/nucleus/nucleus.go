@@ -40,7 +40,7 @@ type SPAConfig struct {
 	APIPrefix string
 }
 
-// New creates a new GoFrame application with sensible defaults
+// New creates a new Nucleus application with sensible defaults
 func New() *AppBuilder {
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 
@@ -233,7 +233,7 @@ func (b *AppBuilder) Run() error {
 		b.setupSPA(a.Router)
 	}
 
-	fmt.Printf("GoFrame running on http://%s\n", b.config.Addr())
+	fmt.Printf("Nucleus running on http://%s\n", b.config.Addr())
 	return a.Run(context.Background())
 }
 

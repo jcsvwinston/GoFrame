@@ -2,7 +2,7 @@
 # Build the admin UI for production embedding
 set -e
 
-echo "🔧 Building GoFrame Admin UI..."
+echo "🔧 Building Nucleus Admin UI..."
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 UI_DIR="$SCRIPT_DIR/ui"

@@ -10,7 +10,7 @@ import (
 	"strings"
 )
 
-const adminUIDirEnv = "GOFRAME_ADMIN_UI_DIR"
+const adminUIDirEnv = "NUCLEUS_ADMIN_UI_DIR"
 
 //go:embed ui_fallback/*
 var fallbackUIFS embed.FS
@@ -79,7 +79,7 @@ func adminUIBuildDirUsable(dir string) bool {
 
 func injectAdminPrefix(content []byte, prefix string) []byte {
 	adminPrefix := NormalizePrefix(prefix)
-	injection := fmt.Sprintf(`<head><meta name="goframe-admin-prefix" content="%s">`, html.EscapeString(adminPrefix))
+	injection := fmt.Sprintf(`<head><meta name="nucleus-admin-prefix" content="%s">`, html.EscapeString(adminPrefix))
 	contentStr := string(content)
 	if strings.Contains(contentStr, "<head>") {
 		return []byte(strings.Replace(contentStr, "<head>", injection, 1))

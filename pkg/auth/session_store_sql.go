@@ -9,7 +9,7 @@ import (
 	"time"
 )
 
-const defaultSessionTableName = "goframe_sessions"
+const defaultSessionTableName = "nucleus_sessions"
 const defaultSessionStoreListLimit = 5000
 
 type sqlSessionStoreFlavor string

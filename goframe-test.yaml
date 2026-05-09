@@ -1,4 +1,4 @@
-# GoFrame - Configuración de prueba
+# Nucleus - Configuración de prueba
 # Single node, admin prefix personalizado
 
 # Entorno
@@ -19,7 +19,7 @@ admin_prefix: /system
 database_default: default
 databases:
   default:
-    url: sqlite://goframe.db
+    url: sqlite://nucleus.db
     max_open: 25
     max_idle: 5
     max_lifetime: 5m
@@ -30,4 +30,4 @@ session_cookie_secure: false
 session_cookie_samesite: lax
 
 # Admin
-admin_title: GoFrame Admin
+admin_title: Nucleus Admin

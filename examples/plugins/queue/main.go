@@ -29,7 +29,7 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer, now clockFunc
 		case "capabilities":
 			return runCapabilities(args[1:], stdout, stderr, []string{plugins.CapabilityQueuePublish})
 		case "help", "-h", "--help":
-			fmt.Fprintln(stdout, "Usage: goframe-plugin-examplequeue [capabilities [--json]]")
+			fmt.Fprintln(stdout, "Usage: nucleus-plugin-examplequeue [capabilities [--json]]")
 			fmt.Fprintln(stdout, "Reads SDK v1 envelope from stdin when no subcommand is given.")
 			return plugins.ExitCodeSuccess
 		default:

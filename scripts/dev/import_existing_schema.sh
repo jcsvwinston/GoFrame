@@ -8,8 +8,8 @@ Usage:
 
 Options:
   --schema <path>            Path to SQL schema file to import (required)
-  --config <path>            goframe config path (default: goframe.yaml)
-  --goframe-bin <name/path>  goframe executable (default: goframe)
+  --config <path>            nucleus config path (default: goframe.yaml)
+  --nucleus-bin <name/path>  nucleus executable (default: nucleus)
   --migrations <dir>         migrations directory (default: migrations)
   --baseline-name <name>     baseline migration suffix (default: baseline_existing_schema)
   --models-output <path>     inspectdb output file (default: internal/models/legacy_models.go)
@@ -23,10 +23,10 @@ Options:
   -h, --help                 Show help
 
 Flow:
-  1) Import schema.sql into configured DB (via goframe shell)
+  1) Import schema.sql into configured DB (via nucleus shell)
   2) Generate Go models with inspectdb
   3) Create baseline migration file pair and copy schema.sql into .up.sql
-  4) Mark baseline migration as applied in goframe_schema_migrations
+  4) Mark baseline migration as applied in nucleus_schema_migrations
 
 Examples:
   scripts/dev/import_existing_schema.sh --schema db/schema.sql
@@ -52,7 +52,7 @@ sql_quote() {
 
 SCHEMA_FILE=""
 CONFIG_PATH="goframe.yaml"
-GOFRAME_BIN="goframe"
+NUCLEUS_BIN="nucleus"
 MIGRATIONS_DIR="migrations"
 BASELINE_NAME="baseline_existing_schema"
 MODELS_OUTPUT="internal/models/legacy_models.go"
@@ -74,8 +74,8 @@ while [[ $# -gt 0 ]]; do
       CONFIG_PATH="${2:-}"
       shift 2
       ;;
-    --goframe-bin)
-      GOFRAME_BIN="${2:-}"
+    --nucleus-bin)
+      NUCLEUS_BIN="${2:-}"
       shift 2
       ;;
     --migrations)
@@ -152,9 +152,9 @@ if [[ ! -f "${CONFIG_PATH}" ]]; then
   exit 1
 fi
 
-if ! command -v "${GOFRAME_BIN}" >/dev/null 2>&1; then
-  echo "error: goframe executable not found: ${GOFRAME_BIN}" >&2
-  echo "hint: install goframe or pass --goframe-bin <path>" >&2
+if ! command -v "${NUCLEUS_BIN}" >/dev/null 2>&1; then
+  echo "error: nucleus executable not found: ${NUCLEUS_BIN}" >&2
+  echo "hint: install nucleus or pass --nucleus-bin <path>" >&2
   exit 1
 fi
 
@@ -163,14 +163,14 @@ BASELINE_SLUG="$(normalize_slug "${BASELINE_NAME}")"
 echo "==> Existing schema import automation"
 echo "    schema:      ${SCHEMA_FILE}"
 echo "    config:      ${CONFIG_PATH}"
-echo "    goframe:     ${GOFRAME_BIN}"
+echo "    nucleus:     ${NUCLEUS_BIN}"
 echo "    migrations:  ${MIGRATIONS_DIR}"
 echo "    baseline:    ${BASELINE_SLUG}"
 echo "    models out:  ${MODELS_OUTPUT}"
 
 if [[ $SKIP_IMPORT -eq 0 ]]; then
   echo "==> Step 1/4: Import schema SQL into configured database"
-  "${GOFRAME_BIN}" shell --config "${CONFIG_PATH}" < "${SCHEMA_FILE}"
+  "${NUCLEUS_BIN}" shell --config "${CONFIG_PATH}" < "${SCHEMA_FILE}"
 else
   echo "==> Step 1/4: Skipped (--skip-import)"
 fi
@@ -184,7 +184,7 @@ if [[ $SKIP_INSPECTDB -eq 0 ]]; then
   if [[ -n "${EXCLUDE}" ]]; then
     inspect_args+=(--exclude "${EXCLUDE}")
   fi
-  "${GOFRAME_BIN}" "${inspect_args[@]}"
+  "${NUCLEUS_BIN}" "${inspect_args[@]}"
 else
   echo "==> Step 2/4: Skipped (--skip-inspectdb)"
 fi
@@ -196,7 +196,7 @@ MIGRATION_DOWN=""
 if [[ $SKIP_BASELINE -eq 0 ]]; then
   echo "==> Step 3/4: Create baseline migration and copy schema SQL"
   mkdir -p "${MIGRATIONS_DIR}"
-  "${GOFRAME_BIN}" migrate --config "${CONFIG_PATH}" --migrations "${MIGRATIONS_DIR}" create "${BASELINE_SLUG}"
+  "${NUCLEUS_BIN}" migrate --config "${CONFIG_PATH}" --migrations "${MIGRATIONS_DIR}" create "${BASELINE_SLUG}"
 
   MIGRATION_UP="$(ls -1 "${MIGRATIONS_DIR}"/*_"${BASELINE_SLUG}".up.sql 2>/dev/null | sort | tail -n 1 || true)"
   if [[ -z "${MIGRATION_UP}" ]]; then
@@ -241,14 +241,14 @@ if [[ $SKIP_STAMP -eq 0 ]]; then
   migration_id_sql="$(sql_quote "${MIGRATION_ID}")"
   applied_at_sql="$(sql_quote "$(date -u +"%Y-%m-%dT%H:%M:%SZ")")"
   read -r -d '' stamp_sql <<SQL || true
-CREATE TABLE IF NOT EXISTS goframe_schema_migrations (
+CREATE TABLE IF NOT EXISTS nucleus_schema_migrations (
   id VARCHAR(255) PRIMARY KEY,
   applied_at TEXT NOT NULL
 );
-DELETE FROM goframe_schema_migrations WHERE id = '${migration_id_sql}';
-INSERT INTO goframe_schema_migrations (id, applied_at) VALUES ('${migration_id_sql}', '${applied_at_sql}');
+DELETE FROM nucleus_schema_migrations WHERE id = '${migration_id_sql}';
+INSERT INTO nucleus_schema_migrations (id, applied_at) VALUES ('${migration_id_sql}', '${applied_at_sql}');
 SQL
-  "${GOFRAME_BIN}" shell --config "${CONFIG_PATH}" --command "${stamp_sql}"
+  "${NUCLEUS_BIN}" shell --config "${CONFIG_PATH}" --command "${stamp_sql}"
 else
   echo "==> Step 4/4: Skipped (--skip-stamp)"
 fi
@@ -261,4 +261,4 @@ fi
 echo
 echo "Next recommended checks:"
 echo "  1) go test ./..."
-echo "  2) ${GOFRAME_BIN} migrate --config ${CONFIG_PATH} --migrations ${MIGRATIONS_DIR} status"
+echo "  2) ${NUCLEUS_BIN} migrate --config ${CONFIG_PATH} --migrations ${MIGRATIONS_DIR} status"

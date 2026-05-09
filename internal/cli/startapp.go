@@ -44,7 +44,7 @@ func runStartApp(args []string, _ io.Reader, stdout, stderr io.Writer) error {
 		rest = append([]string{appNameFirst}, rest...)
 	}
 	if len(rest) != 1 {
-		return fmt.Errorf("usage: goframe startapp <name>")
+		return fmt.Errorf("usage: nucleus startapp <name>")
 	}
 	name := strings.TrimSpace(rest[0])
 	if name == "" {

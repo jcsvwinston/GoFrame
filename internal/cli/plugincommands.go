@@ -77,7 +77,7 @@ func runPlugin(args []string, _ io.Reader, stdout, stderr io.Writer) error {
 
 func printPluginUsage(w io.Writer) {
 	fmt.Fprintln(w, "Usage:")
-	fmt.Fprintln(w, "  goframe plugin <list|doctor|test> [options]")
+	fmt.Fprintln(w, "  nucleus plugin <list|doctor|test> [options]")
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Subcommands:")
 	fmt.Fprintln(w, "  list      List discovered providers and capabilities")
@@ -85,16 +85,16 @@ func printPluginUsage(w io.Writer) {
 	fmt.Fprintln(w, "  test      Run provider/capability smoke checks")
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Examples:")
-	fmt.Fprintln(w, "  goframe plugin list --config goframe.yaml")
-	fmt.Fprintln(w, "  goframe plugin doctor --config goframe.yaml")
-	fmt.Fprintln(w, "  goframe plugin test --provider sendgrid --capability mail.send")
+	fmt.Fprintln(w, "  nucleus plugin list --config goframe.yaml")
+	fmt.Fprintln(w, "  nucleus plugin doctor --config goframe.yaml")
+	fmt.Fprintln(w, "  nucleus plugin test --provider sendgrid --capability mail.send")
 }
 
 func runPluginList(args []string, stdout, stderr io.Writer) error {
 	fs := flag.NewFlagSet("plugin list", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 
-	configPath := fs.String("config", "", "Path to goframe config file")
+	configPath := fs.String("config", "", "Path to nucleus config file")
 	timeout := fs.Duration("timeout", plugins.DefaultProbeTimeout, "Capability probe timeout")
 	asJSON := fs.Bool("json", false, "Print output as JSON")
 
@@ -187,7 +187,7 @@ func runPluginDoctor(args []string, stdout, stderr io.Writer) error {
 	fs := flag.NewFlagSet("plugin doctor", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 
-	configPath := fs.String("config", "", "Path to goframe config file")
+	configPath := fs.String("config", "", "Path to nucleus config file")
 	timeout := fs.Duration("timeout", plugins.DefaultProbeTimeout, "Capability probe timeout")
 	asJSON := fs.Bool("json", false, "Print output as JSON")
 
@@ -341,7 +341,7 @@ func runPluginTest(args []string, stdout, stderr io.Writer) error {
 	fs := flag.NewFlagSet("plugin test", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 
-	configPath := fs.String("config", "", "Path to goframe config file")
+	configPath := fs.String("config", "", "Path to nucleus config file")
 	provider := fs.String("provider", "", "Provider name")
 	capability := fs.String("capability", "", "Capability name (domain.action)")
 	timeout := fs.Duration("timeout", plugins.DefaultProbeTimeout, "Capability probe timeout")

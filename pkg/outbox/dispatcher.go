@@ -96,7 +96,7 @@ type Dispatcher struct {
 // These defaults are suitable for development and can be overridden for production.
 func DefaultDispatcherConfig() DispatcherConfig {
 	return DispatcherConfig{
-		LeaseOwner:         "goframe-outbox",
+		LeaseOwner:         "nucleus-outbox",
 		LeaseDuration:      30 * time.Second,
 		PollInterval:       time.Second,
 		BatchSize:          10,

@@ -23,8 +23,8 @@ func TestLoadConfig_Defaults(t *testing.T) {
 	if !ok {
 		t.Fatal("expected default database alias to exist")
 	}
-	if defaultDB.URL != "sqlite://goframe.db" {
-		t.Errorf("expected default alias URL sqlite://goframe.db, got %s", defaultDB.URL)
+	if defaultDB.URL != "sqlite://nucleus.db" {
+		t.Errorf("expected default alias URL sqlite://nucleus.db, got %s", defaultDB.URL)
 	}
 	if cfg.LogLevel != "info" {
 		t.Errorf("expected log level info, got %s", cfg.LogLevel)
@@ -35,8 +35,8 @@ func TestLoadConfig_Defaults(t *testing.T) {
 	if cfg.AdminClusterEnabled {
 		t.Error("expected admin_cluster_enabled false by default")
 	}
-	if cfg.AdminClusterChannel != "goframe:admin:live:v1" {
-		t.Errorf("expected default admin cluster channel goframe:admin:live:v1, got %s", cfg.AdminClusterChannel)
+	if cfg.AdminClusterChannel != "nucleus:admin:live:v1" {
+		t.Errorf("expected default admin cluster channel nucleus:admin:live:v1, got %s", cfg.AdminClusterChannel)
 	}
 	if cfg.AdminBootstrapUsername != "admin" {
 		t.Errorf("expected admin_bootstrap_username admin, got %s", cfg.AdminBootstrapUsername)
@@ -56,8 +56,8 @@ func TestLoadConfig_Defaults(t *testing.T) {
 	if cfg.SessionStore != "memory" {
 		t.Errorf("expected session_store memory, got %s", cfg.SessionStore)
 	}
-	if cfg.SessionTable != "goframe_sessions" {
-		t.Errorf("expected session_table goframe_sessions, got %s", cfg.SessionTable)
+	if cfg.SessionTable != "nucleus_sessions" {
+		t.Errorf("expected session_table nucleus_sessions, got %s", cfg.SessionTable)
 	}
 	if cfg.SessionCookieName != "session" {
 		t.Errorf("expected session cookie name session, got %s", cfg.SessionCookieName)
@@ -135,12 +135,12 @@ databases:
 }
 
 func TestLoadConfig_EnvNestedOverrides(t *testing.T) {
-	os.Setenv("GOFRAME_DATABASE_DEFAULT", "primary")
-	os.Setenv("GOFRAME_DATABASES__PRIMARY__URL", "sqlite://primary-env.db")
-	os.Setenv("GOFRAME_DATABASES__PRIMARY__MAX_OPEN", "17")
-	defer os.Unsetenv("GOFRAME_DATABASE_DEFAULT")
-	defer os.Unsetenv("GOFRAME_DATABASES__PRIMARY__URL")
-	defer os.Unsetenv("GOFRAME_DATABASES__PRIMARY__MAX_OPEN")
+	os.Setenv("NUCLEUS_DATABASE_DEFAULT", "primary")
+	os.Setenv("NUCLEUS_DATABASES__PRIMARY__URL", "sqlite://primary-env.db")
+	os.Setenv("NUCLEUS_DATABASES__PRIMARY__MAX_OPEN", "17")
+	defer os.Unsetenv("NUCLEUS_DATABASE_DEFAULT")
+	defer os.Unsetenv("NUCLEUS_DATABASES__PRIMARY__URL")
+	defer os.Unsetenv("NUCLEUS_DATABASES__PRIMARY__MAX_OPEN")
 
 	cfg, err := LoadConfig()
 	if err != nil {
@@ -188,10 +188,10 @@ func TestConfig_DatabaseByAlias_UsesPrimaryPoolDefaults(t *testing.T) {
 }
 
 func TestLoadConfig_EnvOverride(t *testing.T) {
-	os.Setenv("GOFRAME_PORT", "9090")
-	os.Setenv("GOFRAME_DEBUG", "true")
-	defer os.Unsetenv("GOFRAME_PORT")
-	defer os.Unsetenv("GOFRAME_DEBUG")
+	os.Setenv("NUCLEUS_PORT", "9090")
+	os.Setenv("NUCLEUS_DEBUG", "true")
+	defer os.Unsetenv("NUCLEUS_PORT")
+	defer os.Unsetenv("NUCLEUS_DEBUG")
 
 	cfg, err := LoadConfig()
 	if err != nil {

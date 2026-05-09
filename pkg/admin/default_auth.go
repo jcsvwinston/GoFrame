@@ -14,12 +14,12 @@ import (
 )
 
 const (
-	defaultAdminUsersTable = "goframe_admin_users"
+	defaultAdminUsersTable = "nucleus_admin_users"
 
-	adminSessionUserIDKey    = "__goframe_admin_user_id"
-	adminSessionUsernameKey  = "__goframe_admin_username"
-	adminSessionEmailKey     = "__goframe_admin_email"
-	adminSessionSuperuserKey = "__goframe_admin_superuser"
+	adminSessionUserIDKey    = "__nucleus_admin_user_id"
+	adminSessionUsernameKey  = "__nucleus_admin_username"
+	adminSessionEmailKey     = "__nucleus_admin_email"
+	adminSessionSuperuserKey = "__nucleus_admin_superuser"
 )
 
 // DatabaseAdminAuth is the default admin auth provider wired by pkg/app.
@@ -33,7 +33,7 @@ type DatabaseAdminAuth struct {
 }
 
 // NewDatabaseAdminAuth creates a DB-backed AdminAuth provider that validates
-// credentials against goframe_admin_users (same table used by createuser).
+// credentials against nucleus_admin_users (same table used by createuser).
 func NewDatabaseAdminAuth(sqlDB *sql.DB, session *auth.SessionManager, prefix string) *DatabaseAdminAuth {
 	return &DatabaseAdminAuth{
 		db:      sqlDB,
@@ -211,8 +211,8 @@ func fallbackLoginPage(adminPrefix, next, errorMsg, infoMsg string) string {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="goframe-admin-prefix" content="` + html.EscapeString(adminPrefix) + `">
-  <title>GoFrame Admin Login</title>
+  <meta name="nucleus-admin-prefix" content="` + html.EscapeString(adminPrefix) + `">
+  <title>Nucleus Admin Login</title>
   <style>
     body { margin: 0; min-height: 100vh; display: grid; place-items: center; font-family: system-ui, sans-serif; background: #f6f7f9; color: #15171a; }
     main { width: min(360px, calc(100vw - 32px)); background: #fff; border: 1px solid #d8dde6; border-radius: 8px; padding: 24px; box-shadow: 0 8px 24px rgba(15, 23, 42, 0.08); }
@@ -225,7 +225,7 @@ func fallbackLoginPage(adminPrefix, next, errorMsg, infoMsg string) string {
 </head>
 <body>
   <main>
-    <h1>GoFrame Admin</h1>
+    <h1>Nucleus Admin</h1>
     ` + message + `
     <form method="post">
       <input type="hidden" name="next" value="` + html.EscapeString(next) + `">

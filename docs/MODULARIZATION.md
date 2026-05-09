@@ -147,7 +147,7 @@ because they share a single Go module.
 | `pkg/app/app.go` | `New()` accepts `...Option`; default subsystems extracted to `attachDefaultSubsystems()` |
 | `pkg/app/app_test.go` | New tests: `TestAppNew_WithoutDefaults_CoreOnly`, `TestAppNew_WithExtensions`, `TestAppNew_WithExtensions_Error` |
 | `internal/cli/new.go` | `--template api` support; `newAPIMainTemplate` uses `app.WithoutDefaults()` |
-| `cmd/goframe/main_test.go` | Updated template rejection test for new `api` template |
+| `cmd/nucleus/main_test.go` | Updated template rejection test for new `api` template |
 
 **Tests:** All existing tests pass (backward compat verified); new extension tests pass.
 

@@ -12,7 +12,7 @@ WORKDIR /app
 COPY --from=builder /app/server /app/server
 COPY --from=builder /src/examples/mvc_api/templates /app/templates
 
-ENV GOFRAME_EXAMPLE_PORT=8090
+ENV NUCLEUS_EXAMPLE_PORT=8090
 
 EXPOSE 8090
 CMD ["/app/server"]

@@ -398,7 +398,7 @@ func TestAppNew_AdminClusterEnabledRequiresRedisURL(t *testing.T) {
 func TestAppNew_SQLSessionStorePersistsAcrossRequests(t *testing.T) {
 	cfg := testAppConfig()
 	cfg.SessionStore = "sql"
-	cfg.SessionTable = "goframe_sessions"
+	cfg.SessionTable = "nucleus_sessions"
 
 	a, err := New(cfg)
 	if err != nil {
@@ -450,7 +450,7 @@ func TestAppNew_SQLSessionStorePersistsAcrossRequests(t *testing.T) {
 	}
 
 	var count int
-	if err := sqlDB.QueryRow(`SELECT COUNT(*) FROM "goframe_sessions"`).Scan(&count); err != nil {
+	if err := sqlDB.QueryRow(`SELECT COUNT(*) FROM "nucleus_sessions"`).Scan(&count); err != nil {
 		t.Fatalf("count sessions failed: %v", err)
 	}
 	if count < 1 {
@@ -604,13 +604,13 @@ func TestAppNew_AdminAuthDatabaseAlias_UsesDedicatedAlias(t *testing.T) {
 	}
 
 	var defaultCount int
-	err = defaultSQL.QueryRow(`SELECT COUNT(*) FROM goframe_admin_users`).Scan(&defaultCount)
+	err = defaultSQL.QueryRow(`SELECT COUNT(*) FROM nucleus_admin_users`).Scan(&defaultCount)
 	if err == nil {
 		t.Fatalf("expected default alias to not own admin users table, got count=%d", defaultCount)
 	}
 
 	var adminCount int
-	if err := adminSQL.QueryRow(`SELECT COUNT(*) FROM goframe_admin_users`).Scan(&adminCount); err != nil {
+	if err := adminSQL.QueryRow(`SELECT COUNT(*) FROM nucleus_admin_users`).Scan(&adminCount); err != nil {
 		t.Fatalf("query admin users on dedicated alias failed: %v", err)
 	}
 	if adminCount != 1 {

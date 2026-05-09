@@ -17,7 +17,7 @@ import (
 
 func TestContractFreeze_CLIJSONStatusKeys_NoRemovals(t *testing.T) {
 	currentLines := stableCLIJSONStatusKeyLines(t)
-	if os.Getenv("GOFRAME_UPDATE_CONTRACT_BASELINE") == "1" {
+	if os.Getenv("NUCLEUS_UPDATE_CONTRACT_BASELINE") == "1" {
 		writeBaselineLines(t, currentLines, "baseline", "cli_json_status_keys.txt")
 	}
 
@@ -80,10 +80,10 @@ func stableCLIJSONStatusKeyLines(t *testing.T) []string {
 	)
 	lines = append(lines, collectCLIJSONPayloadKeyLines(t, "createcachetable", cachePayload)...)
 
-	if _, err := dbConn.Exec(`CREATE TABLE goframe_sessions (id TEXT PRIMARY KEY, payload TEXT NOT NULL, expires_at TEXT NOT NULL)`); err != nil {
+	if _, err := dbConn.Exec(`CREATE TABLE nucleus_sessions (id TEXT PRIMARY KEY, payload TEXT NOT NULL, expires_at TEXT NOT NULL)`); err != nil {
 		t.Fatalf("create sessions table failed: %v", err)
 	}
-	if _, err := dbConn.Exec(`INSERT INTO goframe_sessions (id, payload, expires_at) VALUES ('old', '{}', datetime('now','-1 day'))`); err != nil {
+	if _, err := dbConn.Exec(`INSERT INTO nucleus_sessions (id, payload, expires_at) VALUES ('old', '{}', datetime('now','-1 day'))`); err != nil {
 		t.Fatalf("seed expired session failed: %v", err)
 	}
 
@@ -98,10 +98,10 @@ func stableCLIJSONStatusKeyLines(t *testing.T) []string {
 	if _, err := dbConn.Exec(`CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT)`); err != nil {
 		t.Fatalf("create users table failed: %v", err)
 	}
-	if _, err := dbConn.Exec(`CREATE TABLE goframe_content_types (id INTEGER PRIMARY KEY, model TEXT NOT NULL)`); err != nil {
+	if _, err := dbConn.Exec(`CREATE TABLE nucleus_content_types (id INTEGER PRIMARY KEY, model TEXT NOT NULL)`); err != nil {
 		t.Fatalf("create content types table failed: %v", err)
 	}
-	if _, err := dbConn.Exec(`INSERT INTO goframe_content_types(model) VALUES ('users'), ('ghost_model')`); err != nil {
+	if _, err := dbConn.Exec(`INSERT INTO nucleus_content_types(model) VALUES ('users'), ('ghost_model')`); err != nil {
 		t.Fatalf("seed content types failed: %v", err)
 	}
 

@@ -51,7 +51,7 @@ func TestContractFreeze_ConfigKeyPatterns_NoRemovals(t *testing.T) {
 
 func TestContractFreeze_APIExportedSymbols_NoRemovals(t *testing.T) {
 	currentLines := stableAPISymbolBaselineLines(t)
-	if os.Getenv("GOFRAME_UPDATE_CONTRACT_BASELINE") == "1" {
+	if os.Getenv("NUCLEUS_UPDATE_CONTRACT_BASELINE") == "1" {
 		writeBaselineLines(t, currentLines, "baseline", "api_exported_symbols.txt")
 	}
 

@@ -1,4 +1,4 @@
-// Package router provides an HTTP router for the GoFrame framework, built on
+// Package router provides an HTTP router for the Nucleus framework, built on
 // top of Go's standard net/http.ServeMux (Go 1.22+). It includes a default
 // middleware stack, response helpers, CSRF protection, and request binding
 // with validation.
@@ -9,7 +9,7 @@ import (
 	"time"
 )
 
-// Router wraps a Mux with GoFrame conventions and a default middleware stack.
+// Router wraps a Mux with Nucleus conventions and a default middleware stack.
 type Router struct {
 	*Mux
 	logger *slog.Logger

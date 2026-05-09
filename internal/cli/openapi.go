@@ -27,7 +27,7 @@ func runOpenAPI(args []string, _ io.Reader, stdout, stderr io.Writer) error {
 		return err
 	}
 	if len(fs.Args()) != 0 {
-		return fmt.Errorf("usage: goframe openapi [--project .] [--out openapi.json]")
+		return fmt.Errorf("usage: nucleus openapi [--project .] [--out openapi.json]")
 	}
 
 	root, err := filepath.Abs(strings.TrimSpace(*projectDir))
@@ -43,7 +43,7 @@ func runOpenAPI(args []string, _ io.Reader, stdout, stderr io.Writer) error {
 		return fmt.Errorf("openapi export requires a Go module in %s", root)
 	}
 
-	exporterDir, err := os.MkdirTemp(root, ".goframe-openapi-*")
+	exporterDir, err := os.MkdirTemp(root, ".nucleus-openapi-*")
 	if err != nil {
 		return fmt.Errorf("create exporter workspace: %w", err)
 	}

@@ -43,7 +43,7 @@ go build -o bin/server ./cmd/server
 go build -o bin/worker ./cmd/worker
 
 # Build CLI (optional, for operations)
-go build -o bin/goframe ./cmd/goframe
+go build -o bin/goframe ./cmd/nucleus
 ```
 
 ### Version-injected build
@@ -101,7 +101,7 @@ RUN go mod download
 COPY . .
 RUN CGO_ENABLED=0 go build -o /bin/server ./cmd/server
 RUN CGO_ENABLED=0 go build -o /bin/worker ./cmd/worker
-RUN CGO_ENABLED=0 go build -o /bin/goframe ./cmd/goframe
+RUN CGO_ENABLED=0 go build -o /bin/goframe ./cmd/nucleus
 
 FROM alpine:3.20
 RUN apk --no-cache add ca-certificates tzdata

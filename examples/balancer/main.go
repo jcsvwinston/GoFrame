@@ -81,7 +81,7 @@ func main() {
 	}
 
 	go func() {
-		log.Printf("GoFrame LB (sticky) on http://localhost%s → %d nodes", *addr, total)
+		log.Printf("Nucleus LB (sticky) on http://localhost%s → %d nodes", *addr, total)
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Fatal(err)
 		}
