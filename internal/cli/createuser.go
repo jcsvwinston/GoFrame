@@ -14,10 +14,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/jcsvwinston/GoFrame/pkg/auth"
+	"github.com/jcsvwinston/nucleus/pkg/auth"
 )
 
-const adminUsersTable = "goframe_admin_users"
+const adminUsersTable = "nucleus_admin_users"
 
 var usernameRegex = regexp.MustCompile(`^[A-Za-z0-9._-]{3,64}$`)
 
@@ -25,7 +25,7 @@ func runCreateUser(args []string, stdin io.Reader, stdout, stderr io.Writer) err
 	fs := flag.NewFlagSet("createuser", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 
-	configPath := fs.String("config", "", "Path to goframe config file")
+	configPath := fs.String("config", "", "Path to nucleus config file")
 	databaseAlias := fs.String("database", "", "Database alias to use (defaults to database_default)")
 	username := fs.String("username", "", "Username")
 	email := fs.String("email", "", "Email")

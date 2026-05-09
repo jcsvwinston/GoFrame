@@ -1,4 +1,4 @@
-module github.com/jcsvwinston/GoFrame
+module github.com/jcsvwinston/nucleus
 
 go 1.26.3
 

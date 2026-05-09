@@ -13,7 +13,7 @@ func runTestServer(args []string, stdin io.Reader, stdout, stderr io.Writer) err
 	fs := flag.NewFlagSet("testserver", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 
-	configPath := fs.String("config", "", "Path to goframe config file")
+	configPath := fs.String("config", "", "Path to nucleus config file")
 	fixturePath := fs.String("fixture", "", "Path to fixture JSON file")
 	tablesRaw := fs.String("tables", "", "Comma-separated subset of fixture tables to load")
 	truncate := fs.Bool("truncate", true, "Truncate fixture tables before loading")
@@ -75,7 +75,7 @@ func resolveTestServerFixturePath(flagValue string, positional []string) (string
 	flagValue = strings.TrimSpace(flagValue)
 	if flagValue == "" {
 		if len(positional) != 1 {
-			return "", fmt.Errorf("usage: goframe testserver [--config goframe.yaml] [--host ...] [--port ...] [--truncate] [--dry-run] <fixture.json>")
+			return "", fmt.Errorf("usage: nucleus testserver [--config nucleus.yml] [--host ...] [--port ...] [--truncate] [--dry-run] <fixture.json>")
 		}
 		flagValue = strings.TrimSpace(positional[0])
 	} else if len(positional) > 0 {

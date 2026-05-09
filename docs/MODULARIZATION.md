@@ -5,8 +5,8 @@ Status: **In progress**.
 
 ## Objective
 
-Make GoFrame-generated projects fully self-contained: compilable, runnable,
-and deployable without the GoFrame source tree, without a local `replace`
+Make Nucleus-generated projects fully self-contained: compilable, runnable,
+and deployable without the Nucleus source tree, without a local `replace`
 directive, and without unnecessary dependency weight.
 
 ## Phases
@@ -15,8 +15,8 @@ directive, and without unnecessary dependency weight.
 
 **Status: Complete.**
 
-The `goframe new` scaffold now generates a `go.mod` with an explicit
-`require github.com/jcsvwinston/GoFrame <version>` line.
+The `nucleus new` scaffold now generates a `go.mod` with an explicit
+`require github.com/jcsvwinston/nucleus <version>` line.
 
 - Release builds embed the exact version tag (e.g. `v0.5.5`) via goreleaser ldflags.
 - Dev builds emit `latest` so `go mod tidy` resolves the newest published tag.
@@ -79,16 +79,16 @@ actually use.
 
 ```go
 import (
-    "github.com/jcsvwinston/GoFrame/pkg/admin"
-    "github.com/jcsvwinston/GoFrame/pkg/auth"
-    "github.com/jcsvwinston/GoFrame/pkg/authz"
-    "github.com/jcsvwinston/GoFrame/pkg/db"
-    "github.com/jcsvwinston/GoFrame/pkg/mail"
-    "github.com/jcsvwinston/GoFrame/pkg/model"
-    "github.com/jcsvwinston/GoFrame/pkg/observe"
-    "github.com/jcsvwinston/GoFrame/pkg/openapi"
-    "github.com/jcsvwinston/GoFrame/pkg/router"
-    "github.com/jcsvwinston/GoFrame/pkg/storage"
+    "github.com/jcsvwinston/nucleus/pkg/admin"
+    "github.com/jcsvwinston/nucleus/pkg/auth"
+    "github.com/jcsvwinston/nucleus/pkg/authz"
+    "github.com/jcsvwinston/nucleus/pkg/db"
+    "github.com/jcsvwinston/nucleus/pkg/mail"
+    "github.com/jcsvwinston/nucleus/pkg/model"
+    "github.com/jcsvwinston/nucleus/pkg/observe"
+    "github.com/jcsvwinston/nucleus/pkg/openapi"
+    "github.com/jcsvwinston/nucleus/pkg/router"
+    "github.com/jcsvwinston/nucleus/pkg/storage"
 )
 ```
 
@@ -147,7 +147,7 @@ because they share a single Go module.
 | `pkg/app/app.go` | `New()` accepts `...Option`; default subsystems extracted to `attachDefaultSubsystems()` |
 | `pkg/app/app_test.go` | New tests: `TestAppNew_WithoutDefaults_CoreOnly`, `TestAppNew_WithExtensions`, `TestAppNew_WithExtensions_Error` |
 | `internal/cli/new.go` | `--template api` support; `newAPIMainTemplate` uses `app.WithoutDefaults()` |
-| `cmd/goframe/main_test.go` | Updated template rejection test for new `api` template |
+| `cmd/nucleus/main_test.go` | Updated template rejection test for new `api` template |
 
 **Tests:** All existing tests pass (backward compat verified); new extension tests pass.
 
@@ -167,7 +167,7 @@ independent Go modules with their own `go.mod` files. This approach was
 2. Multi-module releases require coordinated tagging infrastructure that
    doesn't exist yet.
 3. Phases 1-3 already achieve the stated goal: scaffolded projects are
-   self-contained, modular, and can run without the GoFrame binary or source.
+   self-contained, modular, and can run without the Nucleus binary or source.
 
 #### What was tried and reverted
 
@@ -180,7 +180,7 @@ independent Go modules with their own `go.mod` files. This approach was
 When the release infrastructure supports coordinated multi-module tagging:
 
 1. Move subsystems to top-level directories with module paths like
-   `github.com/jcsvwinston/GoFrame/storage`
+   `github.com/jcsvwinston/nucleus/storage`
 2. Publish version tags per sub-module
 3. Update scaffold templates to generate per-module `require` lines
 4. Add CI lane to test sub-modules independently

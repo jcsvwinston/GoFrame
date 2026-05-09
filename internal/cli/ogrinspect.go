@@ -16,7 +16,7 @@ func runOGRInspect(args []string, _ io.Reader, stdout, stderr io.Writer) error {
 	fs := flag.NewFlagSet("ogrinspect", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 
-	configPath := fs.String("config", "", "Path to goframe config file")
+	configPath := fs.String("config", "", "Path to nucleus config file")
 	databaseAlias := fs.String("database", "", "Database alias to use (defaults to database_default)")
 	tablesRaw := fs.String("tables", "", "Comma-separated table list to inspect (default: all user tables)")
 	excludeRaw := fs.String("exclude", "", "Comma-separated table list to exclude")
@@ -92,7 +92,7 @@ func runOGRInspect(args []string, _ io.Reader, stdout, stderr io.Writer) error {
 	if err != nil {
 		return err
 	}
-	source = bytes.Replace(source, []byte("goframe inspectdb"), []byte("goframe ogrinspect"), 1)
+	source = bytes.Replace(source, []byte("nucleus inspectdb"), []byte("nucleus ogrinspect"), 1)
 
 	target := strings.TrimSpace(*outputPath)
 	switch target {

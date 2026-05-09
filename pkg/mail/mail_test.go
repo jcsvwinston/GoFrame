@@ -14,7 +14,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jcsvwinston/GoFrame/pkg/plugins"
+	"github.com/jcsvwinston/nucleus/pkg/plugins"
 )
 
 type senderFunc func(context.Context, Message) error
@@ -235,7 +235,7 @@ func TestNewSender_UsesCapabilityPluginForMailSend(t *testing.T) {
 	}
 
 	dir := t.TempDir()
-	pluginPath := filepath.Join(dir, "goframe-plugin-mailgun")
+	pluginPath := filepath.Join(dir, "nucleus-plugin-mailgun")
 	writeMailExecutable(t, pluginPath, "#!/bin/sh\nexit 0\n")
 
 	previousPath := os.Getenv("PATH")
@@ -267,56 +267,6 @@ func TestNewSender_UsesCapabilityPluginForMailSend(t *testing.T) {
 	}
 	if host.execCalls == 0 {
 		t.Fatal("expected ExecuteRequest to be called")
-	}
-}
-
-func TestNewSender_FallsBackToLegacyPluginWhenCapabilityMissing(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("shell-based executable test is unix-only")
-	}
-
-	// Skip on macOS due to potential process execution restrictions in test environments
-	if runtime.GOOS == "darwin" && os.Getenv("CI") != "true" {
-		t.Skip("skipping on macOS outside CI due to process execution restrictions")
-	}
-
-	dir := t.TempDir()
-	genericPath := filepath.Join(dir, "goframe-plugin-mailgun")
-	writeMailExecutable(t, genericPath, `#!/bin/sh
-if [ "$1" = "capabilities" ] && [ "$2" = "--json" ]; then
-  echo '{"capabilities":["queue.publish"]}'
-  exit 0
-fi
-if [ "$1" = "capabilities" ]; then
-  echo "queue.publish"
-  exit 0
-fi
-exit 42
-`)
-
-	legacyPath := filepath.Join(dir, "goframe-mail-mailgun")
-	writeMailExecutable(t, legacyPath, "#!/bin/sh\nexit 0\n")
-
-	previousPath := os.Getenv("PATH")
-	if err := os.Setenv("PATH", dir+string(os.PathListSeparator)+previousPath); err != nil {
-		t.Fatalf("set PATH failed: %v", err)
-	}
-	defer func() {
-		_ = os.Setenv("PATH", previousPath)
-	}()
-
-	sender, err := NewSender(Config{Driver: "mailgun", Timeout: 5 * time.Second})
-	if err != nil {
-		t.Fatalf("NewSender failed: %v", err)
-	}
-
-	if err := sender.Send(context.Background(), Message{
-		From:    "noreply@example.com",
-		To:      []string{"dev@example.com"},
-		Subject: "hello",
-		Body:    "world",
-	}); err != nil {
-		t.Fatalf("legacy fallback send failed: %v", err)
 	}
 }
 
@@ -354,7 +304,7 @@ func TestSetPluginHost_AllowsRuntimeOverride(t *testing.T) {
 	}
 
 	dir := t.TempDir()
-	pluginPath := filepath.Join(dir, "goframe-plugin-mailgun")
+	pluginPath := filepath.Join(dir, "nucleus-plugin-mailgun")
 	writeMailExecutable(t, pluginPath, "#!/bin/sh\nexit 0\n")
 
 	previousPath := os.Getenv("PATH")

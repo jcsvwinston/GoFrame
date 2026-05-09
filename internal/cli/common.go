@@ -14,9 +14,9 @@ import (
 	"time"
 	"unicode"
 
-	"github.com/jcsvwinston/GoFrame/pkg/app"
-	"github.com/jcsvwinston/GoFrame/pkg/db"
-	"github.com/jcsvwinston/GoFrame/pkg/observe"
+	"github.com/jcsvwinston/nucleus/pkg/app"
+	"github.com/jcsvwinston/nucleus/pkg/db"
+	"github.com/jcsvwinston/nucleus/pkg/observe"
 )
 
 var identifierRegex = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)

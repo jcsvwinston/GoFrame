@@ -3,7 +3,7 @@
 Reference date: 2026-04-07.
 Status: Current.
 
-This file defines lifecycle tags for GoFrame CLI command contracts.
+This file defines lifecycle tags for Nucleus CLI command contracts.
 
 Command source of truth:
 

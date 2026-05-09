@@ -109,7 +109,7 @@ func TestRunCollectStaticAndFindStatic(t *testing.T) {
 	restore := withWorkingDir(t, dir)
 	defer restore()
 
-	cfgPath := filepath.Join(dir, "goframe.yaml")
+	cfgPath := filepath.Join(dir, "nucleus.yml")
 	writeTestFile(t, cfgPath, "static_root: collected_static\n")
 	writeTestFile(t, filepath.Join("internal", "web", "static", "site.css"), "body{}")
 	writeTestFile(t, filepath.Join("internal", "web", "static", "js", "app.js"), "console.log('ok')")

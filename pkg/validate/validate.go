@@ -1,5 +1,5 @@
 // Package validate provides struct validation powered by go-playground/validator,
-// with automatic conversion of validation errors to GoFrame DomainErrors.
+// with automatic conversion of validation errors to Nucleus DomainErrors.
 package validate
 
 import (
@@ -8,7 +8,7 @@ import (
 	"sync"
 
 	"github.com/go-playground/validator/v10"
-	gferrors "github.com/jcsvwinston/GoFrame/pkg/errors"
+	gferrors "github.com/jcsvwinston/nucleus/pkg/errors"
 )
 
 var (

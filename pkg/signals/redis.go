@@ -10,11 +10,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/jcsvwinston/GoFrame/pkg/observe"
+	"github.com/jcsvwinston/nucleus/pkg/observe"
 	"github.com/redis/go-redis/v9"
 )
 
-const defaultRedisChannelPrefix = "goframe:signals:"
+const defaultRedisChannelPrefix = "nucleus:signals:"
 
 var (
 	ErrRedisURLRequired = errors.New("signals: redis url is required")

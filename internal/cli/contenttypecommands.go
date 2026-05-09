@@ -10,13 +10,13 @@ import (
 	"strings"
 )
 
-const defaultContentTypesTableName = "goframe_content_types"
+const defaultContentTypesTableName = "nucleus_content_types"
 
 func runRemoveStaleContentTypes(args []string, stdin io.Reader, stdout, stderr io.Writer) error {
 	fs := flag.NewFlagSet("remove_stale_contenttypes", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 
-	configPath := fs.String("config", "", "Path to goframe config file")
+	configPath := fs.String("config", "", "Path to nucleus config file")
 	databaseAlias := fs.String("database", "", "Database alias to use (defaults to database_default)")
 	table := fs.String("table", defaultContentTypesTableName, "Content types table name")
 	column := fs.String("column", "model", "Column storing model/table names")

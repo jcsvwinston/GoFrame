@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/alicebob/miniredis/v2"
-	"github.com/jcsvwinston/GoFrame/pkg/observe"
+	"github.com/jcsvwinston/nucleus/pkg/observe"
 )
 
 func TestNewRedisRelayRequiresRedisURL(t *testing.T) {

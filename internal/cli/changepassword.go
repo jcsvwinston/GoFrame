@@ -9,14 +9,14 @@ import (
 	"io"
 	"strings"
 
-	"github.com/jcsvwinston/GoFrame/pkg/auth"
+	"github.com/jcsvwinston/nucleus/pkg/auth"
 )
 
 func runChangePassword(args []string, stdin io.Reader, stdout, stderr io.Writer) error {
 	fs := flag.NewFlagSet("changepassword", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 
-	configPath := fs.String("config", "", "Path to goframe config file")
+	configPath := fs.String("config", "", "Path to nucleus config file")
 	databaseAlias := fs.String("database", "", "Database alias to use (defaults to database_default)")
 	usernameFlag := fs.String("username", "", "Username to update")
 	password := fs.String("password", "", "New password (plaintext)")
@@ -100,7 +100,7 @@ func resolveChangePasswordUsername(usernameFlag string, positional []string) (st
 	username := strings.TrimSpace(usernameFlag)
 	if username == "" {
 		if len(positional) != 1 {
-			return "", fmt.Errorf("usage: goframe changepassword [--config goframe.yaml] [--password xxx] [--no-input] <username>")
+			return "", fmt.Errorf("usage: nucleus changepassword [--config nucleus.yml] [--password xxx] [--no-input] <username>")
 		}
 		username = strings.TrimSpace(positional[0])
 	} else if len(positional) > 0 {

@@ -9,43 +9,43 @@ import (
 )
 
 func TestBuildCreateCacheTableStatementsSQLite(t *testing.T) {
-	stmts, err := buildCreateCacheTableStatements(dbFlavorSQLite, "goframe_cache_entries")
+	stmts, err := buildCreateCacheTableStatements(dbFlavorSQLite, "nucleus_cache_entries")
 	if err != nil {
 		t.Fatalf("buildCreateCacheTableStatements failed: %v", err)
 	}
 	sqlText := strings.Join(stmts, "\n")
-	if !strings.Contains(sqlText, `CREATE TABLE IF NOT EXISTS "goframe_cache_entries"`) {
+	if !strings.Contains(sqlText, `CREATE TABLE IF NOT EXISTS "nucleus_cache_entries"`) {
 		t.Fatalf("unexpected create table SQL: %s", sqlText)
 	}
-	if !strings.Contains(sqlText, `CREATE INDEX IF NOT EXISTS "goframe_cache_entries_expires_idx"`) {
+	if !strings.Contains(sqlText, `CREATE INDEX IF NOT EXISTS "nucleus_cache_entries_expires_idx"`) {
 		t.Fatalf("expected expires index statement, got: %s", sqlText)
 	}
 }
 
 func TestBuildCreateCacheTableStatementsMSSQL(t *testing.T) {
-	stmts, err := buildCreateCacheTableStatements(dbFlavorMSSQL, "goframe_cache_entries")
+	stmts, err := buildCreateCacheTableStatements(dbFlavorMSSQL, "nucleus_cache_entries")
 	if err != nil {
 		t.Fatalf("buildCreateCacheTableStatements failed: %v", err)
 	}
 	sqlText := strings.Join(stmts, "\n")
-	if !strings.Contains(sqlText, "IF OBJECT_ID(N'goframe_cache_entries', N'U') IS NULL CREATE TABLE [goframe_cache_entries]") {
+	if !strings.Contains(sqlText, "IF OBJECT_ID(N'nucleus_cache_entries', N'U') IS NULL CREATE TABLE [nucleus_cache_entries]") {
 		t.Fatalf("unexpected mssql create table SQL: %s", sqlText)
 	}
-	if !strings.Contains(sqlText, "CREATE INDEX [goframe_cache_entries_expires_idx] ON [goframe_cache_entries] ([expires_at])") {
+	if !strings.Contains(sqlText, "CREATE INDEX [nucleus_cache_entries_expires_idx] ON [nucleus_cache_entries] ([expires_at])") {
 		t.Fatalf("expected mssql expires index statement, got: %s", sqlText)
 	}
 }
 
 func TestBuildCreateCacheTableStatementsOracle(t *testing.T) {
-	stmts, err := buildCreateCacheTableStatements(dbFlavorOracle, "goframe_cache_entries")
+	stmts, err := buildCreateCacheTableStatements(dbFlavorOracle, "nucleus_cache_entries")
 	if err != nil {
 		t.Fatalf("buildCreateCacheTableStatements failed: %v", err)
 	}
 	sqlText := strings.Join(stmts, "\n")
-	if !strings.Contains(sqlText, `EXECUTE IMMEDIATE 'CREATE TABLE "GOFRAME_CACHE_ENTRIES"`) {
+	if !strings.Contains(sqlText, `EXECUTE IMMEDIATE 'CREATE TABLE "NUCLEUS_CACHE_ENTRIES"`) {
 		t.Fatalf("unexpected oracle create table SQL: %s", sqlText)
 	}
-	if !strings.Contains(sqlText, `EXECUTE IMMEDIATE 'CREATE INDEX "GOFRAME_CACHE_ENTRIES_EXPIRES_IDX" ON "GOFRAME_CACHE_ENTRIES" ("EXPIRES_AT")'`) {
+	if !strings.Contains(sqlText, `EXECUTE IMMEDIATE 'CREATE INDEX "NUCLEUS_CACHE_ENTRIES_EXPIRES_IDX" ON "NUCLEUS_CACHE_ENTRIES" ("EXPIRES_AT")'`) {
 		t.Fatalf("expected oracle expires index statement, got: %s", sqlText)
 	}
 	if !strings.Contains(sqlText, "SQLCODE != -955") {
@@ -73,14 +73,14 @@ func TestSelectSessionExpiryColumn(t *testing.T) {
 }
 
 func TestBuildClearSessionsStatementAll(t *testing.T) {
-	stmt, mode, err := buildClearSessionsStatement(nil, dbFlavorSQLite, "goframe_sessions", true)
+	stmt, mode, err := buildClearSessionsStatement(nil, dbFlavorSQLite, "nucleus_sessions", true)
 	if err != nil {
 		t.Fatalf("buildClearSessionsStatement(all) failed: %v", err)
 	}
 	if mode != "all" {
 		t.Fatalf("unexpected mode: %s", mode)
 	}
-	if stmt != `DELETE FROM "goframe_sessions"` {
+	if stmt != `DELETE FROM "nucleus_sessions"` {
 		t.Fatalf("unexpected delete statement: %s", stmt)
 	}
 }
@@ -92,11 +92,11 @@ func TestBuildClearSessionsStatementExpiredSQLite(t *testing.T) {
 	}
 	defer dbConn.Close()
 
-	if _, err := dbConn.Exec(`CREATE TABLE goframe_sessions (id TEXT PRIMARY KEY, expires_at TEXT NOT NULL)`); err != nil {
+	if _, err := dbConn.Exec(`CREATE TABLE nucleus_sessions (id TEXT PRIMARY KEY, expires_at TEXT NOT NULL)`); err != nil {
 		t.Fatalf("create sessions table failed: %v", err)
 	}
 
-	stmt, mode, err := buildClearSessionsStatement(dbConn, dbFlavorSQLite, "goframe_sessions", false)
+	stmt, mode, err := buildClearSessionsStatement(dbConn, dbFlavorSQLite, "nucleus_sessions", false)
 	if err != nil {
 		t.Fatalf("buildClearSessionsStatement(expired) failed: %v", err)
 	}
@@ -115,11 +115,11 @@ func TestBuildClearSessionsStatementMissingExpiryColumn(t *testing.T) {
 	}
 	defer dbConn.Close()
 
-	if _, err := dbConn.Exec(`CREATE TABLE goframe_sessions (id TEXT PRIMARY KEY, payload TEXT NOT NULL)`); err != nil {
+	if _, err := dbConn.Exec(`CREATE TABLE nucleus_sessions (id TEXT PRIMARY KEY, payload TEXT NOT NULL)`); err != nil {
 		t.Fatalf("create sessions table failed: %v", err)
 	}
 
-	if _, _, err := buildClearSessionsStatement(dbConn, dbFlavorSQLite, "goframe_sessions", false); err == nil {
+	if _, _, err := buildClearSessionsStatement(dbConn, dbFlavorSQLite, "nucleus_sessions", false); err == nil {
 		t.Fatal("expected error when expiry column is missing")
 	}
 }

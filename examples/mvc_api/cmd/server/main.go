@@ -7,14 +7,14 @@ import (
 	"log"
 	"net/http"
 
-	"github.com/jcsvwinston/GoFrame/examples/mvc_api/internal/config"
-	"github.com/jcsvwinston/GoFrame/examples/mvc_api/internal/controllers"
-	"github.com/jcsvwinston/GoFrame/examples/mvc_api/internal/models"
-	"github.com/jcsvwinston/GoFrame/examples/mvc_api/internal/services"
-	"github.com/jcsvwinston/GoFrame/pkg/app"
-	"github.com/jcsvwinston/GoFrame/pkg/model"
-	"github.com/jcsvwinston/GoFrame/pkg/openapi"
-	"github.com/jcsvwinston/GoFrame/pkg/router"
+	"github.com/jcsvwinston/nucleus/examples/mvc_api/internal/config"
+	"github.com/jcsvwinston/nucleus/examples/mvc_api/internal/controllers"
+	"github.com/jcsvwinston/nucleus/examples/mvc_api/internal/models"
+	"github.com/jcsvwinston/nucleus/examples/mvc_api/internal/services"
+	"github.com/jcsvwinston/nucleus/pkg/app"
+	"github.com/jcsvwinston/nucleus/pkg/model"
+	"github.com/jcsvwinston/nucleus/pkg/openapi"
+	"github.com/jcsvwinston/nucleus/pkg/router"
 )
 
 //go:embed templates/*.html
@@ -55,7 +55,7 @@ func main() {
 
 	// API routes
 	a.Router.Get("/api/health", func(c *router.Context) error {
-		return c.JSON(http.StatusOK, map[string]any{"status": "ok", "service": "goframe-mvc-api"})
+		return c.JSON(http.StatusOK, map[string]any{"status": "ok", "service": "nucleus-mvc-api"})
 	})
 	a.Router.Get("/api/articles", router.FromHTTP(controllers.ListArticles(svc)))
 	a.Router.Get("/api/articles/live-flag", router.FromHTTP(controllers.ListArticlesLiveFlag(a, svc)))
@@ -74,7 +74,7 @@ func main() {
 	}
 
 	port := cfg.Port
-	log.Println("GoFrame MVC + API Showcase running:")
+	log.Println("Nucleus MVC + API Showcase running:")
 	log.Printf("  web:     http://localhost:%d/\n", port)
 	log.Printf("  api:     http://localhost:%d/api/articles\n", port)
 	log.Printf("  leads:   http://localhost:%d/api/leads\n", port)
@@ -111,7 +111,7 @@ func registerModels(a *app.App) error {
 }
 
 func exampleOpenAPIDocument() *openapi.Document {
-	doc := openapi.NewDocument("GoFrame MVC + API Showcase", "0.1.0")
+	doc := openapi.NewDocument("Nucleus MVC + API Showcase", "0.1.0")
 	doc.Info.Description = "End-to-end showcase for MVC pages, JSON API endpoints, OpenAPI export, admin, outbox, and optional task runtime."
 
 	doc.AddSchema("ArticleRecord", openapi.ObjectSchema(map[string]openapi.Schema{

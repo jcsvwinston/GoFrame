@@ -360,9 +360,8 @@ func TestSourceSortOrder(t *testing.T) {
 		expected int
 	}{
 		{SourceExternalGeneric, 0},
-		{SourceExternalLegacyMail, 1},
-		{SourceBuiltinMail, 2},
-		{Source("unknown"), 3},
+		{SourceBuiltinMail, 1},
+		{Source("unknown"), 2},
 	}
 
 	for _, tt := range tests {
@@ -407,11 +406,8 @@ func TestDiscoverExternalEdgeCases(t *testing.T) {
 }
 
 func TestPluginConstants(t *testing.T) {
-	if GenericBinaryPrefix != "goframe-plugin-" {
-		t.Errorf("Expected GenericBinaryPrefix=goframe-plugin-, got %s", GenericBinaryPrefix)
-	}
-	if LegacyMailBinaryPrefix != "goframe-mail-" {
-		t.Errorf("Expected LegacyMailBinaryPrefix=goframe-mail-, got %s", LegacyMailBinaryPrefix)
+	if GenericBinaryPrefix != "nucleus-plugin-" {
+		t.Errorf("Expected GenericBinaryPrefix=nucleus-plugin-, got %s", GenericBinaryPrefix)
 	}
 	if DefaultProbeTimeout != 2*time.Second {
 		t.Errorf("Expected DefaultProbeTimeout=2s, got %v", DefaultProbeTimeout)
@@ -503,7 +499,7 @@ func TestParseProviderFromBinaryEdgeCases(t *testing.T) {
 	})
 
 	t.Run("empty after prefix", func(t *testing.T) {
-		provider, ok := ParseProviderFromBinary("goframe-plugin-", GenericBinaryPrefix)
+		provider, ok := ParseProviderFromBinary("nucleus-plugin-", GenericBinaryPrefix)
 		if ok {
 			t.Error("Expected false for empty provider")
 		}
@@ -513,7 +509,7 @@ func TestParseProviderFromBinaryEdgeCases(t *testing.T) {
 	})
 
 	t.Run("whitespace after prefix", func(t *testing.T) {
-		provider, ok := ParseProviderFromBinary("goframe-plugin-  ", GenericBinaryPrefix)
+		provider, ok := ParseProviderFromBinary("nucleus-plugin-  ", GenericBinaryPrefix)
 		if ok {
 			t.Error("Expected false for whitespace-only provider")
 		}
@@ -526,7 +522,7 @@ func TestParseProviderFromBinaryEdgeCases(t *testing.T) {
 		if runtime.GOOS != "windows" {
 			t.Skip("windows-specific test")
 		}
-		provider, ok := ParseProviderFromBinary("goframe-plugin-test.exe", GenericBinaryPrefix)
+		provider, ok := ParseProviderFromBinary("nucleus-plugin-test.exe", GenericBinaryPrefix)
 		if !ok {
 			t.Error("Expected true for windows .exe")
 		}
@@ -536,7 +532,7 @@ func TestParseProviderFromBinaryEdgeCases(t *testing.T) {
 	})
 
 	t.Run("contains path separator", func(t *testing.T) {
-		provider, ok := ParseProviderFromBinary("goframe-plugin-test/sub", GenericBinaryPrefix)
+		provider, ok := ParseProviderFromBinary("nucleus-plugin-test/sub", GenericBinaryPrefix)
 		if ok {
 			t.Error("Expected false for provider with path separator")
 		}
@@ -546,7 +542,7 @@ func TestParseProviderFromBinaryEdgeCases(t *testing.T) {
 	})
 
 	t.Run("contains backslash", func(t *testing.T) {
-		provider, ok := ParseProviderFromBinary("goframe-plugin-test\\sub", GenericBinaryPrefix)
+		provider, ok := ParseProviderFromBinary("nucleus-plugin-test\\sub", GenericBinaryPrefix)
 		if ok {
 			t.Error("Expected false for provider with backslash")
 		}

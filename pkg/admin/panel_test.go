@@ -17,11 +17,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jcsvwinston/GoFrame/pkg/auth"
-	"github.com/jcsvwinston/GoFrame/pkg/db"
-	"github.com/jcsvwinston/GoFrame/pkg/model"
-	"github.com/jcsvwinston/GoFrame/pkg/observe"
-	"github.com/jcsvwinston/GoFrame/pkg/router"
+	"github.com/jcsvwinston/nucleus/pkg/auth"
+	"github.com/jcsvwinston/nucleus/pkg/db"
+	"github.com/jcsvwinston/nucleus/pkg/model"
+	"github.com/jcsvwinston/nucleus/pkg/observe"
+	"github.com/jcsvwinston/nucleus/pkg/router"
 )
 
 type AdminUser struct {
@@ -447,14 +447,14 @@ func TestPanel_UIAssetsServedUnderCustomPrefix(t *testing.T) {
 
 	panel, cleanup := setupPanelForTest(t, db.EngineSQL)
 	defer cleanup()
-	panel.config.Prefix = "/goframe-admin"
+	panel.config.Prefix = "/nucleus-admin"
 
 	root := router.NewMux()
-	root.Mount("/goframe-admin", panel.Handler())
+	root.Mount("/nucleus-admin", panel.Handler())
 	srv := httptest.NewServer(root)
 	defer srv.Close()
 
-	indexRes, err := http.Get(srv.URL + "/goframe-admin/")
+	indexRes, err := http.Get(srv.URL + "/nucleus-admin/")
 	if err != nil {
 		t.Fatalf("index request failed: %v", err)
 	}
@@ -465,7 +465,7 @@ func TestPanel_UIAssetsServedUnderCustomPrefix(t *testing.T) {
 	}
 	indexBody, _ := io.ReadAll(indexRes.Body)
 	indexStr := string(indexBody)
-	if !strings.Contains(indexStr, `content="/goframe-admin"`) {
+	if !strings.Contains(indexStr, `content="/nucleus-admin"`) {
 		t.Fatalf("index is missing injected admin prefix: %s", indexStr)
 	}
 	if !strings.Contains(indexStr, `./assets/`) {
@@ -477,7 +477,7 @@ func TestPanel_UIAssetsServedUnderCustomPrefix(t *testing.T) {
 		t.Fatalf("index is missing a JavaScript asset path: %s", indexStr)
 	}
 
-	componentsRes, err := http.Get(srv.URL + "/goframe-admin/" + strings.TrimPrefix(assetPath, "./"))
+	componentsRes, err := http.Get(srv.URL + "/nucleus-admin/" + strings.TrimPrefix(assetPath, "./"))
 	if err != nil {
 		t.Fatalf("asset request failed: %v", err)
 	}

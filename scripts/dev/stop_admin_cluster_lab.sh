@@ -47,7 +47,7 @@ kill_if_running "${NODE_B_PID:-}"
 
 if [[ "${REDIS_STARTED_BY_SCRIPT:-0}" == "1" ]]; then
   if command -v docker >/dev/null 2>&1; then
-    docker stop "${REDIS_CONTAINER_NAME:-goframe-admin-cluster-redis}" >/dev/null 2>&1 || true
+    docker stop "${REDIS_CONTAINER_NAME:-nucleus-admin-cluster-redis}" >/dev/null 2>&1 || true
   fi
 fi
 

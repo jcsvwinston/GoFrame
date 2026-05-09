@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/jcsvwinston/GoFrame/pkg/app"
-	"github.com/jcsvwinston/GoFrame/pkg/outbox"
+	"github.com/jcsvwinston/nucleus/pkg/app"
+	"github.com/jcsvwinston/nucleus/pkg/outbox"
 )
 
 type doctorStatus string
@@ -56,7 +56,7 @@ func runDoctor(args []string, _ io.Reader, stdout, stderr io.Writer) error {
 	fs.SetOutput(stderr)
 
 	checkName := fs.String("check", "", "Specific check to run (default: all)")
-	configPath := fs.String("config", "", "Path to goframe config file")
+	configPath := fs.String("config", "", "Path to nucleus config file")
 	jsonOutput := fs.Bool("json", false, "Output results as JSON")
 	verbose := fs.Bool("verbose", false, "Show detailed output for each check")
 

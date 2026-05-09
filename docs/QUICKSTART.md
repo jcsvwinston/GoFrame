@@ -3,7 +3,7 @@
 Reference date: 2026-04-23.
 Status: Current.
 
-This guide gets you from zero to a running GoFrame app quickly.
+This guide gets you from zero to a running Nucleus app quickly.
 
 ## Prerequisites
 
@@ -13,19 +13,19 @@ This guide gets you from zero to a running GoFrame app quickly.
 ## 1. Install CLI
 
 ```bash
-go install github.com/jcsvwinston/GoFrame/cmd/goframe@latest
+go install github.com/jcsvwinston/nucleus/cmd/nucleus@latest
 ```
 
 ## 2. Create Project
 
 ```bash
-goframe new myapp --module github.com/acme/myapp --template mvc
+nucleus new myapp --module github.com/acme/myapp --template mvc
 cd myapp
 go mod tidy
 ```
 
 The generated project is **self-contained**: it includes a `go.mod` with the
-current GoFrame version and compiles without needing the GoFrame source tree
+current Nucleus version and compiles without needing the Nucleus source tree
 or a `replace` directive.
 
 ### Lightweight API alternative
@@ -33,7 +33,7 @@ or a `replace` directive.
 For a minimal core-only project (no admin panel, storage, or mail):
 
 ```bash
-goframe new myapi --module github.com/acme/myapi --template api
+nucleus new myapi --module github.com/acme/myapi --template api
 cd myapi
 go mod tidy
 ```
@@ -59,10 +59,10 @@ go run ./cmd/worker
 ## 5. Maintenance (no local CLI install needed)
 
 ```bash
-go run github.com/jcsvwinston/GoFrame/cmd/goframe@latest migrate --config goframe.yaml
-go run github.com/jcsvwinston/GoFrame/cmd/goframe@latest seed --config goframe.yaml --seeds seeds
-go run github.com/jcsvwinston/GoFrame/cmd/goframe@latest routes --config goframe.yaml
-go run github.com/jcsvwinston/GoFrame/cmd/goframe@latest health --config goframe.yaml
+go run github.com/jcsvwinston/nucleus/cmd/nucleus@latest migrate --config nucleus.yml
+go run github.com/jcsvwinston/nucleus/cmd/nucleus@latest seed --config nucleus.yml --seeds seeds
+go run github.com/jcsvwinston/nucleus/cmd/nucleus@latest routes --config nucleus.yml
+go run github.com/jcsvwinston/nucleus/cmd/nucleus@latest health --config nucleus.yml
 ```
 
 ## 6. Enterprise SQL Drivers (optional)

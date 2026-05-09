@@ -15,7 +15,7 @@ import (
 )
 
 const (
-	defaultLiveClusterChannel       = "goframe:admin:live:v1"
+	defaultLiveClusterChannel       = "nucleus:admin:live:v1"
 	defaultLiveClusterPublishBuffer = 256
 )
 

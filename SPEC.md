@@ -1,9 +1,9 @@
-# GoFrame Technical Specification
+# Nucleus Technical Specification
 
 Reference date: 2026-04-23.
 Status: Current pre-v1 baseline.
 
-This document defines the current, implemented technical baseline for GoFrame.
+This document defines the current, implemented technical baseline for Nucleus.
 It replaces older design notes that referenced superseded architecture choices.
 
 ## 1. Scope and Precedence
@@ -87,7 +87,7 @@ Scaffold templates:
 
 ## 3.2 HTTP and Middleware (`pkg/router`)
 
-GoFrame uses its own router/mux abstractions (not Chi as a runtime dependency):
+Nucleus uses its own router/mux abstractions (not Chi as a runtime dependency):
 
 - route registration + mounting
 - request middleware chain
@@ -192,8 +192,15 @@ Mail:
 Plugin runtime:
 
 - provider discovery and capability schema handling
-- `goframe-plugin-<provider>` primary external naming
-- `goframe-mail-<driver>` legacy compatibility fallback
+- `nucleus-plugin-<provider>` external naming convention (single, no legacy fallback)
+
+## 3.7 Tasks (`pkg/tasks`)
+
+- Asynq manager and worker runtime
+- explicit enqueue policy helpers for queue/retry/timeout/delay/retention
+- explicit queue runtime actions for pause/unpause/retry and first dead-letter operations (`archive-retry`, `retry-archived`, `purge-archived`)
+- explicit scheduler wrapper for periodic tasks
+- enqueue/process instrumentation hooks
 
 ## 3.8 Storage (`pkg/storage`)
 
@@ -264,32 +271,30 @@ Multi-tenant behavior:
 - Tenant prefixing is transparent to application code
 - Explicit prefix override available via `PutOptions.TenantPrefix`
 
-Tasks (`pkg/tasks`):
-
-- Asynq manager and worker runtime
-- explicit enqueue policy helpers for queue/retry/timeout/delay/retention
-- explicit queue runtime actions for pause/unpause/retry and first dead-letter operations (`archive-retry`, `retry-archived`, `purge-archived`)
-- explicit scheduler wrapper for periodic tasks
-- enqueue/process instrumentation hooks
-
-Outbox (`pkg/outbox`):
+## 3.9 Outbox (`pkg/outbox`)
 
 - SQL-backed transactional outbox store
 - direct + transactional enqueue support
 - runtime inspection for admin/ops visibility
 - explicit dispatcher with leasing, retry backoff, and terminal failure state
 
-Observability (`pkg/observe`):
+External-bridge status (preview, not for production):
+- `KafkaBridge` (`pkg/outbox/bridge_kafka.go`) — present in code as a preview integration point. Its own source notes that this bridge is not wired for production use; configuration, ack semantics, and operational tooling are still subject to change.
+- `WebhookBridge` (`pkg/outbox/bridge_webhook.go`) — present in code on the same footing. Suitable for experimentation; not part of the stable contract surface.
+
+Both bridges are kept in the tree because the dispatcher already accommodates pluggable destinations; they are documented here so users do not assume they are production-ready.
+
+## 3.10 Observability (`pkg/observe`)
 
 - `slog` logger setup
 
-Signals (`pkg/signals`):
+## 3.11 Signals (`pkg/signals`)
 
 - in-process signal bus for model/domain events
 - explicit Redis relay for small distributed publish/subscribe forwarding
 - OpenTelemetry setup and shutdown
 
-Experimental API contracts (`pkg/openapi` + `internal/contracts` convention):
+## 3.12 Experimental API Contracts (`pkg/openapi` + `internal/contracts` convention)
 
 - minimal OpenAPI 3.1 document model for scaffolded project contracts
 - one shared source of truth for CLI export and runtime serving
@@ -324,7 +329,7 @@ Canonical DB configuration is alias-based only:
 database_default: default
 databases:
   default:
-    url: sqlite://goframe.db
+    url: sqlite://nucleus.db
   analytics:
     url: postgres://...
 ```
@@ -360,9 +365,9 @@ Isolation guardrail behavior:
 - startup validation rejects multi-tenant mappings that would share the same DB alias
 - request routing rejects shared site DB alias fallback when tenant isolation is required
 
-## 7. CLI Contract Baseline (`cmd/goframe`, `internal/cli`)
+## 7. CLI Contract Baseline (`cmd/nucleus`, `internal/cli`)
 
-GoFrame ships stable operational CLI coverage for:
+Nucleus ships stable operational CLI coverage for:
 
 - runtime and diagnostics (`serve`, `routes`, `health`)
 - scaffolding (`new`, `startapp`, `generate`)
@@ -389,7 +394,7 @@ Current experimental API contract lane:
 
 - projects aggregate generated API contracts in `internal/contracts`
 - `internal/contracts/contracts.go` exposes the package-level document builder (`DefaultConfig`, `NewDocument`, `NewDocumentWithConfig`)
-- `goframe openapi --out openapi.json` exports the current project contract as OpenAPI JSON
+- `nucleus openapi --out openapi.json` exports the current project contract as OpenAPI JSON
 - generated server scaffolds can serve that same contract explicitly at `/openapi.json` via `app.MountOpenAPI`
 
 ## 8. Compatibility Governance

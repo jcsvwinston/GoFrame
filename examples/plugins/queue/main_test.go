@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jcsvwinston/GoFrame/pkg/plugins"
+	"github.com/jcsvwinston/nucleus/pkg/plugins"
 )
 
 func TestRunCapabilitiesJSON(t *testing.T) {

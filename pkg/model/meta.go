@@ -395,7 +395,7 @@ func extractFieldMeta(sf reflect.StructField) (FieldMeta, error) {
 }
 
 // parseDBTag extracts relevant settings from storage struct tags.
-// It supports GoFrame's db conventions plus legacy aliases like primaryKey.
+// It supports Nucleus's db conventions plus legacy aliases like primaryKey.
 func parseDBTag(tag string, f *FieldMeta) error {
 	parts := strings.Split(tag, ";")
 	for _, part := range parts {

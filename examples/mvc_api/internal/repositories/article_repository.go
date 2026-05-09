@@ -4,7 +4,7 @@ import (
 	"context"
 	"database/sql"
 
-	"github.com/jcsvwinston/GoFrame/examples/mvc_api/internal/dtos"
+	"github.com/jcsvwinston/nucleus/examples/mvc_api/internal/dtos"
 )
 
 type ArticleRepository struct {

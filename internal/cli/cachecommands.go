@@ -10,15 +10,15 @@ import (
 )
 
 const (
-	defaultCacheTableName    = "goframe_cache_entries"
-	defaultSessionsTableName = "goframe_sessions"
+	defaultCacheTableName    = "nucleus_cache_entries"
+	defaultSessionsTableName = "nucleus_sessions"
 )
 
 func runCreateCacheTable(args []string, _ io.Reader, stdout, stderr io.Writer) error {
 	fs := flag.NewFlagSet("createcachetable", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 
-	configPath := fs.String("config", "", "Path to goframe config file")
+	configPath := fs.String("config", "", "Path to nucleus config file")
 	databaseAlias := fs.String("database", "", "Database alias to use (defaults to database_default)")
 	table := fs.String("table", defaultCacheTableName, "Cache table name")
 	dryRun := fs.Bool("dry-run", false, "Print SQL and exit without executing")
@@ -83,7 +83,7 @@ func runClearSessions(args []string, _ io.Reader, stdout, stderr io.Writer) erro
 	fs := flag.NewFlagSet("clearsessions", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 
-	configPath := fs.String("config", "", "Path to goframe config file")
+	configPath := fs.String("config", "", "Path to nucleus config file")
 	databaseAlias := fs.String("database", "", "Database alias to use (defaults to database_default)")
 	table := fs.String("table", defaultSessionsTableName, "Sessions table name")
 	all := fs.Bool("all", false, "Delete all sessions instead of only expired sessions")

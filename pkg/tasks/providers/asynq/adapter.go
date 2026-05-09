@@ -4,7 +4,7 @@ import (
 	"context"
 
 	"github.com/hibiken/asynq"
-	"github.com/jcsvwinston/GoFrame/pkg/tasks"
+	"github.com/jcsvwinston/nucleus/pkg/tasks"
 )
 
 // wrapHandler converts a generic tasks.HandlerFunc into an asynq.HandlerFunc

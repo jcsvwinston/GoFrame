@@ -5,7 +5,7 @@ Status: Current baseline for Track D: Enterprise Data Coverage.
 
 ## Overview
 
-This document summarizes the current stability state of MSSQL and Oracle database engines in GoFrame.
+This document summarizes the current stability state of MSSQL and Oracle database engines in Nucleus.
 
 ## Current Status
 

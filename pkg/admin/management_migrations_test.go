@@ -10,7 +10,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/jcsvwinston/GoFrame/pkg/db"
+	"github.com/jcsvwinston/nucleus/pkg/db"
 )
 
 func TestPanelMigrationsListAndApplyUseRuntime(t *testing.T) {

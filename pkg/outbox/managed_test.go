@@ -20,7 +20,7 @@ func TestNewManagedOutbox(t *testing.T) {
 		managed, err := NewManagedOutbox(ManagedConfig{
 			DB:        db,
 			Flavor:    FlavorSQLite,
-			TableName: "goframe_outbox",
+			TableName: "nucleus_outbox",
 			Logger:    slog.Default(),
 		})
 		if err != nil {

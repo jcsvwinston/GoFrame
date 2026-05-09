@@ -11,17 +11,17 @@ import (
 
 const (
 	// SessionMetaFirstSeenAtKey stores the first server-side observation timestamp (RFC3339).
-	SessionMetaFirstSeenAtKey = "__goframe_first_seen_at"
+	SessionMetaFirstSeenAtKey = "__nucleus_first_seen_at"
 	// SessionMetaLastSeenAtKey stores the latest server-side observation timestamp (RFC3339).
-	SessionMetaLastSeenAtKey = "__goframe_last_seen_at"
+	SessionMetaLastSeenAtKey = "__nucleus_last_seen_at"
 	// SessionMetaPodKey stores the pod identifier handling the session request.
-	SessionMetaPodKey = "__goframe_runtime_pod"
+	SessionMetaPodKey = "__nucleus_runtime_pod"
 	// SessionMetaHostKey stores the host/node identifier handling the session request.
-	SessionMetaHostKey = "__goframe_runtime_host"
+	SessionMetaHostKey = "__nucleus_runtime_host"
 	// SessionMetaInstanceKey stores a composed runtime instance identifier.
-	SessionMetaInstanceKey = "__goframe_runtime_instance"
+	SessionMetaInstanceKey = "__nucleus_runtime_instance"
 	// SessionMetaRemoteIPKey stores the latest observed client IP for the session.
-	SessionMetaRemoteIPKey = "__goframe_remote_ip"
+	SessionMetaRemoteIPKey = "__nucleus_remote_ip"
 )
 
 const defaultRuntimeMetadataInterval = 30 * time.Second
@@ -67,7 +67,7 @@ func DetectSessionRuntimeIdentity() SessionRuntimeIdentity {
 		host = ""
 	}
 
-	instance := strings.TrimSpace(os.Getenv("GOFRAME_INSTANCE_ID"))
+	instance := strings.TrimSpace(os.Getenv("NUCLEUS_INSTANCE_ID"))
 	if instance == "" {
 		switch {
 		case pod != "" && host != "":

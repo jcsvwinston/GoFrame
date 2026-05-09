@@ -22,12 +22,12 @@ jobs:
           set -euo pipefail
           mkdir -p dist-test
           VERSION="${TAG#v}"
-          PKG="goframe_${VERSION}_linux_amd64.tar.gz"
+          PKG="nucleus_${VERSION}_linux_amd64.tar.gz"
           gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern "$PKG" --dir dist-test
           tar -xzf "dist-test/$PKG" -C dist-test
-          chmod +x dist-test/goframe
-          dist-test/goframe version | tee version.txt
-          grep -F "goframe $VERSION" version.txt
+          chmod +x dist-test/nucleus
+          dist-test/nucleus version | tee version.txt
+          grep -F "nucleus $VERSION" version.txt
 
   macos:
     name: macOS Asset Smoke
@@ -44,15 +44,15 @@ jobs:
           VERSION="${TAG#v}"
           ARCH="$(uname -m)"
           if [ "$ARCH" = "arm64" ]; then
-            PKG="goframe_${VERSION}_darwin_arm64.tar.gz"
+            PKG="nucleus_${VERSION}_darwin_arm64.tar.gz"
           else
-            PKG="goframe_${VERSION}_darwin_amd64.tar.gz"
+            PKG="nucleus_${VERSION}_darwin_amd64.tar.gz"
           fi
           gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern "$PKG" --dir dist-test
           tar -xzf "dist-test/$PKG" -C dist-test
-          chmod +x dist-test/goframe
-          dist-test/goframe version | tee version.txt
-          grep -F "goframe $VERSION" version.txt
+          chmod +x dist-test/nucleus
+          dist-test/nucleus version | tee version.txt
+          grep -F "nucleus $VERSION" version.txt
 
   windows:
     name: Windows Asset Smoke
@@ -67,11 +67,11 @@ jobs:
         run: |
           New-Item -ItemType Directory -Path dist-test -Force | Out-Null
           $version = $env:TAG.TrimStart('v')
-          $pkg = "goframe_${version}_windows_amd64.zip"
+          $pkg = "nucleus_${version}_windows_amd64.zip"
           gh release download "$env:TAG" --repo "$env:GITHUB_REPOSITORY" --pattern $pkg --dir dist-test
           Expand-Archive -Path "dist-test/$pkg" -DestinationPath dist-test -Force
-          $output = & "./dist-test/goframe.exe" version
+          $output = & "./dist-test/nucleus.exe" version
           $output | Tee-Object -FilePath version.txt
-          if (-not ($output -match "goframe $version")) {
+          if (-not ($output -match "nucleus $version")) {
             throw "unexpected version output: $output"
           }

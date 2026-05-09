@@ -33,7 +33,7 @@ var (
 
 func initDBTelemetry() {
 	dbTelemetryOnce.Do(func() {
-		meter := otel.Meter("goframe/db")
+		meter := otel.Meter("nucleus/db")
 
 		dbQueryTotal, _ = meter.Int64Counter("db.client.query.total")
 		dbQueryErrors, _ = meter.Int64Counter("db.client.query.errors")

@@ -13,7 +13,7 @@ import (
 	"github.com/google/uuid"
 )
 
-const DefaultTableName = "goframe_outbox"
+const DefaultTableName = "nucleus_outbox"
 
 type Flavor string
 

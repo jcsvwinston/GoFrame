@@ -1,6 +1,6 @@
 # CSRF Protection Guide
 
-GoFrame provides enhanced CSRF protection with a Laravel-style two-layer approach:
+Nucleus provides enhanced CSRF protection with a Laravel-style two-layer approach:
 1. **Origin verification** via `Sec-Fetch-Site` header (modern browsers)
 2. **Traditional token validation** as fallback
 
@@ -9,7 +9,7 @@ GoFrame provides enhanced CSRF protection with a Laravel-style two-layer approac
 Default configuration (recommended for most apps):
 
 ```go
-import "github.com/jcsvwinston/GoFrame/pkg/router"
+import "github.com/jcsvwinston/nucleus/pkg/router"
 
 // CSRF is enabled by default with origin verification
 r := router.New(logger,
@@ -354,7 +354,7 @@ curl -X POST http://localhost:8080/api/data \
 
 ## Comparison with Laravel
 
-| Feature | GoFrame | Laravel |
+| Feature | Nucleus | Laravel |
 |---------|---------|---------|
 | Origin verification | ✅ Sec-Fetch-Site | ✅ Sec-Fetch-Site |
 | Session tokens | ✅ Optional | ✅ Default |

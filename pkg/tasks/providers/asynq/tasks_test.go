@@ -8,8 +8,8 @@ import (
 	"testing"
 
 	"github.com/hibiken/asynq"
-	"github.com/jcsvwinston/GoFrame/pkg/observe"
-	"github.com/jcsvwinston/GoFrame/pkg/tasks"
+	"github.com/jcsvwinston/nucleus/pkg/observe"
+	"github.com/jcsvwinston/nucleus/pkg/tasks"
 	"go.opentelemetry.io/otel"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/trace"
@@ -450,7 +450,7 @@ func TestInjectTaskCorrelation_EmptyPayload(t *testing.T) {
 }
 
 func TestInjectTaskCorrelation_DuplicatePreventsOverwrite(t *testing.T) {
-	raw := []byte(`{"_goframe_ctx":{"request_id":"original"}}`)
+	raw := []byte(`{"_nucleus_ctx":{"request_id":"original"}}`)
 	meta := taskCorrelation{RequestID: "new-req"}
 
 	encoded, err := injectTaskCorrelation(raw, meta)
@@ -484,7 +484,7 @@ func TestExtractTaskCorrelation_NoCorrelationKey(t *testing.T) {
 }
 
 func TestExtractTaskCorrelation_InvalidCorrelationValue(t *testing.T) {
-	meta := extractTaskCorrelation([]byte(`{"_goframe_ctx":"not-a-map"}`))
+	meta := extractTaskCorrelation([]byte(`{"_nucleus_ctx":"not-a-map"}`))
 	if meta.hasValues() {
 		t.Fatalf("expected empty correlation for invalid correlation value, got: %+v", meta)
 	}

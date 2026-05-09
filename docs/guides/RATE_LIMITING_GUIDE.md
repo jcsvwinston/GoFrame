@@ -3,7 +3,7 @@
 Reference date: 2026-04-10.
 Status: Current.
 
-This guide covers GoFrame's rate limiting system, including fixed-window and token-bucket algorithms, per-route and per-role configuration, and production tuning.
+This guide covers Nucleus's rate limiting system, including fixed-window and token-bucket algorithms, per-route and per-role configuration, and production tuning.
 
 ## Table of Contents
 
@@ -22,7 +22,7 @@ This guide covers GoFrame's rate limiting system, including fixed-window and tok
 
 ## Overview
 
-GoFrame provides multi-dimensional rate limiting via middleware:
+Nucleus provides multi-dimensional rate limiting via middleware:
 
 | Dimension | Scope | Use Case |
 |-----------|-------|----------|
@@ -39,7 +39,7 @@ GoFrame provides multi-dimensional rate limiting via middleware:
 ### Basic configuration
 
 ```yaml
-# goframe.yaml
+# nucleus.yml
 rate_limit: 100           # Requests per window (global default)
 rate_limit_window: 60     # Window size in seconds
 ```
@@ -47,7 +47,7 @@ rate_limit_window: 60     # Window size in seconds
 ### Advanced configuration
 
 ```yaml
-# goframe.yaml
+# nucleus.yml
 rate_limit: 100
 rate_limit_window: 60
 rate_limit_burst: 20      # Token-bucket burst capacity
@@ -113,7 +113,7 @@ Request 100 -> 429 Too Many Requests
 
 ## Token-Bucket Algorithm
 
-When `rate_limit_burst` is configured, GoFrame uses token-bucket for smoother limiting:
+When `rate_limit_burst` is configured, Nucleus uses token-bucket for smoother limiting:
 
 ```yaml
 rate_limit: 100           # Refill rate: 100 tokens/minute
@@ -146,7 +146,7 @@ rate_limit_by_route: true
 Define route-specific limits in code:
 
 ```go
-import "github.com/jcsvwinston/GoFrame/pkg/router"
+import "github.com/jcsvwinston/nucleus/pkg/router"
 
 r := router.New()
 
@@ -197,7 +197,7 @@ claims := auth.JWTClaims{
 
 ## Rate Limit Headers
 
-GoFrame returns standard rate limit headers:
+Nucleus returns standard rate limit headers:
 
 ```http
 HTTP/1.1 200 OK

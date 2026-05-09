@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jcsvwinston/GoFrame/pkg/tasks"
+	"github.com/jcsvwinston/nucleus/pkg/tasks"
 )
 
 func TestNewScheduler(t *testing.T) {

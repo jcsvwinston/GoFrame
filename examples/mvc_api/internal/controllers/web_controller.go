@@ -4,10 +4,10 @@ import (
 	"html/template"
 	"net/http"
 
-	"github.com/jcsvwinston/GoFrame/examples/mvc_api/internal/config"
-	"github.com/jcsvwinston/GoFrame/examples/mvc_api/internal/dtos"
-	"github.com/jcsvwinston/GoFrame/examples/mvc_api/internal/services"
-	"github.com/jcsvwinston/GoFrame/pkg/app"
+	"github.com/jcsvwinston/nucleus/examples/mvc_api/internal/config"
+	"github.com/jcsvwinston/nucleus/examples/mvc_api/internal/dtos"
+	"github.com/jcsvwinston/nucleus/examples/mvc_api/internal/services"
+	"github.com/jcsvwinston/nucleus/pkg/app"
 )
 
 func HomePage(tpl *template.Template, cfg *app.Config) http.HandlerFunc {
@@ -18,7 +18,7 @@ func HomePage(tpl *template.Template, cfg *app.Config) http.HandlerFunc {
 		}
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		_ = tpl.ExecuteTemplate(w, "home.html", map[string]any{
-			"Title":         "GoFrame Showcase",
+			"Title":         "Nucleus Showcase",
 			"AdminPassword": adminPassword,
 			"DemoUser":      config.DemoAppUsername,
 			"DemoPassword":  config.DemoAppPassword,

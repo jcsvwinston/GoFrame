@@ -1,4 +1,4 @@
-# GoFrame Admin UI
+# Nucleus Admin UI
 
 Modern admin panel built with React + Vite + Tailwind CSS + shadcn/ui.
 
@@ -17,19 +17,19 @@ Modern admin panel built with React + Vite + Tailwind CSS + shadcn/ui.
 
 ### Customizable Admin Prefix
 
-By default, the admin panel is served at `/admin`. Applications can override this path to use `/admin` for their own panels and move the GoFrame admin panel to a different route.
+By default, the admin panel is served at `/admin`. Applications can override this path to use `/admin` for their own panels and move the Nucleus admin panel to a different route.
 
-**In your `goframe.yaml`:**
+**In your `nucleus.yml`:**
 
 ```yaml
-# Move admin panel to /goframe-admin
-admin_prefix: /goframe-admin
+# Move admin panel to /nucleus-admin
+admin_prefix: /nucleus-admin
 ```
 
 Or via environment variable:
 
 ```bash
-GOFRAME_ADMIN_PREFIX=/goframe-admin
+NUCLEUS_ADMIN_PREFIX=/nucleus-admin
 ```
 
 The frontend automatically reads the admin prefix from the backend injection and adjusts all API calls and routing accordingly.
@@ -184,20 +184,20 @@ Look for:
 Set environment variable to increase logging:
 
 ```bash
-GOFRAME_DEBUG=true go run . serve
+NUCLEUS_DEBUG=true go run . serve
 ```
 
 Or use the `--config` flag with a custom config file:
 
 ```yaml
-# goframe-debug.yaml
+# nucleus-debug.yaml
 env: development
 debug: true
 log_level: debug
 ```
 
 ```bash
-go run . serve --config goframe-debug.yaml
+go run . serve --config nucleus-debug.yaml
 ```
 
 **5. Test Authentication Manually**
@@ -228,7 +228,7 @@ If using SQLite (default), query the database directly:
 
 ```bash
 # If using sqlite3 CLI
-sqlite3 goframe.db "SELECT id, username, email, is_superuser FROM goframe_admin_users;"
+sqlite3 nucleus.db "SELECT id, username, email, is_superuser FROM nucleus_admin_users;"
 ```
 
 Expected output:
@@ -267,14 +267,14 @@ In `src/stores/authStore.ts`:
 **Authentication Flow:**
 1. `authMiddleware()` in `pkg/admin/panel.go` calls `Authenticate()`
 2. `Authenticate()` in `pkg/admin/default_auth.go`:
-   - Checks session for `__goframe_admin_user_id`
+   - Checks session for `__nucleus_admin_user_id`
    - If missing, returns error → redirects to `/admin/login`
    - If found, looks up user in database
    - If user not found, destroys session → redirects to `/admin/login`
 
 **Session Handling:**
 1. Login POST in `handleLoginPOST()`:
-   - Validates credentials against `goframe_admin_users` table
+   - Validates credentials against `nucleus_admin_users` table
    - Calls `session.RenewToken()` to prevent session fixation
    - Stores user ID, username, email in session
    - Redirects to `next` URL (default: `/admin/`)
@@ -297,7 +297,7 @@ go run . createuser --username admin --password test --email test@test.com --no-
 go run . health
 
 # 4. View server logs
-GOFRAME_LOG_LEVEL=debug go run . serve
+NUCLEUS_LOG_LEVEL=debug go run . serve
 
 # 5. Test with fresh session (clear browser cookies first)
 curl -c /tmp/gf_cookies.txt -X POST http://localhost:8080/admin/login \
@@ -313,21 +313,21 @@ curl -c /tmp/gf_cookies.txt -X POST http://localhost:8080/admin/login \
 | Cookie not being set | `Secure` flag on HTTP | Set `session_cookie_secure: false` in config |
 | 401 on all API calls | Session middleware not in chain | Verify `sessionManager.Middleware()` is applied |
 | Blank page after login | SPA not building correctly | Run `npm run build` in `pkg/admin/ui/` |
-| Admin panel not accessible at custom path | `admin_prefix` not configured | Set `admin_prefix` in `goframe.yaml` |
+| Admin panel not accessible at custom path | `admin_prefix` not configured | Set `admin_prefix` in `nucleus.yml` |
 | API calls fail with 404 after custom prefix | Frontend not rebuilt | Run `npm run build` and restart server |
 
 ### Custom Admin Prefix
 
-If you're using a custom admin prefix (e.g., `/goframe-admin`):
+If you're using a custom admin prefix (e.g., `/nucleus-admin`):
 
-1. **Configure in `goframe.yaml`:**
+1. **Configure in `nucleus.yml`:**
    ```yaml
-   admin_prefix: /goframe-admin
+   admin_prefix: /nucleus-admin
    ```
 
 2. **Access the admin panel at the new path:**
-   - Login: `http://localhost:8080/goframe-admin/login`
-   - Dashboard: `http://localhost:8080/goframe-admin/`
+   - Login: `http://localhost:8080/nucleus-admin/login`
+   - Dashboard: `http://localhost:8080/nucleus-admin/`
 
 3. **Rebuild the admin UI** (if making frontend changes):
    ```bash

@@ -1,5 +1,5 @@
 // Package signals provides a synchronous and asynchronous event bus for the
-// GoFrame framework. It implements a pattern similar to Django signals, allowing
+// Nucleus framework. It implements a pattern similar to Django signals, allowing
 // decoupled components to react to model lifecycle events (pre/post save, delete, etc.).
 package signals
 

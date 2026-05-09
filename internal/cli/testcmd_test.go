@@ -57,7 +57,7 @@ func TestRunTest_DryRun(t *testing.T) {
 	var out bytes.Buffer
 	var errOut bytes.Buffer
 	err := runTest(
-		[]string{"--dry-run", "--run", "TestRun", "--count", "3", "./cmd/goframe"},
+		[]string{"--dry-run", "--run", "TestRun", "--count", "3", "./cmd/nucleus"},
 		strings.NewReader(""),
 		&out,
 		&errOut,
@@ -65,7 +65,7 @@ func TestRunTest_DryRun(t *testing.T) {
 	if err != nil {
 		t.Fatalf("runTest dry-run failed: %v (stderr=%s)", err, errOut.String())
 	}
-	if !strings.Contains(out.String(), "go test -run TestRun -count 3 ./cmd/goframe") {
+	if !strings.Contains(out.String(), "go test -run TestRun -count 3 ./cmd/nucleus") {
 		t.Fatalf("unexpected dry-run output: %s", out.String())
 	}
 }

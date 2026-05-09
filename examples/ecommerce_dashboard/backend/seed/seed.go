@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"math/rand"
 
-	"github.com/jcsvwinston/GoFrame/examples/ecommerce_dashboard/backend/models"
+	"github.com/jcsvwinston/nucleus/examples/ecommerce_dashboard/backend/models"
 )
 
 var (

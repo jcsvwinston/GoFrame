@@ -2,7 +2,7 @@
 
 ## Supported Versions
 
-GoFrame is currently in pre-1.0 development (`v0.x`).
+Nucleus is currently in pre-1.0 development (`v0.x`).
 
 Security fixes are prioritized for:
 
@@ -39,6 +39,6 @@ We follow coordinated disclosure whenever possible:
 
 For production deployments, review:
 
-- `goframe check --deploy`
+- `nucleus check --deploy`
 - `docs/DEVELOPER_MANUAL.md`
 - `docs/RELEASE_CHECKLIST.md`

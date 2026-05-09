@@ -1,6 +1,6 @@
-# Contributing to GoFrame
+# Contributing to Nucleus
 
-Thanks for your interest in improving GoFrame.
+Thanks for your interest in improving Nucleus.
 
 This document describes the preferred workflow for contributing code, docs, and tests.
 
@@ -61,7 +61,7 @@ When opening an issue, include:
 
 - Go version and OS
 - command(s) executed
-- config snippet (`goframe.yaml`) if relevant
+- config snippet (`nucleus.yml`) if relevant
 - expected behavior vs actual behavior
 - reproducible steps and logs/error output
 

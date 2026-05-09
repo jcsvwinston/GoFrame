@@ -9,8 +9,8 @@ import (
 	"testing"
 
 	"github.com/alicebob/miniredis/v2"
-	"github.com/jcsvwinston/GoFrame/pkg/db"
-	"github.com/jcsvwinston/GoFrame/pkg/storage"
+	"github.com/jcsvwinston/nucleus/pkg/db"
+	"github.com/jcsvwinston/nucleus/pkg/storage"
 )
 
 type testHealthCheckRow struct {

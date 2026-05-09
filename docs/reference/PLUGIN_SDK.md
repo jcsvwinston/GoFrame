@@ -2,11 +2,11 @@
 
 Reference date: 2026-04-05.
 Status: Current (pre-v1 baseline).
-Target baseline: GoFrame pre-v1.
+Target baseline: Nucleus pre-v1.
 
 ## Goal
 
-Provide a stable, capability-based plugin contract so GoFrame can be extended beyond mail integrations.
+Provide a stable, capability-based plugin contract so Nucleus can be extended beyond mail integrations.
 
 Examples of target domains:
 
@@ -42,21 +42,19 @@ A provider can implement multiple capabilities.
 - low latency, strong typing, no process boundary
 
 2. External executable providers
-- isolated process called by GoFrame
+- isolated process called by Nucleus
 - language-agnostic and deploy-flexible
 - contract enforced through JSON envelopes and exit codes
 
 ## External Plugin Naming
 
-Primary naming (generic):
+Naming convention:
 
-- `goframe-plugin-<provider>`
+- `nucleus-plugin-<provider>`
 
-Compatibility naming (legacy mail path):
-
-- `goframe-mail-<driver>`
-
-In the current pre-v1 line, GoFrame supports both forms and maps legacy mail plugins to capability `mail.send`.
+This is the only external plugin discovery prefix. There is no legacy
+fallback; mail providers are exposed via the standard capability
+mechanism (`mail.send`).
 
 ## Request Envelope (External)
 
@@ -134,7 +132,7 @@ Error response example:
 
 ## Configuration Model (Proposed)
 
-Suggested `goframe.yaml` shape:
+Suggested `nucleus.yml` shape:
 
 ```yaml
 plugins:
@@ -170,7 +168,7 @@ Stretch schema set:
 
 ## Mail Provider Plugins
 
-GoFrame includes a pluggable mail layer in `pkg/mail` that uses the plugin SDK.
+Nucleus includes a pluggable mail layer in `pkg/mail` that uses the plugin SDK.
 
 **Built-in drivers:**
 - `noop`
@@ -179,9 +177,7 @@ GoFrame includes a pluggable mail layer in `pkg/mail` that uses the plugin SDK.
 
 **Extensibility:**
 - In-process registration via `mail.RegisterProvider(...)`
-- External binary plugins on `PATH`:
-  - `goframe-plugin-<provider>` (capability discovery, preferred)
-  - `goframe-mail-<driver>` (legacy mail compatibility)
+- External binary plugins on `PATH`: `nucleus-plugin-<provider>` advertising the `mail.send` capability.
 
 **Configuration:**
 ```yaml
@@ -199,24 +195,21 @@ sendgrid_endpoint: https://api.sendgrid.com/v3/mail/send
 
 **Operational Commands:**
 ```bash
-goframe sendtestemail --config goframe.yaml --to dev@example.com --dry-run
-goframe sendtestemail --config goframe.yaml --driver sendgrid --to dev@example.com --dry-run
-goframe mailproviders --config goframe.yaml
-goframe mailproviders --config goframe.yaml --json
-goframe plugin list --config goframe.yaml
-goframe plugin doctor --config goframe.yaml
-goframe plugin test --provider sendgrid --capability mail.send
+nucleus sendtestemail --config nucleus.yml --to dev@example.com --dry-run
+nucleus sendtestemail --config nucleus.yml --driver sendgrid --to dev@example.com --dry-run
+nucleus mailproviders --config nucleus.yml
+nucleus mailproviders --config nucleus.yml --json
+nucleus plugin list --config nucleus.yml
+nucleus plugin doctor --config nucleus.yml
+nucleus plugin test --provider sendgrid --capability mail.send
 ```
 
 **External Plugin Contract:**
-If `mail_driver: mailgun`, GoFrame resolves in this order:
-1. `goframe-plugin-mailgun` (requires capability `mail.send`)
-2. `goframe-mail-mailgun` (legacy fallback)
+If `mail_driver: mailgun`, Nucleus looks up `nucleus-plugin-mailgun` on
+`PATH` and requires it to advertise the `mail.send` capability.
 
-Generic capability plugins receive `pkg/plugins` request envelope (`version: v1`) over `stdin`.
-
-Legacy mail plugins receive JSON over `stdin`:
-- `driver`, `from`, `to`, `subject`, `body`, `headers`
+Capability plugins receive a `pkg/plugins` request envelope
+(`version: v1`) over `stdin`.
 
 Exit code contract:
 - `0`: accepted
@@ -224,16 +217,16 @@ Exit code contract:
 
 ## CLI and Diagnostics (Current Baseline)
 
-- `goframe plugin list` (detected providers and capabilities)
-- `goframe plugin doctor` (runtime/config validation)
-- `goframe plugin test --provider <p> --capability <c>` (contract smoke)
+- `nucleus plugin list` (detected providers and capabilities)
+- `nucleus plugin doctor` (runtime/config validation)
+- `nucleus plugin test --provider <p> --capability <c>` (contract smoke)
 
 ## Official Example Plugins (Current Baseline)
 
 Repository-shipped examples:
 
-- `examples/plugins/mail`: `goframe-plugin-examplemail` (`mail.send`)
-- `examples/plugins/queue`: `goframe-plugin-examplequeue` (`queue.publish`)
+- `examples/plugins/mail`: `nucleus-plugin-examplemail` (`mail.send`)
+- `examples/plugins/queue`: `nucleus-plugin-examplequeue` (`queue.publish`)
 
 Reference guide:
 
@@ -242,14 +235,13 @@ Reference guide:
 ## Compatibility Commitments (pre-v1)
 
 - `version: v1` envelope fields remain backward compatible throughout the current pre-v1 line
-- legacy mail executable pattern (`goframe-mail-<driver>`) remains supported
 - breaking contract changes require a new envelope version (`v2`)
 
 Runtime bridge status:
 
-- `pkg/mail.NewSender` now resolves external mail providers in this order:
-  1. `goframe-plugin-<driver>` when capability `mail.send` is advertised
-  2. `goframe-mail-<driver>` legacy fallback
+- `pkg/mail.NewSender` resolves external mail providers via
+  `nucleus-plugin-<driver>` on `PATH` when capability `mail.send` is
+  advertised. There is no legacy fallback.
 
 ## Test Strategy
 

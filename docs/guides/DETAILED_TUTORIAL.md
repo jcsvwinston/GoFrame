@@ -1,9 +1,9 @@
-# Detailed Tutorial: Build an App with GoFrame (MVC + API)
+# Detailed Tutorial: Build an App with Nucleus (MVC + API)
 
 Reference date: 2026-04-07.
 Status: Current.
 
-This tutorial walks through the full flow to build a real app with GoFrame:
+This tutorial walks through the full flow to build a real app with Nucleus:
 
 1. Project bootstrap
 2. Domain modeling
@@ -29,12 +29,12 @@ myapp/
   seeds/
   templates/
     home.html
-  goframe.yaml
+  nucleus.yml
 ```
 
 ## 1) Framework configuration
 
-`goframe.yaml`:
+`nucleus.yml`:
 
 ```yaml
 database_default: default
@@ -60,7 +60,7 @@ Notes:
 Generate a base resource (model + scaffold CRUD handler + test + migration):
 
 ```bash
-go run ./cmd/goframe generate resource Project
+go run ./cmd/nucleus generate resource Project
 ```
 
 This creates, among others:
@@ -78,7 +78,7 @@ Edit `models/project.go` to match your real use case:
 ```go
 package models
 
-import "github.com/jcsvwinston/GoFrame/pkg/model"
+import "github.com/jcsvwinston/nucleus/pkg/model"
 
 type Project struct {
 	model.BaseModel
@@ -113,8 +113,8 @@ DROP TABLE IF EXISTS projects;
 ## 5) Apply migrations and load seed data
 
 ```bash
-go run ./cmd/goframe migrate --config goframe.yaml
-go run ./cmd/goframe migrate --config goframe.yaml status
+go run ./cmd/nucleus migrate --config nucleus.yml
+go run ./cmd/nucleus migrate --config nucleus.yml status
 ```
 
 Create `seeds/001_projects.sql`:
@@ -127,7 +127,7 @@ VALUES ('Roadmap 2026', 'Main product plan', 1);
 Run:
 
 ```bash
-go run ./cmd/goframe seed --config goframe.yaml --seeds seeds
+go run ./cmd/nucleus seed --config nucleus.yml --seeds seeds
 ```
 
 ## 6) App bootstrap and model registration
@@ -143,13 +143,13 @@ import (
 	"log"
 	"net/http"
 
-	"github.com/jcsvwinston/GoFrame/pkg/app"
-	"github.com/jcsvwinston/GoFrame/pkg/model"
+	"github.com/jcsvwinston/nucleus/pkg/app"
+	"github.com/jcsvwinston/nucleus/pkg/model"
 	"myapp/models"
 )
 
 func main() {
-	cfg, err := app.LoadConfig("goframe.yaml")
+	cfg, err := app.LoadConfig("nucleus.yml")
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -204,7 +204,7 @@ func registerMVCRoutes(a *app.App) {
   </head>
   <body>
     <h1>{{ .Title }}</h1>
-    <p>MVC + API app with GoFrame</p>
+    <p>MVC + API app with Nucleus</p>
   </body>
 </html>
 ```
@@ -214,8 +214,8 @@ func registerMVCRoutes(a *app.App) {
 Create admin:
 
 ```bash
-go run ./cmd/goframe createuser \
-  --config goframe.yaml \
+go run ./cmd/nucleus createuser \
+  --config nucleus.yml \
   --no-input \
   --username admin \
   --email admin@example.com \
@@ -240,21 +240,21 @@ Recommended commands:
 
 ```bash
 # Show effective routes
-go run ./cmd/goframe routes --config goframe.yaml
+go run ./cmd/nucleus routes --config nucleus.yml
 
 # Dependency health check
-go run ./cmd/goframe health --config goframe.yaml --json
+go run ./cmd/nucleus health --config nucleus.yml --json
 
 # Create a new migration
-go run ./cmd/goframe migrate --config goframe.yaml create add_project_owner
+go run ./cmd/nucleus migrate --config nucleus.yml create add_project_owner
 
 # Run an ad-hoc SQL query
-go run ./cmd/goframe shell --config goframe.yaml -c "SELECT count(*) FROM projects"
+go run ./cmd/nucleus shell --config nucleus.yml -c "SELECT count(*) FROM projects"
 ```
 
 ## 9) Production guardrails
 
-With `env: production`, GoFrame protects sensitive actions (`seed`, `migrate down/reset/refresh`):
+With `env: production`, Nucleus protects sensitive actions (`seed`, `migrate down/reset/refresh`):
 
 - Use `--force` in non-interactive CI/CD.
 - Or use `--yes` to confirm without a prompt.
@@ -262,23 +262,23 @@ With `env: production`, GoFrame protects sensitive actions (`seed`, `migrate dow
 Examples:
 
 ```bash
-go run ./cmd/goframe seed --config goframe.yaml --seeds seeds --force
-go run ./cmd/goframe migrate --config goframe.yaml reset --force
+go run ./cmd/nucleus seed --config nucleus.yml --seeds seeds --force
+go run ./cmd/nucleus migrate --config nucleus.yml reset --force
 ```
 
 ## 10) Extend CLI per project
 
-You can add custom commands without touching core by creating executables named `goframe-<name>` in `PATH`.
+You can add custom commands without touching core by creating executables named `nucleus-<name>` in `PATH`.
 
 Example:
 
-- If `goframe-report` exists in `PATH`, then:
+- If `nucleus-report` exists in `PATH`, then:
 
 ```bash
-go run ./cmd/goframe report --from 2026-01-01
+go run ./cmd/nucleus report --from 2026-01-01
 ```
 
-GoFrame automatically delegates to that external command.
+Nucleus automatically delegates to that external command.
 
 ## 11) Suggested next evolution
 

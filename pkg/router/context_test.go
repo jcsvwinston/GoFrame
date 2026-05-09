@@ -11,7 +11,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/jcsvwinston/GoFrame/pkg/auth"
+	"github.com/jcsvwinston/nucleus/pkg/auth"
 )
 
 func TestContextHandler_UnifiedAccess(t *testing.T) {

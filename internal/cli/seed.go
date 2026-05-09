@@ -15,7 +15,7 @@ func runSeed(args []string, stdin io.Reader, stdout, stderr io.Writer) error {
 	fs := flag.NewFlagSet("seed", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 
-	configPath := fs.String("config", "", "Path to goframe config file")
+	configPath := fs.String("config", "", "Path to nucleus config file")
 	databaseAlias := fs.String("database", "", "Database alias to use (defaults to database_default)")
 	seedsDir := fs.String("seeds", "seeds", "Directory containing .sql seed files")
 	singleFile := fs.String("file", "", "Run a single seed file (absolute path or relative to --seeds)")

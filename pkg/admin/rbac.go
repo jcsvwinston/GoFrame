@@ -6,10 +6,10 @@ import (
 	"net/http"
 	"sort"
 
-	"github.com/jcsvwinston/GoFrame/pkg/auth"
-	"github.com/jcsvwinston/GoFrame/pkg/authz"
-	gferrors "github.com/jcsvwinston/GoFrame/pkg/errors"
-	"github.com/jcsvwinston/GoFrame/pkg/router"
+	"github.com/jcsvwinston/nucleus/pkg/auth"
+	"github.com/jcsvwinston/nucleus/pkg/authz"
+	gferrors "github.com/jcsvwinston/nucleus/pkg/errors"
+	"github.com/jcsvwinston/nucleus/pkg/router"
 )
 
 // rbacEnforcer wraps the Casbin enforcer for admin authorization.

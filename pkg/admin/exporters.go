@@ -11,8 +11,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/jcsvwinston/GoFrame/pkg/model"
-	"github.com/jcsvwinston/GoFrame/pkg/storage"
+	"github.com/jcsvwinston/nucleus/pkg/model"
+	"github.com/jcsvwinston/nucleus/pkg/storage"
 )
 
 // ExportFormat defines supported export formats.
@@ -220,7 +220,7 @@ func (p *Panel) exportSQL(ctx context.Context, cfg ExportConfig, result ExportRe
 	buf := &bytes.Buffer{}
 	totalRecords := 0
 
-	buf.WriteString("-- GoFrame SQL Dump\n")
+	buf.WriteString("-- Nucleus SQL Dump\n")
 	buf.WriteString(fmt.Sprintf("-- Generated: %s\n", ts))
 	buf.WriteString(fmt.Sprintf("-- Database: %s\n\n", cfg.Database))
 

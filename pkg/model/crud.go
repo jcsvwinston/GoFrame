@@ -11,8 +11,8 @@ import (
 	"strings"
 	"time"
 
-	gferrors "github.com/jcsvwinston/GoFrame/pkg/errors"
-	"github.com/jcsvwinston/GoFrame/pkg/signals"
+	gferrors "github.com/jcsvwinston/nucleus/pkg/errors"
+	"github.com/jcsvwinston/nucleus/pkg/signals"
 )
 
 // QueryOpts controls filtering, searching, sorting, and pagination.

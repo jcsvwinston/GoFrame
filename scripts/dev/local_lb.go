@@ -112,7 +112,7 @@ func buildProxy(rawTarget string) *httputil.ReverseProxy {
 	proxy.Director = func(req *http.Request) {
 		originalDirector(req)
 		req.Header.Set("X-Forwarded-Host", req.Host)
-		req.Header.Set("X-GoFrame-LB", "local-round-robin")
+		req.Header.Set("X-Nucleus-LB", "local-round-robin")
 	}
 	proxy.ErrorHandler = func(w http.ResponseWriter, r *http.Request, err error) {
 		log.Printf("upstream error target=%s method=%s path=%s err=%v", target.String(), r.Method, r.URL.Path, err)

@@ -10,10 +10,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jcsvwinston/GoFrame/pkg/db"
-	"github.com/jcsvwinston/GoFrame/pkg/model"
-	"github.com/jcsvwinston/GoFrame/pkg/observe"
-	"github.com/jcsvwinston/GoFrame/pkg/router"
+	"github.com/jcsvwinston/nucleus/pkg/db"
+	"github.com/jcsvwinston/nucleus/pkg/model"
+	"github.com/jcsvwinston/nucleus/pkg/observe"
+	"github.com/jcsvwinston/nucleus/pkg/router"
 )
 
 func TestRequestRingBufferLatest(t *testing.T) {

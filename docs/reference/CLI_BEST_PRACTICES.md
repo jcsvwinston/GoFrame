@@ -3,7 +3,7 @@
 Reference date: 2026-04-07.
 Status: Current.
 
-This document defines the CLI quality bar for GoFrame as an enterprise and long-lifecycle framework.
+This document defines the CLI quality bar for Nucleus as an enterprise and long-lifecycle framework.
 
 ## CLI Design Principles
 
@@ -28,9 +28,9 @@ This document defines the CLI quality bar for GoFrame as an enterprise and long-
 - stable commands keep behavior across `v1.x`
 - deprecations are additive first and include migration guidance
 
-## Current GoFrame CLI Baseline
+## Current Nucleus CLI Baseline
 
-Implemented areas in `cmd/goframe` + `internal/cli`:
+Implemented areas in `cmd/nucleus` + `internal/cli`:
 
 - Runtime and diagnostics: `serve`, `routes`, `health`, `check --deploy`, `diffsettings`
 - Scaffolding and generation: `new`, `startapp`, `generate`

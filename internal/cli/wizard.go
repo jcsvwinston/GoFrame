@@ -22,7 +22,7 @@ func runWizard(args []string, stdin io.Reader, stdout, stderr io.Writer) error {
 	fs.SetOutput(stderr)
 
 	wizardType := fs.String("type", "", "Wizard type: inspectdb, new, startapp")
-	configPath := fs.String("config", "", "Path to goframe config file")
+	configPath := fs.String("config", "", "Path to nucleus config file")
 
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -156,7 +156,7 @@ func promptMultiSelect(scanner *bufio.Scanner, writer io.Writer, p wizardPrompt)
 }
 
 func runInspectDBWizard(configPath string, stdin io.Reader, stdout, stderr io.Writer) error {
-	fmt.Fprintf(stdout, "=== GoFrame inspectdb Wizard ===\n\n")
+	fmt.Fprintf(stdout, "=== Nucleus inspectdb Wizard ===\n\n")
 
 	// Step 1: Database URL
 	dbURL, err := promptUser(stdin, stdout, wizardPrompt{
@@ -213,22 +213,22 @@ func runInspectDBWizard(configPath string, stdin io.Reader, stdout, stderr io.Wr
 	fmt.Fprintf(stdout, "Output package: %s\n", outputPackage)
 	fmt.Fprintf(stdout, "Naming convention: %s\n", namingConvention)
 
-	return fmt.Errorf("wizard inspectdb is experimental and did not execute changes; run goframe inspectdb --config %s --output %s", configPathOrDefault(configPath), outputPackage)
+	return fmt.Errorf("wizard inspectdb is experimental and did not execute changes; run nucleus inspectdb --config %s --output %s", configPathOrDefault(configPath), outputPackage)
 }
 
 func runNewWizard(configPath string, stdin io.Reader, stdout, stderr io.Writer) error {
-	fmt.Fprintf(stdout, "=== GoFrame new Wizard ===\n\n")
-	return fmt.Errorf("wizard new is experimental and did not execute changes; run goframe new <name> --module <module>")
+	fmt.Fprintf(stdout, "=== Nucleus new Wizard ===\n\n")
+	return fmt.Errorf("wizard new is experimental and did not execute changes; run nucleus new <name> --module <module>")
 }
 
 func runStartAppWizard(configPath string, stdin io.Reader, stdout, stderr io.Writer) error {
-	fmt.Fprintf(stdout, "=== GoFrame startapp Wizard ===\n\n")
-	return fmt.Errorf("wizard startapp is experimental and did not execute changes; run goframe startapp <name> --out <path>")
+	fmt.Fprintf(stdout, "=== Nucleus startapp Wizard ===\n\n")
+	return fmt.Errorf("wizard startapp is experimental and did not execute changes; run nucleus startapp <name> --out <path>")
 }
 
 func configPathOrDefault(path string) string {
 	if strings.TrimSpace(path) == "" {
-		return "goframe.yaml"
+		return "nucleus.yml"
 	}
 	return path
 }

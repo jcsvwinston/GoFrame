@@ -10,7 +10,7 @@ import (
 )
 
 import (
-	"github.com/jcsvwinston/GoFrame/pkg/tasks"
+	"github.com/jcsvwinston/nucleus/pkg/tasks"
 )
 
 

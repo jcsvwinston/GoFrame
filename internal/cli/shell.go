@@ -16,7 +16,7 @@ func runShell(args []string, stdin io.Reader, stdout, stderr io.Writer) error {
 	fs := flag.NewFlagSet("shell", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 
-	configPath := fs.String("config", "", "Path to goframe config file")
+	configPath := fs.String("config", "", "Path to nucleus config file")
 	databaseAlias := fs.String("database", "", "Database alias to use (defaults to database_default)")
 	command := fs.String("command", "", "Execute one SQL command and exit")
 	fs.StringVar(command, "c", "", "Shorthand for --command")
@@ -59,13 +59,13 @@ func runShell(args []string, stdin io.Reader, stdout, stderr io.Writer) error {
 		return executeSQLScriptWithOutput(sqlDB, string(body), *timeout, stdout, *sandbox)
 	}
 
-	fmt.Fprintln(stdout, "Entering GoFrame SQL shell. Type 'exit' or 'quit' to leave.")
+	fmt.Fprintln(stdout, "Entering Nucleus SQL shell. Type 'exit' or 'quit' to leave.")
 	if *sandbox {
 		fmt.Fprintln(stdout, "Sandbox mode enabled. Only read-only SQL statements are allowed.")
 	}
 	scanner := bufio.NewScanner(stdin)
 	for {
-		fmt.Fprint(stdout, "goframe-sql> ")
+		fmt.Fprint(stdout, "nucleus-sql> ")
 		if !scanner.Scan() {
 			break
 		}

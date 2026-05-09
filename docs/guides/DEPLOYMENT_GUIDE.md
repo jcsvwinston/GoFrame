@@ -3,7 +3,7 @@
 Reference date: 2026-04-10.
 Status: Current.
 
-This guide covers deploying GoFrame applications to production, including containerization, reverse proxy configuration, TLS, horizontal scaling, and operational best practices.
+This guide covers deploying Nucleus applications to production, including containerization, reverse proxy configuration, TLS, horizontal scaling, and operational best practices.
 
 ## Table of Contents
 
@@ -22,7 +22,7 @@ This guide covers deploying GoFrame applications to production, including contai
 
 ## Overview
 
-A GoFrame application consists of two runtime processes:
+A Nucleus application consists of two runtime processes:
 
 1. **Server** (`cmd/server`): HTTP server handling web requests.
 2. **Worker** (`cmd/worker`): Background job processor for Asynq tasks.
@@ -43,7 +43,7 @@ go build -o bin/server ./cmd/server
 go build -o bin/worker ./cmd/worker
 
 # Build CLI (optional, for operations)
-go build -o bin/goframe ./cmd/goframe
+go build -o bin/nucleus ./cmd/nucleus
 ```
 
 ### Version-injected build
@@ -83,7 +83,7 @@ USER appuser
 
 COPY --from=builder /bin/server /bin/server
 COPY --from=builder /bin/worker /bin/worker
-COPY goframe.yaml /etc/app/goframe.yaml
+COPY nucleus.yml /etc/app/nucleus.yml
 COPY internal/config/ /etc/app/config/
 
 WORKDIR /etc/app
@@ -101,7 +101,7 @@ RUN go mod download
 COPY . .
 RUN CGO_ENABLED=0 go build -o /bin/server ./cmd/server
 RUN CGO_ENABLED=0 go build -o /bin/worker ./cmd/worker
-RUN CGO_ENABLED=0 go build -o /bin/goframe ./cmd/goframe
+RUN CGO_ENABLED=0 go build -o /bin/nucleus ./cmd/nucleus
 
 FROM alpine:3.20
 RUN apk --no-cache add ca-certificates tzdata
@@ -110,8 +110,8 @@ USER appuser
 
 COPY --from=builder /bin/server /bin/server
 COPY --from=builder /bin/worker /bin/worker
-COPY --from=builder /bin/goframe /bin/goframe
-COPY goframe.yaml /etc/app/goframe.yaml
+COPY --from=builder /bin/nucleus /bin/nucleus
+COPY nucleus.yml /etc/app/nucleus.yml
 COPY migrations/ /etc/app/migrations/
 
 WORKDIR /etc/app
@@ -130,21 +130,21 @@ services:
     ports:
       - "8080:8080"
     environment:
-      - GOFRAME_ENV=development
-      - GOFRAME_DATABASE_DEFAULT=default
-      - GOFRAME_DATABASES_DEFAULT_URL=sqlite://goframe.db
-      - GOFRAME_REDIS_URL=redis://redis:6379/0
+      - NUCLEUS_ENV=development
+      - NUCLEUS_DATABASE_DEFAULT=default
+      - NUCLEUS_DATABASES_DEFAULT_URL=sqlite://nucleus.db
+      - NUCLEUS_REDIS_URL=redis://redis:6379/0
     depends_on:
       - redis
     volumes:
-      - ./goframe.yaml:/etc/app/goframe.yaml
+      - ./nucleus.yml:/etc/app/nucleus.yml
 
   worker:
     build: .
     command: ["/bin/worker"]
     environment:
-      - GOFRAME_ENV=development
-      - GOFRAME_REDIS_URL=redis://redis:6379/0
+      - NUCLEUS_ENV=development
+      - NUCLEUS_REDIS_URL=redis://redis:6379/0
     depends_on:
       - redis
 
@@ -156,9 +156,9 @@ services:
   postgres:
     image: postgres:16-alpine
     environment:
-      POSTGRES_USER: goframe
-      POSTGRES_PASSWORD: goframe
-      POSTGRES_DB: goframe
+      POSTGRES_USER: nucleus
+      POSTGRES_PASSWORD: nucleus
+      POSTGRES_DB: nucleus
     ports:
       - "5432:5432"
     volumes:
@@ -180,13 +180,13 @@ services:
     ports:
       - "8080:8080"
     environment:
-      - GOFRAME_ENV=production
-      - GOFRAME_JWT_SECRET=${GOFRAME_JWT_SECRET}
-      - GOFRAME_DATABASE_DEFAULT=default
-      - GOFRAME_DATABASES_DEFAULT_URL=${DATABASE_URL}
-      - GOFRAME_REDIS_URL=${REDIS_URL}
-      - GOFRAME_SESSION_STORE=redis
-      - GOFRAME_SESSION_COOKIE_SECURE=true
+      - NUCLEUS_ENV=production
+      - NUCLEUS_JWT_SECRET=${NUCLEUS_JWT_SECRET}
+      - NUCLEUS_DATABASE_DEFAULT=default
+      - NUCLEUS_DATABASES_DEFAULT_URL=${DATABASE_URL}
+      - NUCLEUS_REDIS_URL=${REDIS_URL}
+      - NUCLEUS_SESSION_STORE=redis
+      - NUCLEUS_SESSION_COOKIE_SECURE=true
     deploy:
       replicas: 2
       resources:
@@ -194,7 +194,7 @@ services:
           memory: 512M
           cpus: "1.0"
     healthcheck:
-      test: ["CMD", "/bin/goframe", "health"]
+      test: ["CMD", "/bin/nucleus", "health"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -209,8 +209,8 @@ services:
       target: builder
     command: ["/bin/worker"]
     environment:
-      - GOFRAME_ENV=production
-      - GOFRAME_REDIS_URL=${REDIS_URL}
+      - NUCLEUS_ENV=production
+      - NUCLEUS_REDIS_URL=${REDIS_URL}
     deploy:
       replicas: 1
       resources:
@@ -254,45 +254,45 @@ volumes:
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: goframe-server
+  name: nucleus-server
   labels:
-    app: goframe
+    app: nucleus
     component: server
 spec:
   replicas: 3
   selector:
     matchLabels:
-      app: goframe
+      app: nucleus
       component: server
   template:
     metadata:
       labels:
-        app: goframe
+        app: nucleus
         component: server
     spec:
       containers:
       - name: server
-        image: your-registry/goframe:latest
+        image: your-registry/nucleus:latest
         ports:
         - containerPort: 8080
           name: http
         env:
-        - name: GOFRAME_ENV
+        - name: NUCLEUS_ENV
           value: production
-        - name: GOFRAME_JWT_SECRET
+        - name: NUCLEUS_JWT_SECRET
           valueFrom:
             secretKeyRef:
-              name: goframe-secrets
+              name: nucleus-secrets
               key: jwt-secret
-        - name: GOFRAME_DATABASES_DEFAULT_URL
+        - name: NUCLEUS_DATABASES_DEFAULT_URL
           valueFrom:
             secretKeyRef:
-              name: goframe-secrets
+              name: nucleus-secrets
               key: database-url
-        - name: GOFRAME_REDIS_URL
+        - name: NUCLEUS_REDIS_URL
           valueFrom:
             secretKeyRef:
-              name: goframe-secrets
+              name: nucleus-secrets
               key: redis-url
         resources:
           requests:
@@ -317,10 +317,10 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: goframe-server
+  name: nucleus-server
 spec:
   selector:
-    app: goframe
+    app: nucleus
     component: server
   ports:
   - protocol: TCP
@@ -331,33 +331,33 @@ spec:
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: goframe-worker
+  name: nucleus-worker
   labels:
-    app: goframe
+    app: nucleus
     component: worker
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: goframe
+      app: nucleus
       component: worker
   template:
     metadata:
       labels:
-        app: goframe
+        app: nucleus
         component: worker
     spec:
       containers:
       - name: worker
-        image: your-registry/goframe:latest
+        image: your-registry/nucleus:latest
         command: ["/bin/worker"]
         env:
-        - name: GOFRAME_ENV
+        - name: NUCLEUS_ENV
           value: production
-        - name: GOFRAME_REDIS_URL
+        - name: NUCLEUS_REDIS_URL
           valueFrom:
             secretKeyRef:
-              name: goframe-secrets
+              name: nucleus-secrets
               key: redis-url
         resources:
           requests:
@@ -374,15 +374,15 @@ spec:
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: goframe-config
+  name: nucleus-config
 data:
-  GOFRAME_HOST: "0.0.0.0"
-  GOFRAME_PORT: "8080"
-  GOFRAME_SESSION_STORE: "redis"
-  GOFRAME_SESSION_COOKIE_SECURE: "true"
-  GOFRAME_SESSION_COOKIE_SAME_SITE: "strict"
-  GOFRAME_LOG_LEVEL: "info"
-  GOFRAME_OTLP_ENDPOINT: "http://otel-collector:4318"
+  NUCLEUS_HOST: "0.0.0.0"
+  NUCLEUS_PORT: "8080"
+  NUCLEUS_SESSION_STORE: "redis"
+  NUCLEUS_SESSION_COOKIE_SECURE: "true"
+  NUCLEUS_SESSION_COOKIE_SAME_SITE: "strict"
+  NUCLEUS_LOG_LEVEL: "info"
+  NUCLEUS_OTLP_ENDPOINT: "http://otel-collector:4318"
 ```
 
 ---
@@ -405,7 +405,7 @@ app.example.com {
 ### Nginx
 
 ```nginx
-upstream goframe {
+upstream nucleus {
     server 127.0.0.1:8080;
     keepalive 32;
 }
@@ -434,7 +434,7 @@ server {
 
     # Proxy settings
     location / {
-        proxy_pass http://goframe;
+        proxy_pass http://nucleus;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -445,7 +445,7 @@ server {
 
     # WebSocket support for admin live inspector
     location /admin/api/live/ws {
-        proxy_pass http://goframe;
+        proxy_pass http://nucleus;
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection "upgrade";
@@ -461,8 +461,8 @@ server {
         add_header Cache-Control "public, immutable";
     }
 
-    access_log /var/log/nginx/goframe-access.log;
-    error_log /var/log/nginx/goframe-error.log;
+    access_log /var/log/nginx/nucleus-access.log;
+    error_log /var/log/nginx/nucleus-error.log;
 }
 ```
 
@@ -471,16 +471,16 @@ server {
 ```yaml
 http:
   routers:
-    goframe:
+    nucleus:
       rule: "Host(`app.example.com`)"
-      service: goframe
+      service: nucleus
       entryPoints:
         - websecure
       tls:
         certResolver: letsencrypt
 
   services:
-    goframe:
+    nucleus:
       loadBalancer:
         servers:
           - url: "http://127.0.0.1:8080"
@@ -512,14 +512,14 @@ sudo certbot renew --dry-run
 If TLS is terminated upstream:
 
 ```yaml
-# goframe.yaml
+# nucleus.yml
 server:
   host: "0.0.0.0"
   port: 8080
 
 # Nginx doesn't need TLS config
-# GoFrame reads X-Forwarded-Proto from request headers
-# Session cookies marked Secure if GOFRAME_SESSION_COOKIE_SECURE=true
+# Nucleus reads X-Forwarded-Proto from request headers
+# Session cookies marked Secure if NUCLEUS_SESSION_COOKIE_SECURE=true
 ```
 
 ---
@@ -528,14 +528,14 @@ server:
 
 ### Server instances
 
-GoFrame servers are stateless. Scale horizontally freely:
+Nucleus servers are stateless. Scale horizontally freely:
 
 ```bash
 # Docker Compose
 docker compose up --scale server=5
 
 # Kubernetes
-kubectl scale deployment goframe-server --replicas=5
+kubectl scale deployment nucleus-server --replicas=5
 ```
 
 ### Shared state requirements
@@ -566,13 +566,13 @@ Asynq workers share queue consumption. Each task is processed by exactly one wor
 
 ```bash
 # Backup
-pg_dump -U goframe -h localhost goframe > backup_$(date +%Y%m%d_%H%M%S).sql
+pg_dump -U nucleus -h localhost nucleus > backup_$(date +%Y%m%d_%H%M%S).sql
 
 # Compressed backup
-pg_dump -U goframe -h localhost goframe | gzip > backup_$(date +%Y%m%d_%H%M%S).sql.gz
+pg_dump -U nucleus -h localhost nucleus | gzip > backup_$(date +%Y%m%d_%H%M%S).sql.gz
 
 # Restore
-psql -U goframe -h localhost goframe < backup_20260410_120000.sql
+psql -U nucleus -h localhost nucleus < backup_20260410_120000.sql
 
 # Continuous backup (WAL archiving) - configure in postgresql.conf
 wal_level = replica
@@ -584,60 +584,60 @@ archive_command = 'cp %p /backup/wal/%f'
 
 ```bash
 # Backup
-mysqldump -u goframe -p goframe > backup_$(date +%Y%m%d_%H%M%S).sql
+mysqldump -u nucleus -p nucleus > backup_$(date +%Y%m%d_%H%M%S).sql
 
 # Restore
-mysql -u goframe -p goframe < backup_20260410_120000.sql
+mysql -u nucleus -p nucleus < backup_20260410_120000.sql
 ```
 
 ### SQLite
 
 ```bash
 # Backup (while running)
-# Use goframe dumpdata for application data
-goframe dumpdata --config goframe.yaml > fixture.json
+# Use nucleus dumpdata for application data
+nucleus dumpdata --config nucleus.yml > fixture.json
 
 # File-level backup (stop server first)
-cp goframe.db goframe.db.backup
+cp nucleus.db nucleus.db.backup
 
 # Or use .backup command in sqlite3
-sqlite3 goframe.db ".backup 'goframe.db.backup'"
+sqlite3 nucleus.db ".backup 'nucleus.db.backup'"
 ```
 
-### GoFrame fixtures
+### Nucleus fixtures
 
 ```bash
 # Export all data as JSON fixtures
-goframe dumpdata --config goframe.yaml > fixtures.json
+nucleus dumpdata --config nucleus.yml > fixtures.json
 
 # Import fixtures
-goframe loaddata --config goframe.yaml fixtures.json
+nucleus loaddata --config nucleus.yml fixtures.json
 
 # Import with truncate (production requires --force)
-goframe loaddata --config goframe.yaml --truncate --force fixtures.json
+nucleus loaddata --config nucleus.yml --truncate --force fixtures.json
 ```
 
 ### Backup schedule
 
 ```bash
 # Cron: daily backup at 2am
-0 2 * * * pg_dump -U goframe goframe | gzip > /backup/db_$(date +\%Y\%m\%d).sql.gz
+0 2 * * * pg_dump -U nucleus nucleus | gzip > /backup/db_$(date +\%Y\%m\%d).sql.gz
 
 # Cron: weekly full backup, daily incrementals
-0 2 * * 0 pg_dump -U goframe -Fc goframe > /backup/full_$(date +\%Y\%m\%d).dump
-0 2 * * 1-6 pg_dump -U goframe --data-only goframe | gzip > /backup/daily_$(date +\%Y\%m\%d).sql.gz
+0 2 * * 0 pg_dump -U nucleus -Fc nucleus > /backup/full_$(date +\%Y\%m\%d).dump
+0 2 * * 1-6 pg_dump -U nucleus --data-only nucleus | gzip > /backup/daily_$(date +\%Y\%m\%d).sql.gz
 ```
 
 ---
 
 ## Log Aggregation
 
-GoFrame uses structured logging via `log/slog` and exports traces/metrics via OpenTelemetry.
+Nucleus uses structured logging via `log/slog` and exports traces/metrics via OpenTelemetry.
 
 ### Log output formats
 
 ```yaml
-# goframe.yaml
+# nucleus.yml
 log_level: info
 log_format: json   # Options: text, json
 ```
@@ -646,10 +646,10 @@ log_format: json   # Options: text, json
 
 ```bash
 # Run server, redirect logs to file
-./bin/server 2>&1 | tee -a /var/log/goframe/server.log
+./bin/server 2>&1 | tee -a /var/log/nucleus/server.log
 
 # Or use systemd journal
-# /etc/systemd/system/goframe-server.service
+# /etc/systemd/system/nucleus-server.service
 [Service]
 StandardOutput=journal
 StandardError=journal
@@ -660,13 +660,13 @@ StandardError=journal
 ```yaml
 # Promtail configuration
 scrape_configs:
-  - job_name: goframe
+  - job_name: nucleus
     static_configs:
       - targets:
           - localhost
         labels:
-          job: goframe
-          __path__: /var/log/goframe/*.log
+          job: nucleus
+          __path__: /var/log/nucleus/*.log
     pipeline_stages:
       - json:
           expressions:
@@ -682,21 +682,21 @@ scrape_configs:
 # Logstash configuration
 input {
   file {
-    path => "/var/log/goframe/*.log"
+    path => "/var/log/nucleus/*.log"
     codec => "json"
   }
 }
 
 filter {
   mutate {
-    add_field => { "service" => "goframe" }
+    add_field => { "service" => "nucleus" }
   }
 }
 
 output {
   elasticsearch {
     hosts => ["localhost:9200"]
-    index => "goframe-%{+YYYY.MM.dd}"
+    index => "nucleus-%{+YYYY.MM.dd}"
   }
 }
 ```
@@ -732,7 +732,7 @@ service:
 ```
 
 ```yaml
-# goframe.yaml
+# nucleus.yml
 otlp_endpoint: http://otel-collector:4318
 ```
 
@@ -742,14 +742,14 @@ otlp_endpoint: http://otel-collector:4318
 
 ### Security
 
-- [ ] `GOFRAME_ENV=production` set
+- [ ] `NUCLEUS_ENV=production` set
 - [ ] Strong `jwt_secret` (64-byte random hex)
 - [ ] `session_cookie_secure: true` (HTTPS only)
 - [ ] `session_cookie_same_site: strict`
 - [ ] CSRF middleware enabled for state-changing endpoints
 - [ ] Rate limiting configured (`rate_limit_burst`, `rate_limit_by_route`)
 - [ ] CORS origins restricted (no `*` in production)
-- [ ] Admin panel secured (`goframe createuser` run)
+- [ ] Admin panel secured (`nucleus createuser` run)
 - [ ] Database credentials in secrets manager (not env files)
 - [ ] TLS enabled (Let's Encrypt or load balancer)
 
@@ -760,7 +760,7 @@ otlp_endpoint: http://otel-collector:4318
 - [ ] Liveness probe configured
 - [ ] Graceful shutdown tested (drain connections)
 - [ ] Database connection pooling tuned (`max_open_conns`, `max_idle_conns`)
-- [ ] Redis connection validated (`goframe health`)
+- [ ] Redis connection validated (`nucleus health`)
 - [ ] Session store set to `redis` or `sql` (not `memory`)
 - [ ] Background workers running and consuming queues
 - [ ] OTel exporter configured and shipping data
@@ -771,15 +771,15 @@ otlp_endpoint: http://otel-collector:4318
 - [ ] Metrics dashboard created (Grafana/Prometheus)
 - [ ] Alert rules configured (error rate, latency, queue depth)
 - [ ] Database backups scheduled and tested
-- [ ] Migration strategy defined (`goframe migrate` before deploy)
+- [ ] Migration strategy defined (`nucleus migrate` before deploy)
 - [ ] Rollback plan documented
-- [ ] `goframe check --deploy` passes
+- [ ] `nucleus check --deploy` passes
 
 ### Performance
 
-- [ ] Static assets collected (`goframe collectstatic`)
+- [ ] Static assets collected (`nucleus collectstatic`)
 - [ ] CDN configured for `/static/`
-- [ ] Database indexes verified (`goframe inspectdb`)
+- [ ] Database indexes verified (`nucleus inspectdb`)
 - [ ] Query performance monitored (admin live SQL inspector)
 - [ ] Worker concurrency tuned for workload
 - [ ] Redis memory usage monitored

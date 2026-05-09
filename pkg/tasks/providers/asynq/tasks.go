@@ -14,8 +14,8 @@ import (
 	"time"
 
 	"github.com/hibiken/asynq"
-	"github.com/jcsvwinston/GoFrame/pkg/observe"
-	"github.com/jcsvwinston/GoFrame/pkg/tasks"
+	"github.com/jcsvwinston/nucleus/pkg/observe"
+	"github.com/jcsvwinston/nucleus/pkg/tasks"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
@@ -32,7 +32,7 @@ var (
 	ErrNilTask          = errors.New("tasks: task is nil")
 )
 
-const taskCorrelationPayloadKey = "_goframe_ctx"
+const taskCorrelationPayloadKey = "_nucleus_ctx"
 
 var (
 	taskTelemetryOnce sync.Once
@@ -379,8 +379,8 @@ func extractTaskCorrelation(raw []byte) taskCorrelation {
 
 func initTaskTelemetry() {
 	taskTelemetryOnce.Do(func() {
-		meter := otel.Meter("goframe/tasks")
-		taskTracer = otel.Tracer("goframe/tasks")
+		meter := otel.Meter("nucleus/tasks")
+		taskTracer = otel.Tracer("nucleus/tasks")
 
 		taskEnqueueTotal, _ = meter.Int64Counter("jobs.enqueue.total")
 		taskEnqueueErrors, _ = meter.Int64Counter("jobs.enqueue.errors")

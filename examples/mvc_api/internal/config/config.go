@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/jcsvwinston/GoFrame/pkg/app"
+	"github.com/jcsvwinston/nucleus/pkg/app"
 )
 
 const (
@@ -28,7 +28,7 @@ func DefaultConfig() *app.Config {
 			},
 		},
 		AdminPrefix:            "/admin",
-		AdminTitle:             "GoFrame Showcase Admin",
+		AdminTitle:             "Nucleus Showcase Admin",
 		AdminBootstrapUsername: "admin",
 		AdminBootstrapEmail:    "admin@example.com",
 		AdminBootstrapPassword: "supersecret123",
@@ -43,9 +43,9 @@ func applyEnvOverrides(cfg *app.Config) {
 	if cfg == nil {
 		return
 	}
-	cfg.Port = getenvInt("GOFRAME_EXAMPLE_PORT", cfg.Port)
+	cfg.Port = getenvInt("NUCLEUS_EXAMPLE_PORT", cfg.Port)
 
-	if dbURL := strings.TrimSpace(os.Getenv("GOFRAME_EXAMPLE_DB_URL")); dbURL != "" {
+	if dbURL := strings.TrimSpace(os.Getenv("NUCLEUS_EXAMPLE_DB_URL")); dbURL != "" {
 		if cfg.Databases == nil {
 			cfg.Databases = map[string]app.DatabaseConfig{}
 		}
@@ -54,40 +54,40 @@ func applyEnvOverrides(cfg *app.Config) {
 		cfg.Databases["default"] = dbCfg
 	}
 
-	if redisURL := strings.TrimSpace(os.Getenv("GOFRAME_EXAMPLE_REDIS_URL")); redisURL != "" {
+	if redisURL := strings.TrimSpace(os.Getenv("NUCLEUS_EXAMPLE_REDIS_URL")); redisURL != "" {
 		cfg.RedisURL = redisURL
 	}
 
-	if sessionStore := strings.TrimSpace(os.Getenv("GOFRAME_EXAMPLE_SESSION_STORE")); sessionStore != "" {
+	if sessionStore := strings.TrimSpace(os.Getenv("NUCLEUS_EXAMPLE_SESSION_STORE")); sessionStore != "" {
 		cfg.SessionStore = strings.ToLower(sessionStore)
 	}
-	if sessionRedisURL := strings.TrimSpace(os.Getenv("GOFRAME_EXAMPLE_SESSION_REDIS_URL")); sessionRedisURL != "" {
+	if sessionRedisURL := strings.TrimSpace(os.Getenv("NUCLEUS_EXAMPLE_SESSION_REDIS_URL")); sessionRedisURL != "" {
 		cfg.SessionRedisURL = sessionRedisURL
 	}
 
-	cfg.AdminClusterEnabled = getenvBool("GOFRAME_EXAMPLE_ADMIN_CLUSTER_ENABLED", cfg.AdminClusterEnabled)
-	if clusterRedis := strings.TrimSpace(os.Getenv("GOFRAME_EXAMPLE_ADMIN_CLUSTER_REDIS_URL")); clusterRedis != "" {
+	cfg.AdminClusterEnabled = getenvBool("NUCLEUS_EXAMPLE_ADMIN_CLUSTER_ENABLED", cfg.AdminClusterEnabled)
+	if clusterRedis := strings.TrimSpace(os.Getenv("NUCLEUS_EXAMPLE_ADMIN_CLUSTER_REDIS_URL")); clusterRedis != "" {
 		cfg.AdminClusterRedisURL = clusterRedis
 	}
-	if clusterChannel := strings.TrimSpace(os.Getenv("GOFRAME_EXAMPLE_ADMIN_CLUSTER_CHANNEL")); clusterChannel != "" {
+	if clusterChannel := strings.TrimSpace(os.Getenv("NUCLEUS_EXAMPLE_ADMIN_CLUSTER_CHANNEL")); clusterChannel != "" {
 		cfg.AdminClusterChannel = clusterChannel
 	}
-	if clusterNodeID := strings.TrimSpace(os.Getenv("GOFRAME_EXAMPLE_ADMIN_CLUSTER_NODE_ID")); clusterNodeID != "" {
+	if clusterNodeID := strings.TrimSpace(os.Getenv("NUCLEUS_EXAMPLE_ADMIN_CLUSTER_NODE_ID")); clusterNodeID != "" {
 		cfg.AdminClusterNodeID = clusterNodeID
 	}
-	if clusterToken := strings.TrimSpace(os.Getenv("GOFRAME_EXAMPLE_ADMIN_CLUSTER_TOKEN")); clusterToken != "" {
+	if clusterToken := strings.TrimSpace(os.Getenv("NUCLEUS_EXAMPLE_ADMIN_CLUSTER_TOKEN")); clusterToken != "" {
 		cfg.AdminClusterToken = clusterToken
 	}
-	if traceURLTemplate := strings.TrimSpace(os.Getenv("GOFRAME_EXAMPLE_ADMIN_TRACE_URL_TEMPLATE")); traceURLTemplate != "" {
+	if traceURLTemplate := strings.TrimSpace(os.Getenv("NUCLEUS_EXAMPLE_ADMIN_TRACE_URL_TEMPLATE")); traceURLTemplate != "" {
 		cfg.AdminTraceURLTemplate = traceURLTemplate
 	}
-	if otlpEndpoint := strings.TrimSpace(os.Getenv("GOFRAME_EXAMPLE_OTLP_ENDPOINT")); otlpEndpoint != "" {
+	if otlpEndpoint := strings.TrimSpace(os.Getenv("NUCLEUS_EXAMPLE_OTLP_ENDPOINT")); otlpEndpoint != "" {
 		cfg.OTLPEndpoint = otlpEndpoint
 	}
-	if adminTitle := strings.TrimSpace(os.Getenv("GOFRAME_EXAMPLE_ADMIN_TITLE")); adminTitle != "" {
+	if adminTitle := strings.TrimSpace(os.Getenv("NUCLEUS_EXAMPLE_ADMIN_TITLE")); adminTitle != "" {
 		cfg.AdminTitle = adminTitle
 	}
-	if bootstrapPassword := strings.TrimSpace(os.Getenv("GOFRAME_EXAMPLE_ADMIN_BOOTSTRAP_PASSWORD")); bootstrapPassword != "" {
+	if bootstrapPassword := strings.TrimSpace(os.Getenv("NUCLEUS_EXAMPLE_ADMIN_BOOTSTRAP_PASSWORD")); bootstrapPassword != "" {
 		cfg.AdminBootstrapPassword = bootstrapPassword
 	}
 }

@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/jcsvwinston/GoFrame/pkg/model"
+	"github.com/jcsvwinston/nucleus/pkg/model"
 )
 
 // ImportConfig defines the target and behavior of an import.

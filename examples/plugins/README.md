@@ -1,6 +1,6 @@
 # Official Plugin SDK Examples
 
-This directory contains the official GoFrame `v0.6.x` Plugin SDK v1 examples required by the roadmap:
+This directory contains the official Nucleus `v0.6.x` Plugin SDK v1 examples required by the roadmap:
 
 - `mail/`: provider `examplemail` implementing `mail.send`
 - `queue/`: provider `examplequeue` implementing `queue.publish`
@@ -19,8 +19,8 @@ From repository root:
 ```bash
 mkdir -p .tmp/plugins
 
-go build -o .tmp/plugins/goframe-plugin-examplemail ./examples/plugins/mail
-go build -o .tmp/plugins/goframe-plugin-examplequeue ./examples/plugins/queue
+go build -o .tmp/plugins/nucleus-plugin-examplemail ./examples/plugins/mail
+go build -o .tmp/plugins/nucleus-plugin-examplequeue ./examples/plugins/queue
 ```
 
 Then prepend to `PATH`:
@@ -32,16 +32,16 @@ export PATH="$(pwd)/.tmp/plugins:$PATH"
 ## Verify Discovery and Diagnostics
 
 ```bash
-goframe plugin list --config goframe.yaml
-goframe plugin doctor --config goframe.yaml
+nucleus plugin list --config nucleus.yml
+nucleus plugin doctor --config nucleus.yml
 
-goframe plugin test --provider examplemail --capability mail.send --execute
-goframe plugin test --provider examplequeue --capability queue.publish --execute
+nucleus plugin test --provider examplemail --capability mail.send --execute
+nucleus plugin test --provider examplequeue --capability queue.publish --execute
 ```
 
 ## End-to-End Mail Smoke
 
-Set in `goframe.yaml`:
+Set in `nucleus.yml`:
 
 ```yaml
 mail_driver: examplemail
@@ -51,13 +51,13 @@ mail_from: noreply@example.com
 Run:
 
 ```bash
-goframe sendtestemail --config goframe.yaml --to dev@example.com --subject "mail plugin smoke"
+nucleus sendtestemail --config nucleus.yml --to dev@example.com --subject "mail plugin smoke"
 ```
 
 ## Queue Request Smoke (Direct Envelope Call)
 
 ```bash
-cat <<'JSON' | goframe-plugin-examplequeue
+cat <<'JSON' | nucleus-plugin-examplequeue
 {
   "version": "v1",
   "request_id": "req_queue_demo",

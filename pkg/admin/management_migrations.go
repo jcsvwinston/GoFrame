@@ -9,9 +9,9 @@ import (
 	"strings"
 	"time"
 
-	gfdb "github.com/jcsvwinston/GoFrame/pkg/db"
-	gferrors "github.com/jcsvwinston/GoFrame/pkg/errors"
-	"github.com/jcsvwinston/GoFrame/pkg/router"
+	gfdb "github.com/jcsvwinston/nucleus/pkg/db"
+	gferrors "github.com/jcsvwinston/nucleus/pkg/errors"
+	"github.com/jcsvwinston/nucleus/pkg/router"
 )
 
 func (p *Panel) handleListMigrations(c *router.Context) error {

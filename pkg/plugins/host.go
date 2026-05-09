@@ -5,7 +5,7 @@ import (
 	"time"
 )
 
-// Host is the stable plugin runtime contract exposed by GoFrame.
+// Host is the stable plugin runtime contract exposed by Nucleus.
 // It allows callers to discover providers, probe capabilities, and execute
 // capability requests independently from the underlying transport/runtime.
 type Host interface {

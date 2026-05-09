@@ -3,7 +3,7 @@
 Reference date: 2026-04-05.
 Status: Current.
 
-Use this as a practical default for MVC + API GoFrame apps.
+Use this as a practical default for MVC + API Nucleus apps.
 
 ```text
 myapp/
@@ -26,7 +26,7 @@ myapp/
       static/
   migrations/
   seeds/
-  goframe.yaml
+  nucleus.yml
   go.mod
 ```
 
@@ -56,7 +56,7 @@ internal/contracts/
 ## Minimum to Start
 
 1. `cmd/server/main.go`
-2. `goframe.yaml`
+2. `nucleus.yml`
 3. `migrations/` with at least one migration pair
 4. one registered model and one route
 
@@ -77,6 +77,6 @@ The current experimental OpenAPI lane uses `internal/contracts` as the project c
 1. each generated contract file exposes an explicit `RegisterXContract(doc *openapi.Document)` function,
 2. each generated contract file auto-registers that function in the package aggregator,
 3. `internal/contracts/contracts.go` centralizes the document bootstrap via `DefaultConfig()`, `NewDocument()`, and `NewDocumentWithConfig(cfg Config)`,
-4. `goframe openapi --out openapi.json` and runtime serving should both use that same document builder,
+4. `nucleus openapi --out openapi.json` and runtime serving should both use that same document builder,
 5. scaffolded contracts should stay explicit, but can use small `pkg/openapi` helpers such as `ObjectSchema`, `ArraySchema`, `DataEnvelopeSchema`, `CollectionEnvelopeSchema`, `IDSchema`, `JSONRequestBody`, `JSONResponse`, `ErrorResponse`, `EmptyResponse`, `PathParameter`, `QueryParameter`, and `SearchQueryParameter` to reduce repetition,
 6. scaffolded server apps mount the experimental document explicitly at `/openapi.json` via `app.MountOpenAPI("/openapi.json", contracts.NewDocument)`.

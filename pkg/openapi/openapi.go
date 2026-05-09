@@ -7,7 +7,7 @@ import (
 )
 
 // Document is a small OpenAPI 3.1 document model used by generated contracts.
-// It intentionally covers the subset GoFrame scaffolds need today.
+// It intentionally covers the subset Nucleus scaffolds need today.
 type Document struct {
 	OpenAPI    string              `json:"openapi"`
 	Info       Info                `json:"info"`

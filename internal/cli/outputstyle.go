@@ -43,17 +43,17 @@ func defaultOutputOptions() outputOptions {
 		Symbols: true,
 	}
 
-	if raw := strings.ToLower(strings.TrimSpace(os.Getenv("GOFRAME_OUTPUT"))); raw != "" {
+	if raw := strings.ToLower(strings.TrimSpace(os.Getenv("NUCLEUS_OUTPUT"))); raw != "" {
 		if f, ok := parseOutputFormat(raw); ok {
 			opts.Format = f
 		}
 	}
-	if raw := strings.ToLower(strings.TrimSpace(os.Getenv("GOFRAME_COLOR"))); raw != "" {
+	if raw := strings.ToLower(strings.TrimSpace(os.Getenv("NUCLEUS_COLOR"))); raw != "" {
 		if c, ok := parseColorMode(raw); ok {
 			opts.Color = c
 		}
 	}
-	if raw := strings.ToLower(strings.TrimSpace(os.Getenv("GOFRAME_SYMBOLS"))); raw != "" {
+	if raw := strings.ToLower(strings.TrimSpace(os.Getenv("NUCLEUS_SYMBOLS"))); raw != "" {
 		switch raw {
 		case "1", "true", "yes", "on":
 			opts.Symbols = true

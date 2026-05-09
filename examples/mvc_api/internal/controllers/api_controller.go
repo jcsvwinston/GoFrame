@@ -4,15 +4,15 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/jcsvwinston/GoFrame/examples/mvc_api/internal/dtos"
-	"github.com/jcsvwinston/GoFrame/examples/mvc_api/internal/services"
-	"github.com/jcsvwinston/GoFrame/pkg/app"
-	"github.com/jcsvwinston/GoFrame/pkg/router"
+	"github.com/jcsvwinston/nucleus/examples/mvc_api/internal/dtos"
+	"github.com/jcsvwinston/nucleus/examples/mvc_api/internal/services"
+	"github.com/jcsvwinston/nucleus/pkg/app"
+	"github.com/jcsvwinston/nucleus/pkg/router"
 )
 
 func Health() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		router.JSON(w, http.StatusOK, map[string]any{"status": "ok", "service": "goframe-mvc-api"})
+		router.JSON(w, http.StatusOK, map[string]any{"status": "ok", "service": "nucleus-mvc-api"})
 	}
 }
 

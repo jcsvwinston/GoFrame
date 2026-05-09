@@ -3,7 +3,7 @@ package admin
 import (
 	"strings"
 
-	"github.com/jcsvwinston/GoFrame/pkg/mail"
+	"github.com/jcsvwinston/nucleus/pkg/mail"
 )
 
 type emailRuntimeSnapshot struct {

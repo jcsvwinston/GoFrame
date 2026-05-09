@@ -4,7 +4,7 @@ Reference date: 2026-04-23.
 Status: Current (updated for build-tag modularization).
 
 This document tracks the critical third-party dependencies that form the stable
-surface of GoFrame and records swap drills to prove adapter boundaries work.
+surface of Nucleus and records swap drills to prove adapter boundaries work.
 
 ## Classification
 

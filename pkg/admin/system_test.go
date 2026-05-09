@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jcsvwinston/GoFrame/pkg/db"
-	"github.com/jcsvwinston/GoFrame/pkg/outbox"
+	"github.com/jcsvwinston/nucleus/pkg/db"
+	"github.com/jcsvwinston/nucleus/pkg/outbox"
 )
 
 func TestBuildSystemEnvironmentRowsMasksSensitiveValues(t *testing.T) {

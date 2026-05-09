@@ -23,7 +23,7 @@ func runCollectStatic(args []string, _ io.Reader, stdout, stderr io.Writer) erro
 	fs := flag.NewFlagSet("collectstatic", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 
-	configPath := fs.String("config", "", "Path to goframe config file")
+	configPath := fs.String("config", "", "Path to nucleus config file")
 	outputDir := fs.String("output", "", "Destination directory (defaults to config static_root)")
 	sourceRaw := fs.String("source", "", "Comma-separated source directories")
 	noDefaultSources := fs.Bool("no-default-sources", false, "Disable default static source discovery")
@@ -113,7 +113,7 @@ func runFindStatic(args []string, _ io.Reader, stdout, stderr io.Writer) error {
 	fs := flag.NewFlagSet("findstatic", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 
-	configPath := fs.String("config", "", "Path to goframe config file")
+	configPath := fs.String("config", "", "Path to nucleus config file")
 	sourceRaw := fs.String("source", "", "Comma-separated source directories")
 	noDefaultSources := fs.Bool("no-default-sources", false, "Disable default static source discovery")
 	first := fs.Bool("first", false, "Return only the first match for each query")
@@ -127,7 +127,7 @@ func runFindStatic(args []string, _ io.Reader, stdout, stderr io.Writer) error {
 	}
 	queries := fs.Args()
 	if len(queries) == 0 {
-		return fmt.Errorf("findstatic requires at least one asset path (example: goframe findstatic app.css)")
+		return fmt.Errorf("findstatic requires at least one asset path (example: nucleus findstatic app.css)")
 	}
 
 	cfg, err := loadConfig(*configPath)

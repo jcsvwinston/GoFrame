@@ -13,10 +13,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/jcsvwinston/GoFrame/pkg/db"
-	"github.com/jcsvwinston/GoFrame/pkg/outbox"
-	"github.com/jcsvwinston/GoFrame/pkg/router"
-	"github.com/jcsvwinston/GoFrame/pkg/tasks"
+	"github.com/jcsvwinston/nucleus/pkg/db"
+	"github.com/jcsvwinston/nucleus/pkg/outbox"
+	"github.com/jcsvwinston/nucleus/pkg/router"
+	"github.com/jcsvwinston/nucleus/pkg/tasks"
 	"github.com/shirou/gopsutil/v3/cpu"
 	"github.com/shirou/gopsutil/v3/process"
 )

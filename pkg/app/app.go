@@ -16,20 +16,20 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/jcsvwinston/GoFrame/pkg/admin"
-	"github.com/jcsvwinston/GoFrame/pkg/auth"
-	"github.com/jcsvwinston/GoFrame/pkg/authz"
-	"github.com/jcsvwinston/GoFrame/pkg/db"
-	"github.com/jcsvwinston/GoFrame/pkg/mail"
-	"github.com/jcsvwinston/GoFrame/pkg/model"
-	"github.com/jcsvwinston/GoFrame/pkg/observe"
-	"github.com/jcsvwinston/GoFrame/pkg/openapi"
-	"github.com/jcsvwinston/GoFrame/pkg/outbox"
-	"github.com/jcsvwinston/GoFrame/pkg/router"
-	"github.com/jcsvwinston/GoFrame/pkg/storage"
+	"github.com/jcsvwinston/nucleus/pkg/admin"
+	"github.com/jcsvwinston/nucleus/pkg/auth"
+	"github.com/jcsvwinston/nucleus/pkg/authz"
+	"github.com/jcsvwinston/nucleus/pkg/db"
+	"github.com/jcsvwinston/nucleus/pkg/mail"
+	"github.com/jcsvwinston/nucleus/pkg/model"
+	"github.com/jcsvwinston/nucleus/pkg/observe"
+	"github.com/jcsvwinston/nucleus/pkg/openapi"
+	"github.com/jcsvwinston/nucleus/pkg/outbox"
+	"github.com/jcsvwinston/nucleus/pkg/router"
+	"github.com/jcsvwinston/nucleus/pkg/storage"
 )
 
-// App is the main GoFrame application container. It wires the minimum runtime
+// App is the main Nucleus application container. It wires the minimum runtime
 // dependencies (config, logger, router, DB, model registry, and admin panel).
 //
 // By default, app.New(cfg) initializes all subsystems (admin, storage, mail, authz).
@@ -157,7 +157,7 @@ func New(cfg *Config, opts ...Option) (*App, error) {
 	logger := observe.NewLogger(effective.LogLevel, effective.LogFormat)
 
 	telemetryShutdown, err := observe.SetupOpenTelemetry(context.Background(), observe.TelemetryConfig{
-		ServiceName:  "goframe-app",
+		ServiceName:  "nucleus-app",
 		OTLPEndpoint: effective.OTLPEndpoint,
 	}, logger)
 	if err != nil {
@@ -337,7 +337,7 @@ func attachOutbox(a *App, cfg *Config, dbConn *db.DB) error {
 		DB:            sqlDB,
 		TableName:     cfg.Outbox.TableName,
 		Flavor:        outboxFlavorForConfig(cfg),
-		LeaseOwner:    "goframe-app",
+		LeaseOwner:    "nucleus-app",
 		LeaseDuration: cfg.Outbox.LeaseDuration,
 		PollInterval:  time.Second,
 		BatchSize:     10,

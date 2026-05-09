@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/jcsvwinston/GoFrame/pkg/app"
+	"github.com/jcsvwinston/nucleus/pkg/app"
 )
 
 func TestServices_EnsureSchema(t *testing.T) {

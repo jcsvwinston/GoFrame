@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/jcsvwinston/GoFrame/pkg/app"
+	"github.com/jcsvwinston/nucleus/pkg/app"
 )
 
 // --- common.go tests ---

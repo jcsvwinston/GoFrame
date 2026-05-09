@@ -15,12 +15,12 @@ Source directory:
 ## Included Providers
 
 1. `examplemail`
-- binary name: `goframe-plugin-examplemail`
+- binary name: `nucleus-plugin-examplemail`
 - capability: `mail.send`
 - executable path in repo: `examples/plugins/mail`
 
 2. `examplequeue`
-- binary name: `goframe-plugin-examplequeue`
+- binary name: `nucleus-plugin-examplequeue`
 - capability: `queue.publish`
 - executable path in repo: `examples/plugins/queue`
 
@@ -39,8 +39,8 @@ From repository root:
 ```bash
 mkdir -p .tmp/plugins
 
-go build -o .tmp/plugins/goframe-plugin-examplemail ./examples/plugins/mail
-go build -o .tmp/plugins/goframe-plugin-examplequeue ./examples/plugins/queue
+go build -o .tmp/plugins/nucleus-plugin-examplemail ./examples/plugins/mail
+go build -o .tmp/plugins/nucleus-plugin-examplequeue ./examples/plugins/queue
 ```
 
 Add binaries to `PATH`:
@@ -52,11 +52,11 @@ export PATH="$(pwd)/.tmp/plugins:$PATH"
 ## Verify with CLI
 
 ```bash
-goframe plugin list --config goframe.yaml
-goframe plugin doctor --config goframe.yaml
+nucleus plugin list --config nucleus.yml
+nucleus plugin doctor --config nucleus.yml
 
-goframe plugin test --provider examplemail --capability mail.send --execute
-goframe plugin test --provider examplequeue --capability queue.publish --execute
+nucleus plugin test --provider examplemail --capability mail.send --execute
+nucleus plugin test --provider examplequeue --capability queue.publish --execute
 ```
 
 ## Mail End-to-End Smoke
@@ -71,13 +71,13 @@ mail_from: noreply@example.com
 Run:
 
 ```bash
-goframe sendtestemail --config goframe.yaml --to dev@example.com --subject "mail plugin smoke"
+nucleus sendtestemail --config nucleus.yml --to dev@example.com --subject "mail plugin smoke"
 ```
 
 ## Queue Envelope Smoke
 
 ```bash
-cat <<'JSON' | goframe-plugin-examplequeue
+cat <<'JSON' | nucleus-plugin-examplequeue
 {
   "version": "v1",
   "request_id": "req_queue_demo",

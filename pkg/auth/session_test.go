@@ -41,7 +41,7 @@ func TestNewSessionManager_CookieSettings(t *testing.T) {
 		Secure:     true,
 		Path:       "/app",
 		Domain:     "example.com",
-		CookieName: "goframe_session",
+		CookieName: "nucleus_session",
 		SameSite:   "strict",
 	})
 
@@ -54,8 +54,8 @@ func TestNewSessionManager_CookieSettings(t *testing.T) {
 	if sm.SCS().Cookie.Domain != "example.com" {
 		t.Fatalf("expected cookie domain example.com, got %q", sm.SCS().Cookie.Domain)
 	}
-	if sm.SCS().Cookie.Name != "goframe_session" {
-		t.Fatalf("expected cookie name goframe_session, got %q", sm.SCS().Cookie.Name)
+	if sm.SCS().Cookie.Name != "nucleus_session" {
+		t.Fatalf("expected cookie name nucleus_session, got %q", sm.SCS().Cookie.Name)
 	}
 	if sm.SCS().Cookie.SameSite != http.SameSiteStrictMode {
 		t.Fatalf("expected strict same-site, got %v", sm.SCS().Cookie.SameSite)

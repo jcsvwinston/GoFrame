@@ -20,21 +20,21 @@ func TestFirewall_NoThirdPartyTypesInStableAPIs(t *testing.T) {
 		importPath string
 		relative   string
 	}{
-		{importPath: "github.com/jcsvwinston/GoFrame/pkg/app", relative: "pkg/app"},
-		{importPath: "github.com/jcsvwinston/GoFrame/pkg/auth", relative: "pkg/auth"},
-		{importPath: "github.com/jcsvwinston/GoFrame/pkg/authz", relative: "pkg/authz"},
-		{importPath: "github.com/jcsvwinston/GoFrame/pkg/db", relative: "pkg/db"},
-		{importPath: "github.com/jcsvwinston/GoFrame/pkg/errors", relative: "pkg/errors"},
-		{importPath: "github.com/jcsvwinston/GoFrame/pkg/mail", relative: "pkg/mail"},
-		{importPath: "github.com/jcsvwinston/GoFrame/pkg/model", relative: "pkg/model"},
-		{importPath: "github.com/jcsvwinston/GoFrame/pkg/observe", relative: "pkg/observe"},
-		{importPath: "github.com/jcsvwinston/GoFrame/pkg/plugins", relative: "pkg/plugins"},
-		{importPath: "github.com/jcsvwinston/GoFrame/pkg/router", relative: "pkg/router"},
-		{importPath: "github.com/jcsvwinston/GoFrame/pkg/signals", relative: "pkg/signals"},
-		{importPath: "github.com/jcsvwinston/GoFrame/pkg/tasks", relative: "pkg/tasks"},
-		{importPath: "github.com/jcsvwinston/GoFrame/pkg/validate", relative: "pkg/validate"},
-		{importPath: "github.com/jcsvwinston/GoFrame/pkg/storage", relative: "pkg/storage"},
-		{importPath: "github.com/jcsvwinston/GoFrame/pkg/outbox", relative: "pkg/outbox"},
+		{importPath: "github.com/jcsvwinston/nucleus/pkg/app", relative: "pkg/app"},
+		{importPath: "github.com/jcsvwinston/nucleus/pkg/auth", relative: "pkg/auth"},
+		{importPath: "github.com/jcsvwinston/nucleus/pkg/authz", relative: "pkg/authz"},
+		{importPath: "github.com/jcsvwinston/nucleus/pkg/db", relative: "pkg/db"},
+		{importPath: "github.com/jcsvwinston/nucleus/pkg/errors", relative: "pkg/errors"},
+		{importPath: "github.com/jcsvwinston/nucleus/pkg/mail", relative: "pkg/mail"},
+		{importPath: "github.com/jcsvwinston/nucleus/pkg/model", relative: "pkg/model"},
+		{importPath: "github.com/jcsvwinston/nucleus/pkg/observe", relative: "pkg/observe"},
+		{importPath: "github.com/jcsvwinston/nucleus/pkg/plugins", relative: "pkg/plugins"},
+		{importPath: "github.com/jcsvwinston/nucleus/pkg/router", relative: "pkg/router"},
+		{importPath: "github.com/jcsvwinston/nucleus/pkg/signals", relative: "pkg/signals"},
+		{importPath: "github.com/jcsvwinston/nucleus/pkg/tasks", relative: "pkg/tasks"},
+		{importPath: "github.com/jcsvwinston/nucleus/pkg/validate", relative: "pkg/validate"},
+		{importPath: "github.com/jcsvwinston/nucleus/pkg/storage", relative: "pkg/storage"},
+		{importPath: "github.com/jcsvwinston/nucleus/pkg/outbox", relative: "pkg/outbox"},
 	}
 
 	// Third-party packages that should NOT appear in exported signatures

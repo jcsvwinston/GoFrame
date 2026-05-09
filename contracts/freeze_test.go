@@ -13,8 +13,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/jcsvwinston/GoFrame/internal/cli"
-	"github.com/jcsvwinston/GoFrame/pkg/app"
+	"github.com/jcsvwinston/nucleus/internal/cli"
+	"github.com/jcsvwinston/nucleus/pkg/app"
 )
 
 func TestContractFreeze_CLIPrimaryCommands_NoRemovals(t *testing.T) {
@@ -51,7 +51,7 @@ func TestContractFreeze_ConfigKeyPatterns_NoRemovals(t *testing.T) {
 
 func TestContractFreeze_APIExportedSymbols_NoRemovals(t *testing.T) {
 	currentLines := stableAPISymbolBaselineLines(t)
-	if os.Getenv("GOFRAME_UPDATE_CONTRACT_BASELINE") == "1" {
+	if os.Getenv("NUCLEUS_UPDATE_CONTRACT_BASELINE") == "1" {
 		writeBaselineLines(t, currentLines, "baseline", "api_exported_symbols.txt")
 	}
 
@@ -147,19 +147,19 @@ func stableAPISymbolBaselineLines(t *testing.T) []string {
 		importPath string
 		relative   string
 	}{
-		{importPath: "github.com/jcsvwinston/GoFrame/pkg/app", relative: "pkg/app"},
-		{importPath: "github.com/jcsvwinston/GoFrame/pkg/auth", relative: "pkg/auth"},
-		{importPath: "github.com/jcsvwinston/GoFrame/pkg/authz", relative: "pkg/authz"},
-		{importPath: "github.com/jcsvwinston/GoFrame/pkg/db", relative: "pkg/db"},
-		{importPath: "github.com/jcsvwinston/GoFrame/pkg/errors", relative: "pkg/errors"},
-		{importPath: "github.com/jcsvwinston/GoFrame/pkg/mail", relative: "pkg/mail"},
-		{importPath: "github.com/jcsvwinston/GoFrame/pkg/model", relative: "pkg/model"},
-		{importPath: "github.com/jcsvwinston/GoFrame/pkg/observe", relative: "pkg/observe"},
-		{importPath: "github.com/jcsvwinston/GoFrame/pkg/plugins", relative: "pkg/plugins"},
-		{importPath: "github.com/jcsvwinston/GoFrame/pkg/router", relative: "pkg/router"},
-		{importPath: "github.com/jcsvwinston/GoFrame/pkg/signals", relative: "pkg/signals"},
-		{importPath: "github.com/jcsvwinston/GoFrame/pkg/tasks", relative: "pkg/tasks"},
-		{importPath: "github.com/jcsvwinston/GoFrame/pkg/validate", relative: "pkg/validate"},
+		{importPath: "github.com/jcsvwinston/nucleus/pkg/app", relative: "pkg/app"},
+		{importPath: "github.com/jcsvwinston/nucleus/pkg/auth", relative: "pkg/auth"},
+		{importPath: "github.com/jcsvwinston/nucleus/pkg/authz", relative: "pkg/authz"},
+		{importPath: "github.com/jcsvwinston/nucleus/pkg/db", relative: "pkg/db"},
+		{importPath: "github.com/jcsvwinston/nucleus/pkg/errors", relative: "pkg/errors"},
+		{importPath: "github.com/jcsvwinston/nucleus/pkg/mail", relative: "pkg/mail"},
+		{importPath: "github.com/jcsvwinston/nucleus/pkg/model", relative: "pkg/model"},
+		{importPath: "github.com/jcsvwinston/nucleus/pkg/observe", relative: "pkg/observe"},
+		{importPath: "github.com/jcsvwinston/nucleus/pkg/plugins", relative: "pkg/plugins"},
+		{importPath: "github.com/jcsvwinston/nucleus/pkg/router", relative: "pkg/router"},
+		{importPath: "github.com/jcsvwinston/nucleus/pkg/signals", relative: "pkg/signals"},
+		{importPath: "github.com/jcsvwinston/nucleus/pkg/tasks", relative: "pkg/tasks"},
+		{importPath: "github.com/jcsvwinston/nucleus/pkg/validate", relative: "pkg/validate"},
 	}
 
 	lines := make([]string, 0, 512)

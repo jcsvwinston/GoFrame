@@ -10,7 +10,7 @@ import (
 func TestDetectSessionRuntimeIdentity(t *testing.T) {
 	t.Setenv("POD_NAME", "api-pod-01")
 	t.Setenv("NODE_NAME", "node-a")
-	t.Setenv("GOFRAME_INSTANCE_ID", "")
+	t.Setenv("NUCLEUS_INSTANCE_ID", "")
 
 	identity := DetectSessionRuntimeIdentity()
 	if identity.Pod != "api-pod-01" {
@@ -36,7 +36,7 @@ func TestDetectSessionRuntimeIdentity_StandaloneDoesNotUseHostnameAsPod(t *testi
 	t.Setenv("KUBERNETES_SERVICE_HOST", "")
 	t.Setenv("KUBERNETES_PORT", "")
 	t.Setenv("HOSTNAME", "dev-host-01")
-	t.Setenv("GOFRAME_INSTANCE_ID", "")
+	t.Setenv("NUCLEUS_INSTANCE_ID", "")
 
 	identity := DetectSessionRuntimeIdentity()
 	if identity.Pod != "" {

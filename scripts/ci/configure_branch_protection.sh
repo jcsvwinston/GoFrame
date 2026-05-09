@@ -3,7 +3,7 @@ set -euo pipefail
 
 usage() {
   cat <<'EOF'
-Configure GitHub branch protection with GoFrame required merge checks.
+Configure GitHub branch protection with Nucleus required merge checks.
 
 Usage:
   bash scripts/ci/configure_branch_protection.sh [options]
@@ -18,7 +18,7 @@ Options:
 
 Examples:
   bash scripts/ci/configure_branch_protection.sh --dry-run
-  bash scripts/ci/configure_branch_protection.sh --repo jcsvwinston/GoFrame --branch main
+  bash scripts/ci/configure_branch_protection.sh --repo jcsvwinston/nucleus --branch main
 EOF
 }
 

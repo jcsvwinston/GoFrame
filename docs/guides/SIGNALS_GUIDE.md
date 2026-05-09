@@ -3,14 +3,14 @@
 Reference date: 2026-04-23.
 Status: Current.
 
-This guide covers GoFrame's current signal model:
+This guide covers Nucleus's current signal model:
 
 - `pkg/signals.Bus` for in-process publish/subscribe
 - `pkg/signals.RedisRelay` for small Redis-backed cross-process forwarding
 
 ## Overview
 
-GoFrame signals are intentionally small and explicit.
+Nucleus signals are intentionally small and explicit.
 
 Use them for:
 

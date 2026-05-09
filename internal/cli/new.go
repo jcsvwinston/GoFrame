@@ -16,7 +16,7 @@ func runNew(args []string, _ io.Reader, stdout, stderr io.Writer) error {
 
 	outDir := fs.String("out", ".", "Parent directory where the project folder will be created")
 	modulePath := fs.String("module", "", "Go module path (default: example.com/<project_name>)")
-	port := fs.Int("port", 8080, "HTTP port in goframe.yaml")
+	port := fs.Int("port", 8080, "HTTP port in nucleus.yml")
 	force := fs.Bool("force", false, "Overwrite scaffold files if the project directory exists")
 	templateName := fs.String("template", "mvc", "Starter template (mvc: full-stack, api: lightweight core-only)")
 
@@ -39,7 +39,7 @@ func runNew(args []string, _ io.Reader, stdout, stderr io.Writer) error {
 		rest = append([]string{projectFirst}, rest...)
 	}
 	if len(rest) != 1 {
-		return fmt.Errorf("usage: goframe new <project_name> [--module example.com/name] [--out .] [--port 8080] [--template mvc]")
+		return fmt.Errorf("usage: nucleus new <project_name> [--module example.com/name] [--out .] [--port 8080] [--template mvc]")
 	}
 	if *port <= 0 {
 		return fmt.Errorf("port must be greater than 0")
@@ -71,7 +71,7 @@ func runNew(args []string, _ io.Reader, stdout, stderr io.Writer) error {
 
 	slug := toSnakeCase(projectName)
 	if slug == "" {
-		slug = "goframe_app"
+		slug = "nucleus_app"
 	}
 
 	frameworkVersion := resolveFrameworkVersion()
@@ -88,7 +88,7 @@ func runNew(args []string, _ io.Reader, stdout, stderr io.Writer) error {
 			body    string
 		}{
 			{relPath: "go.mod", body: fmt.Sprintf(newGoModTemplate, module, frameworkVersion)},
-			{relPath: "goframe.yaml", body: fmt.Sprintf(newAPIConfigTemplate, *port)},
+			{relPath: "nucleus.yml", body: fmt.Sprintf(newAPIConfigTemplate, *port)},
 			{relPath: ".gitignore", body: newGitignoreTemplate},
 			{relPath: "README.md", body: fmt.Sprintf(newReadmeTemplate, projectName)},
 			{relPath: filepath.Join("cmd", "server", "main.go"), body: fmt.Sprintf(newAPIMainTemplate, module, module, module, module, projectName)},
@@ -107,7 +107,7 @@ func runNew(args []string, _ io.Reader, stdout, stderr io.Writer) error {
 			body    string
 		}{
 			{relPath: "go.mod", body: fmt.Sprintf(newGoModTemplate, module, frameworkVersion)},
-			{relPath: "goframe.yaml", body: fmt.Sprintf(newConfigTemplate, *port)},
+			{relPath: "nucleus.yml", body: fmt.Sprintf(newConfigTemplate, *port)},
 			{relPath: ".gitignore", body: newGitignoreTemplate},
 			{relPath: "README.md", body: fmt.Sprintf(newReadmeTemplate, projectName)},
 			{relPath: filepath.Join("cmd", "server", "main.go"), body: fmt.Sprintf(newMainTemplate, module, module, module, module, module, projectName)},
@@ -160,9 +160,9 @@ func runNew(args []string, _ io.Reader, stdout, stderr io.Writer) error {
 		fmt.Fprintf(stdout, "  go run ./cmd/worker\n")
 	}
 	fmt.Fprintf(stdout, "\n")
-	fmt.Fprintf(stdout, "Maintenance (no local GoFrame source needed):\n")
-	fmt.Fprintf(stdout, "  go run github.com/jcsvwinston/GoFrame/cmd/goframe@latest migrate --config goframe.yaml\n")
-	fmt.Fprintf(stdout, "  go run github.com/jcsvwinston/GoFrame/cmd/goframe@latest seed --config goframe.yaml --seeds seeds\n")
+	fmt.Fprintf(stdout, "Maintenance (no local Nucleus source needed):\n")
+	fmt.Fprintf(stdout, "  go run github.com/jcsvwinston/nucleus/cmd/nucleus@latest migrate --config nucleus.yml\n")
+	fmt.Fprintf(stdout, "  go run github.com/jcsvwinston/nucleus/cmd/nucleus@latest seed --config nucleus.yml --seeds seeds\n")
 	fmt.Fprintf(stdout, "\n")
 	fmt.Fprintf(stdout, "Access:\n")
 	if tmpl == "api" {
@@ -184,7 +184,7 @@ func runNew(args []string, _ io.Reader, stdout, stderr io.Writer) error {
 func defaultModulePath(projectName string) string {
 	slug := toSnakeCase(projectName)
 	if slug == "" {
-		slug = "goframe_app"
+		slug = "nucleus_app"
 	}
 	return "example.com/" + slug
 }
@@ -209,7 +209,7 @@ const newGoModTemplate = `module %s
 
 go 1.25
 
-require github.com/jcsvwinston/GoFrame %s
+require github.com/jcsvwinston/nucleus %s
 `
 
 const newConfigTemplate = `database_default: default
@@ -232,7 +232,7 @@ rate_limit_burst: 0
 rate_limit_by_route: false
 rate_limit_by_role: false
 admin_prefix: /admin
-admin_title: GoFrame Admin
+admin_title: Nucleus Admin
 admin_auth_database: default
 admin_bootstrap_username: admin
 admin_bootstrap_email: admin@example.com
@@ -258,7 +258,7 @@ const newGitignoreTemplate = `app.db
 
 const newReadmeTemplate = `# %s
 
-Proyecto generado con goframe CLI.
+Proyecto generado con nucleus CLI.
 
 ## Arranque rapido
 
@@ -289,13 +289,13 @@ import (
 	"%s/internal/models"
 	"%s/internal/repositories"
 	"%s/internal/services"
-	"github.com/jcsvwinston/GoFrame/pkg/app"
-	"github.com/jcsvwinston/GoFrame/pkg/model"
-	"github.com/jcsvwinston/GoFrame/pkg/router"
+	"github.com/jcsvwinston/nucleus/pkg/app"
+	"github.com/jcsvwinston/nucleus/pkg/model"
+	"github.com/jcsvwinston/nucleus/pkg/router"
 )
 
 func main() {
-	cfg, err := app.LoadConfig("goframe.yaml")
+	cfg, err := app.LoadConfig("nucleus.yml")
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -380,7 +380,7 @@ func ensureSeed(sqlDB *sql.DB) error {
 	now := time.Now().UTC()
 	_, err := sqlDB.Exec(
 		"INSERT INTO articles (created_at, updated_at, title, content, published) VALUES (?, ?, ?, ?, ?)",
-		now, now, "Welcome to GoFrame", "This record is editable from /admin and visible via /api/articles.", true,
+		now, now, "Welcome to Nucleus", "This record is editable from /admin and visible via /api/articles.", true,
 	)
 	return err
 }
@@ -395,13 +395,13 @@ import (
 	"%s/internal/repositories"
 	"%s/internal/services"
 	projecttasks "%s/internal/tasks"
-	"github.com/jcsvwinston/GoFrame/pkg/app"
-	gftasks "github.com/jcsvwinston/GoFrame/pkg/tasks"
-	asynqprovider "github.com/jcsvwinston/GoFrame/pkg/tasks/providers/asynq"
+	"github.com/jcsvwinston/nucleus/pkg/app"
+	gftasks "github.com/jcsvwinston/nucleus/pkg/tasks"
+	asynqprovider "github.com/jcsvwinston/nucleus/pkg/tasks/providers/asynq"
 )
 
 func main() {
-	cfg, err := app.LoadConfig("goframe.yaml")
+	cfg, err := app.LoadConfig("nucleus.yml")
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -445,7 +445,7 @@ func main() {
 
 const newArticleModelTemplate = `package models
 
-import "github.com/jcsvwinston/GoFrame/pkg/model"
+import "github.com/jcsvwinston/nucleus/pkg/model"
 
 type Article struct {
 	model.BaseModel
@@ -461,13 +461,13 @@ import (
 	"html/template"
 	"net/http"
 
-	gfrender "github.com/jcsvwinston/GoFrame/pkg/router"
+	gfrender "github.com/jcsvwinston/nucleus/pkg/router"
 )
 
 func HomePage(tpl *template.Template) gfrender.Handler {
 	return func(c *gfrender.Context) error {
 		return c.HTML(http.StatusOK, "home.html", map[string]any{
-			"Title": "GoFrame Starter",
+			"Title": "Nucleus Starter",
 		})
 	}
 }
@@ -479,7 +479,7 @@ import (
 	"net/http"
 
 	"%s/internal/services"
-	gfrender "github.com/jcsvwinston/GoFrame/pkg/router"
+	gfrender "github.com/jcsvwinston/nucleus/pkg/router"
 )
 
 type createArticleInput struct {
@@ -624,7 +624,7 @@ func articleFromRepository(record repositories.Article) Article {
 
 const newArticleContractTemplate = `package contracts
 
-import "github.com/jcsvwinston/GoFrame/pkg/openapi"
+import "github.com/jcsvwinston/nucleus/pkg/openapi"
 
 func init() {
 	RegisterContract(RegisterArticleContract)
@@ -773,7 +773,7 @@ import (
 	"context"
 
 	"%s/internal/services"
-	gftasks "github.com/jcsvwinston/GoFrame/pkg/tasks"
+	gftasks "github.com/jcsvwinston/nucleus/pkg/tasks"
 )
 
 const TaskArticleCreated = "articles.created"
@@ -857,7 +857,7 @@ const newHomeHTMLTemplate = `<!DOCTYPE html>
   <main class="wrap">
     <section class="card">
       <h1>{{ .Title }}</h1>
-      <p>Starter GoFrame generado por CLI.</p>
+      <p>Starter Nucleus generado por CLI.</p>
       <div class="links">
         <a href="/admin">Abrir Admin</a>
         <a href="/api/articles">GET /api/articles</a>
@@ -881,7 +881,7 @@ const newMigrationUpTemplate = `CREATE TABLE IF NOT EXISTS articles (
 const newMigrationDownTemplate = `DROP TABLE IF EXISTS articles;`
 
 const newSeedTemplate = `INSERT INTO articles (created_at, updated_at, title, content, published)
-VALUES (CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 'Seed Article', 'Seed inserted by goframe starter', 1);`
+VALUES (CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 'Seed Article', 'Seed inserted by nucleus starter', 1);`
 
 const newAPIConfigTemplate = `database_default: default
 databases:
@@ -909,12 +909,12 @@ import (
 	"%s/internal/contracts"
 	"%s/internal/repositories"
 	"%s/internal/services"
-	"github.com/jcsvwinston/GoFrame/pkg/app"
-	"github.com/jcsvwinston/GoFrame/pkg/router"
+	"github.com/jcsvwinston/nucleus/pkg/app"
+	"github.com/jcsvwinston/nucleus/pkg/router"
 )
 
 func main() {
-	cfg, err := app.LoadConfig("goframe.yaml")
+	cfg, err := app.LoadConfig("nucleus.yml")
 	if err != nil {
 		log.Fatal(err)
 	}

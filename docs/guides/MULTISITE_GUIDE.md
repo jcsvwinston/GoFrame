@@ -3,7 +3,7 @@
 Reference date: 2026-04-10.
 Status: Current.
 
-This guide covers GoFrame's MultiSite and MultiTenant request scope resolution, including site resolution, tenant routing, database alias routing, and security isolation.
+This guide covers Nucleus's MultiSite and MultiTenant request scope resolution, including site resolution, tenant routing, database alias routing, and security isolation.
 
 ## Table of Contents
 
@@ -21,7 +21,7 @@ This guide covers GoFrame's MultiSite and MultiTenant request scope resolution, 
 
 ## Overview
 
-GoFrame provides request-scope resolution for:
+Nucleus provides request-scope resolution for:
 
 | Feature | Purpose | Resolution Method |
 |---------|---------|-------------------|
@@ -35,7 +35,7 @@ Both features work together and are resolved at the middleware level before reac
 ## MultiSite Configuration
 
 ```yaml
-# goframe.yaml
+# nucleus.yml
 multisite:
   enabled: true
   sites:
@@ -54,7 +54,7 @@ multisite:
 
 ## Site Resolution
 
-GoFrame resolves the current site from the request host:
+Nucleus resolves the current site from the request host:
 
 ### Exact host matching
 
@@ -84,7 +84,7 @@ Matches:
 ### Accessing current site in handlers
 
 ```go
-import "github.com/jcsvwinston/GoFrame/pkg/app"
+import "github.com/jcsvwinston/nucleus/pkg/app"
 
 func (h *Handler) Home(w http.ResponseWriter, r *http.Request) {
     scope := app.RequestScopeFromContext(r.Context())
@@ -105,7 +105,7 @@ func (h *Handler) Home(w http.ResponseWriter, r *http.Request) {
 ## MultiTenant Configuration
 
 ```yaml
-# goframe.yaml
+# nucleus.yml
 multitenant:
   enabled: true
   resolver: subdomain       # Options: subdomain, header
@@ -180,7 +180,7 @@ func (h *Handler) GetArticles(w http.ResponseWriter, r *http.Request) {
 
 ## Tenant-to-Database Routing
 
-GoFrame maps tenants to database aliases:
+Nucleus maps tenants to database aliases:
 
 ### Explicit mapping
 
@@ -231,7 +231,7 @@ func (h *Handler) GetArticles(w http.ResponseWriter, r *http.Request) {
 
 ### `require_isolated_db` guardrail
 
-When `require_isolated_db: true` (default), GoFrame enforces:
+When `require_isolated_db: true` (default), Nucleus enforces:
 
 1. **Startup validation**: Rejects configuration if multiple tenants map to the same database alias.
 2. **Request routing**: Rejects requests when tenant isolation is required but the resolved database is shared.

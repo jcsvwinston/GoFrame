@@ -1,5 +1,5 @@
 // Package model provides the model registry, metadata extraction, and generic
-// CRUD operations for the GoFrame framework. It uses reflection to extract
+// CRUD operations for the Nucleus framework. It uses reflection to extract
 // struct metadata at registration time and uses the native SQL runtime.
 package model
 
@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-// BaseModel provides the standard fields that all GoFrame models should embed.
+// BaseModel provides the standard fields that all Nucleus models should embed.
 // It is the equivalent of Django's models.Model.
 type BaseModel struct {
 	ID        uint       `db:"pk" json:"id"`

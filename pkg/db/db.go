@@ -1,4 +1,4 @@
-// Package db provides database connectivity for the GoFrame framework.
+// Package db provides database connectivity for the Nucleus framework.
 // The runtime is implemented directly on top of database/sql.
 package db
 

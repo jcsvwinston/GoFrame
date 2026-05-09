@@ -6,7 +6,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/jcsvwinston/GoFrame/pkg/observe"
+	"github.com/jcsvwinston/nucleus/pkg/observe"
 )
 
 func newTestDB(t *testing.T) *DB {

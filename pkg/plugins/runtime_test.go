@@ -23,7 +23,7 @@ func TestExecuteRequestSuccess(t *testing.T) {
 	}
 
 	dir := t.TempDir()
-	pluginPath := filepath.Join(dir, "goframe-plugin-success")
+	pluginPath := filepath.Join(dir, "nucleus-plugin-success")
 	writePluginRuntimeExecutable(t, pluginPath, `#!/bin/sh
 cat >/dev/null
 echo '{"version":"v1","ok":true,"output":{"accepted":true}}'
@@ -74,7 +74,7 @@ func TestExecuteRequestErrorExitCodeMapping(t *testing.T) {
 	}
 
 	dir := t.TempDir()
-	pluginPath := filepath.Join(dir, "goframe-plugin-error")
+	pluginPath := filepath.Join(dir, "nucleus-plugin-error")
 	writePluginRuntimeExecutable(t, pluginPath, `#!/bin/sh
 cat >/dev/null
 echo '{"version":"v1","ok":false,"retriable":true,"error":{"code":"PROVIDER_RATE_LIMIT","message":"rate limited"}}'
@@ -128,7 +128,7 @@ func TestExecuteRequestTimeout(t *testing.T) {
 	}
 
 	dir := t.TempDir()
-	pluginPath := filepath.Join(dir, "goframe-plugin-timeout")
+	pluginPath := filepath.Join(dir, "nucleus-plugin-timeout")
 	writePluginRuntimeExecutable(t, pluginPath, `#!/bin/sh
 sleep 2
 cat >/dev/null
@@ -414,7 +414,7 @@ func TestExecuteRequestResponseOKFalse(t *testing.T) {
 	}
 
 	dir := t.TempDir()
-	pluginPath := filepath.Join(dir, "goframe-plugin-false")
+	pluginPath := filepath.Join(dir, "nucleus-plugin-false")
 	writePluginRuntimeExecutable(t, pluginPath, `#!/bin/sh
 cat >/dev/null
 echo '{"version":"v1","ok":false,"error":{"code":"REJECTED","message":"validation failed"}}'

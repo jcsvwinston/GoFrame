@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/jcsvwinston/GoFrame/pkg/app"
+	"github.com/jcsvwinston/nucleus/pkg/app"
 )
 
 type healthComponent struct {
@@ -30,7 +30,7 @@ func runHealth(args []string, _ io.Reader, stdout, stderr io.Writer) error {
 	fs := flag.NewFlagSet("health", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 
-	configPath := fs.String("config", "", "Path to goframe config file")
+	configPath := fs.String("config", "", "Path to nucleus config file")
 	timeout := fs.Duration("timeout", 3*time.Second, "Health check timeout")
 	asJSON := fs.Bool("json", false, "Print output as JSON")
 	deploy := fs.Bool("deploy", false, "Run additional deployment hardening checks")
@@ -265,7 +265,7 @@ func applyDeployMailChecks(cfg *app.Config, report *healthReport) {
 		addHealthComponent(report, healthComponent{
 			Name:    "deploy.mail_driver",
 			Status:  "ok",
-			Details: fmt.Sprintf("mail_driver=%s (external plugin goframe-plugin-%s or legacy goframe-mail-%s)", driver, driver, driver),
+			Details: fmt.Sprintf("mail_driver=%s (external plugin nucleus-plugin-%s)", driver, driver),
 		})
 	}
 }

@@ -1,7 +1,7 @@
 package models
 import (
 	"time"
-	"github.com/jcsvwinston/GoFrame/pkg/model"
+	"github.com/jcsvwinston/nucleus/pkg/model"
 )
 type Device struct {
 	model.BaseModel
