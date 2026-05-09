@@ -2,6 +2,7 @@ package outbox
 
 import (
 	"context"
+	"strings"
 	"testing"
 )
 
@@ -114,24 +115,12 @@ func TestKafkaBridge(t *testing.T) {
 		Topic:   "events",
 	}
 
-	bridge, err := NewKafkaBridge(cfg)
-	if err != nil {
-		t.Fatalf("create kafka bridge: %v", err)
-	}
-
-	if bridge.Name() != "test-kafka" {
-		t.Fatalf("unexpected bridge name: %s", bridge.Name())
-	}
-
-	// Test that send returns not implemented error
-	ctx := context.Background()
-	err = bridge.Send(ctx, Message{})
+	_, err := NewKafkaBridge(cfg)
 	if err == nil {
-		t.Fatal("expected not implemented error")
+		t.Fatal("expected disabled kafka bridge error")
 	}
-
-	if err := bridge.Close(); err != nil {
-		t.Fatalf("close bridge: %v", err)
+	if !strings.Contains(err.Error(), "disabled") {
+		t.Fatalf("expected disabled kafka bridge error, got %v", err)
 	}
 }
 

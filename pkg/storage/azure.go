@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"net/url"
 	"time"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob"
@@ -96,6 +95,10 @@ func (s *azureStore) targetContainer(opts PutOptions) string {
 
 // Put uploads a file from an io.Reader to Azure Blob Storage.
 func (s *azureStore) Put(ctx context.Context, key string, reader io.Reader, opts PutOptions) (ObjectInfo, error) {
+	key = normalizeKey(key)
+	if err := validateKey(key); err != nil {
+		return ObjectInfo{}, err
+	}
 	containerName := s.targetContainer(opts)
 
 	data, err := io.ReadAll(reader)
@@ -140,58 +143,91 @@ func (s *azureStore) Put(ctx context.Context, key string, reader io.Reader, opts
 
 // Get retrieves a file by key from Azure Blob Storage.
 func (s *azureStore) Get(ctx context.Context, key string) (io.ReadCloser, ObjectInfo, error) {
-	downloadResp, err := s.client.DownloadStream(ctx, s.containerName, key, nil)
-	if err != nil {
-		return nil, ObjectInfo{}, normalizeError(key, err)
+	key = normalizeKey(key)
+	if err := validateKey(key); err != nil {
+		return nil, ObjectInfo{}, err
 	}
 
-	info := ObjectInfo{
-		Key:        key,
-		Visibility: Private,
-	}
+	for _, target := range s.lookupContainers() {
+		downloadResp, err := s.client.DownloadStream(ctx, target.name, key, nil)
+		if err != nil {
+			if isNotFoundError(err) {
+				continue
+			}
+			return nil, ObjectInfo{}, normalizeError(key, err)
+		}
 
-	if downloadResp.ContentLength != nil {
-		info.Size = *downloadResp.ContentLength
-	}
-	if downloadResp.ContentType != nil {
-		info.ContentType = *downloadResp.ContentType
-	}
-	if downloadResp.LastModified != nil {
-		info.UpdatedAt = *downloadResp.LastModified
-	}
+		info := ObjectInfo{
+			Key:        key,
+			Visibility: target.visibility,
+		}
 
-	return downloadResp.Body, info, nil
+		if downloadResp.ContentLength != nil {
+			info.Size = *downloadResp.ContentLength
+		}
+		if downloadResp.ContentType != nil {
+			info.ContentType = *downloadResp.ContentType
+		}
+		if downloadResp.LastModified != nil {
+			info.UpdatedAt = *downloadResp.LastModified
+		}
+
+		return downloadResp.Body, info, nil
+	}
+	return nil, ObjectInfo{}, ErrNotFound(key)
 }
 
 // Delete removes an object by key. Idempotent: no error if key doesn't exist.
 func (s *azureStore) Delete(ctx context.Context, key string) error {
-	_, err := s.client.DeleteBlob(ctx, s.containerName, key, nil)
-	if err != nil {
-		if isNotFoundError(err) {
-			return nil
+	key = normalizeKey(key)
+	if err := validateKey(key); err != nil {
+		return err
+	}
+	for _, target := range s.lookupContainers() {
+		_, err := s.client.DeleteBlob(ctx, target.name, key, nil)
+		if err != nil {
+			if isNotFoundError(err) {
+				continue
+			}
+			return normalizeError(key, err)
 		}
-		return normalizeError(key, err)
 	}
 	return nil
 }
 
 // Exists checks if a key exists in Azure Blob Storage.
 func (s *azureStore) Exists(ctx context.Context, key string) (bool, error) {
-	_, err := s.client.DownloadStream(ctx, s.containerName, key, &azblob.DownloadStreamOptions{
-		Range: blob.HTTPRange{Count: 0},
-	})
-	if err != nil {
-		if isNotFoundError(err) {
-			return false, nil
-		}
-		return false, normalizeError(key, err)
+	key = normalizeKey(key)
+	if err := validateKey(key); err != nil {
+		return false, err
 	}
-	return true, nil
+	for _, target := range s.lookupContainers() {
+		_, err := s.client.DownloadStream(ctx, target.name, key, &azblob.DownloadStreamOptions{
+			Range: blob.HTTPRange{Count: 0},
+		})
+		if err == nil {
+			return true, nil
+		}
+		if !isNotFoundError(err) {
+			return false, normalizeError(key, err)
+		}
+	}
+	return false, nil
 }
 
 // List returns objects with the given prefix and delimiter support.
 func (s *azureStore) List(ctx context.Context, opts ListOptions) (ListResult, error) {
 	var result ListResult
+	opts.Prefix = normalizeKey(opts.Prefix)
+	opts.Marker = normalizeKey(opts.Marker)
+	if err := validateKeyPrefix(opts.Prefix); err != nil {
+		return result, err
+	}
+	if opts.Marker != "" {
+		if err := validateKey(opts.Marker); err != nil {
+			return result, err
+		}
+	}
 
 	if opts.Delimiter != "" {
 		// Use hierarchy mode for directory-like listing.
@@ -284,6 +320,10 @@ func strPtr(s string) *string {
 
 // PublicURL returns a publicly accessible URL for a key.
 func (s *azureStore) PublicURL(ctx context.Context, key string, opts URLConfig) (string, error) {
+	key = normalizeKey(key)
+	if err := validateKey(key); err != nil {
+		return "", err
+	}
 	if s.publicContainer == "" {
 		return "", nil
 	}
@@ -299,17 +339,33 @@ func (s *azureStore) PublicURL(ctx context.Context, key string, opts URLConfig) 
 		return "", normalizeError(key, err)
 	}
 
-	escapedKey := url.PathEscape(key)
+	escapedKey := escapeURLPath(key)
 	return fmt.Sprintf("https://%s.blob.core.windows.net/%s/%s", s.accountName, s.publicContainer, escapedKey), nil
 }
 
 // SignedURL returns a time-limited URL for accessing a private object.
 func (s *azureStore) SignedURL(ctx context.Context, key string, expires time.Duration, opts URLConfig) (string, error) {
+	key = normalizeKey(key)
+	if err := validateKey(key); err != nil {
+		return "", err
+	}
 	if expires <= 0 {
 		expires = 24 * time.Hour
 	}
 
-	containerClient := s.client.ServiceClient().NewContainerClient(s.containerName)
+	containerName := s.containerName
+	if s.publicContainer != "" {
+		_, err := s.client.DownloadStream(ctx, s.publicContainer, key, &azblob.DownloadStreamOptions{
+			Range: blob.HTTPRange{Count: 0},
+		})
+		if err == nil {
+			containerName = s.publicContainer
+		} else if !isNotFoundError(err) {
+			return "", normalizeError(key, err)
+		}
+	}
+
+	containerClient := s.client.ServiceClient().NewContainerClient(containerName)
 	blobClient := containerClient.NewBlobClient(key)
 
 	startTime := time.Now().UTC()
@@ -329,11 +385,34 @@ func (s *azureStore) SignedURL(ctx context.Context, key string, expires time.Dur
 
 // Copy copies an object from srcKey to dstKey within the same container.
 func (s *azureStore) Copy(ctx context.Context, srcKey, dstKey string) (ObjectInfo, error) {
-	srcContainerClient := s.client.ServiceClient().NewContainerClient(s.containerName)
+	srcKey = normalizeKey(srcKey)
+	dstKey = normalizeKey(dstKey)
+	if err := validateKey(srcKey); err != nil {
+		return ObjectInfo{}, err
+	}
+	if err := validateKey(dstKey); err != nil {
+		return ObjectInfo{}, err
+	}
+
+	containerName := s.containerName
+	visibility := Private
+	if s.publicContainer != "" {
+		_, err := s.client.DownloadStream(ctx, s.publicContainer, srcKey, &azblob.DownloadStreamOptions{
+			Range: blob.HTTPRange{Count: 0},
+		})
+		if err == nil {
+			containerName = s.publicContainer
+			visibility = Public
+		} else if !isNotFoundError(err) {
+			return ObjectInfo{}, normalizeError(srcKey, err)
+		}
+	}
+
+	srcContainerClient := s.client.ServiceClient().NewContainerClient(containerName)
 	srcBlobClient := srcContainerClient.NewBlobClient(srcKey)
 	srcURL := srcBlobClient.URL()
 
-	dstContainerClient := s.client.ServiceClient().NewContainerClient(s.containerName)
+	dstContainerClient := s.client.ServiceClient().NewContainerClient(containerName)
 	dstBlobClient := dstContainerClient.NewBlobClient(dstKey)
 
 	_, err := dstBlobClient.CopyFromURL(ctx, srcURL, nil)
@@ -349,7 +428,7 @@ func (s *azureStore) Copy(ctx context.Context, srcKey, dstKey string) (ObjectInf
 
 	info := ObjectInfo{
 		Key:        dstKey,
-		Visibility: Private,
+		Visibility: visibility,
 	}
 
 	if propResp.ContentLength != nil {
@@ -370,4 +449,20 @@ func (s *azureStore) Close() error {
 	s.client = nil
 	s.sharedKeyCred = nil
 	return nil
+}
+
+type azureLookupContainer struct {
+	name       string
+	visibility Visibility
+}
+
+func (s *azureStore) lookupContainers() []azureLookupContainer {
+	containers := make([]azureLookupContainer, 0, 2)
+	if s.publicContainer != "" {
+		containers = append(containers, azureLookupContainer{name: s.publicContainer, visibility: Public})
+	}
+	if s.containerName != "" {
+		containers = append(containers, azureLookupContainer{name: s.containerName, visibility: Private})
+	}
+	return containers
 }

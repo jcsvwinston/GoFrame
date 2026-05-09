@@ -6,6 +6,7 @@ import (
 	"io"
 	"mime"
 	"net/url"
+	"path"
 	"strings"
 	"time"
 
@@ -141,6 +142,9 @@ func (s *S3Store) Put(ctx context.Context, key string, reader io.Reader, opts Pu
 
 func (s *S3Store) Get(ctx context.Context, key string) (io.ReadCloser, ObjectInfo, error) {
 	key = normalizeKey(key)
+	if err := validateKey(key); err != nil {
+		return nil, ObjectInfo{}, err
+	}
 
 	bucket := s.bucket
 	// Check public bucket first for public objects
@@ -188,6 +192,9 @@ func (s *S3Store) Get(ctx context.Context, key string) (io.ReadCloser, ObjectInf
 
 func (s *S3Store) Delete(ctx context.Context, key string) error {
 	key = normalizeKey(key)
+	if err := validateKey(key); err != nil {
+		return err
+	}
 
 	// Try both buckets
 	for _, bucket := range []string{s.bucket, s.publicBucket} {
@@ -208,6 +215,9 @@ func (s *S3Store) Delete(ctx context.Context, key string) error {
 
 func (s *S3Store) Exists(ctx context.Context, key string) (bool, error) {
 	key = normalizeKey(key)
+	if err := validateKey(key); err != nil {
+		return false, err
+	}
 
 	for _, bucket := range []string{s.bucket, s.publicBucket} {
 		if bucket == "" {
@@ -226,6 +236,17 @@ func (s *S3Store) Exists(ctx context.Context, key string) (bool, error) {
 }
 
 func (s *S3Store) List(ctx context.Context, opts ListOptions) (ListResult, error) {
+	opts.Prefix = normalizeKey(opts.Prefix)
+	opts.Marker = normalizeKey(opts.Marker)
+	if err := validateKeyPrefix(opts.Prefix); err != nil {
+		return ListResult{}, err
+	}
+	if opts.Marker != "" {
+		if err := validateKey(opts.Marker); err != nil {
+			return ListResult{}, err
+		}
+	}
+
 	doneCh := make(chan struct{})
 	defer close(doneCh)
 
@@ -269,13 +290,17 @@ func (s *S3Store) List(ctx context.Context, opts ListOptions) (ListResult, error
 }
 
 func (s *S3Store) PublicURL(ctx context.Context, key string, opts URLConfig) (string, error) {
+	key = normalizeKey(key)
+	if err := validateKey(key); err != nil {
+		return "", err
+	}
+
 	// PublicURL only works for public objects in the public bucket.
 	// If no public bucket is configured, return empty.
 	if s.publicBucket == "" {
 		return "", nil
 	}
 
-	key = normalizeKey(key)
 	// Check if object exists in public bucket
 	_, err := s.client.StatObject(ctx, s.publicBucket, key, minio.StatObjectOptions{})
 	if err != nil {
@@ -289,6 +314,9 @@ func (s *S3Store) PublicURL(ctx context.Context, key string, opts URLConfig) (st
 
 func (s *S3Store) SignedURL(ctx context.Context, key string, expires time.Duration, opts URLConfig) (string, error) {
 	key = normalizeKey(key)
+	if err := validateKey(key); err != nil {
+		return "", err
+	}
 
 	bucket := s.bucket
 	if s.publicBucket != "" {
@@ -318,6 +346,12 @@ func (s *S3Store) SignedURL(ctx context.Context, key string, expires time.Durati
 func (s *S3Store) Copy(ctx context.Context, srcKey, dstKey string) (ObjectInfo, error) {
 	srcKey = normalizeKey(srcKey)
 	dstKey = normalizeKey(dstKey)
+	if err := validateKey(srcKey); err != nil {
+		return ObjectInfo{}, err
+	}
+	if err := validateKey(dstKey); err != nil {
+		return ObjectInfo{}, err
+	}
 
 	src := minio.CopySrcOptions{
 		Bucket: s.bucket,
@@ -360,11 +394,15 @@ func isS3NotFound(err error) bool {
 }
 
 func normalizeKey(key string) string {
-	key = strings.TrimPrefix(key, "/")
+	key = strings.TrimSpace(key)
 	key = strings.ReplaceAll(key, "\\", "/")
+	key = strings.TrimLeft(key, "/")
 	// Collapse multiple slashes
 	for strings.Contains(key, "//") {
 		key = strings.ReplaceAll(key, "//", "/")
+	}
+	if key == "." {
+		return ""
 	}
 	return key
 }
@@ -373,8 +411,30 @@ func validateKey(key string) error {
 	if key == "" {
 		return ErrInvalidKey("empty key")
 	}
+	if strings.ContainsRune(key, '\x00') {
+		return ErrInvalidKey("contains NUL byte")
+	}
 	if strings.Contains(key, "//") {
 		return ErrInvalidKey("contains double slash")
 	}
+	if path.IsAbs(key) {
+		return ErrInvalidKey("absolute paths are not allowed")
+	}
+	if path.Clean(key) != key {
+		return ErrInvalidKey("contains non-canonical path segments")
+	}
+	for _, segment := range strings.Split(key, "/") {
+		if segment == "." || segment == ".." {
+			return ErrInvalidKey("path traversal is not allowed")
+		}
+	}
 	return nil
+}
+
+func validateKeyPrefix(prefix string) error {
+	prefix = strings.TrimSuffix(prefix, "/")
+	if prefix == "" {
+		return nil
+	}
+	return validateKey(prefix)
 }

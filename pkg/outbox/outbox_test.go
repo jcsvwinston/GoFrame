@@ -157,6 +157,81 @@ func TestDispatcherRetriesThenFails(t *testing.T) {
 	}
 }
 
+func TestDispatcherBridgeRoutingRequiresRoute(t *testing.T) {
+	db := openOutboxTestDB(t)
+	store, err := NewStore(db, Config{Flavor: FlavorSQLite})
+	if err != nil {
+		t.Fatalf("new store: %v", err)
+	}
+	if _, err := store.Enqueue(context.Background(), Entry{
+		Topic:   "billing.invoice.created",
+		Payload: map[string]any{"invoice_id": "inv_unrouted"},
+	}); err != nil {
+		t.Fatalf("enqueue: %v", err)
+	}
+
+	dispatcher, err := NewDispatcher(store, func(ctx context.Context, msg Message) error {
+		return nil
+	}, DispatcherConfig{
+		LeaseOwner:  "test-node",
+		BatchSize:   1,
+		MaxAttempts: 1,
+		Registry:    NewBridgeRegistry(),
+		Router:      NewRouter(),
+	})
+	if err != nil {
+		t.Fatalf("new dispatcher: %v", err)
+	}
+
+	result, err := dispatcher.RunOnce(context.Background())
+	if err != nil {
+		t.Fatalf("run once: %v", err)
+	}
+	if result.Attempted != 1 || result.Failed != 1 || result.Delivered != 0 {
+		t.Fatalf("unexpected dispatch result: %#v", result)
+	}
+
+	snapshot := store.Snapshot(context.Background())
+	if snapshot.Failed != 1 || snapshot.Delivered != 0 {
+		t.Fatalf("expected unrouted message to remain visible as failed, got %#v", snapshot)
+	}
+}
+
+func TestDispatcherBridgeRoutingCanExplicitlyIgnoreMissingRoute(t *testing.T) {
+	db := openOutboxTestDB(t)
+	store, err := NewStore(db, Config{Flavor: FlavorSQLite})
+	if err != nil {
+		t.Fatalf("new store: %v", err)
+	}
+	if _, err := store.Enqueue(context.Background(), Entry{
+		Topic:   "metrics.low_value",
+		Payload: map[string]any{"ok": true},
+	}); err != nil {
+		t.Fatalf("enqueue: %v", err)
+	}
+
+	dispatcher, err := NewDispatcher(store, func(ctx context.Context, msg Message) error {
+		return nil
+	}, DispatcherConfig{
+		LeaseOwner:         "test-node",
+		BatchSize:          1,
+		Registry:           NewBridgeRegistry(),
+		Router:             NewRouter(),
+		MissingRoutePolicy: MissingRouteIgnore,
+	})
+	if err != nil {
+		t.Fatalf("new dispatcher: %v", err)
+	}
+
+	result, err := dispatcher.RunOnce(context.Background())
+	if err != nil {
+		t.Fatalf("run once: %v", err)
+	}
+	if result.Delivered != 1 || result.Failed != 0 {
+		t.Fatalf("unexpected dispatch result: %#v", result)
+	}
+}
+
 func openOutboxTestDB(t *testing.T) *sql.DB {
 	t.Helper()
 

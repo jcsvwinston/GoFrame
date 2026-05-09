@@ -37,7 +37,7 @@ Core types:
 | `storage.PutOptions` | Configures uploads: `Visibility`, `ContentType`, `Metadata`, `TenantPrefix` |
 | `storage.ObjectInfo` | Metadata returned after upload or stat: `Key`, `Size`, `ContentType`, `Visibility`, `UpdatedAt` |
 | `storage.Visibility` | `Private` (default) or `Public` --- controls object accessibility |
-| `storage.CredentialSource` | Flexible credential resolution: `value`, `env_var`, `file`, `secret_manager` |
+| `storage.CredentialSource` | Credential resolution: `value`, `env_var`, `file`, `secret_manager` with `env:` references only |
 | `storage.ListOptions` | Configures listing: `Prefix`, `Delimiter`, `Limit`, `Marker` |
 | `storage.ListResult` | Response from `List()`: `Objects`, `CommonPrefixes`, `NextMarker`, `Truncated` |
 
@@ -63,7 +63,7 @@ All providers implement the same `Store` interface. Switching providers requires
 
 Storage is configured via YAML under the `storage` key.
 
-> **Note on credential sources:** The `storage.CredentialSource` type in `pkg/storage` supports four resolution methods (`value`, `env_var`, `file`, `secret_manager`). However, the application-level YAML config currently exposes credentials as plain strings only (direct values). Full `CredentialSource` support at the YAML level is planned for a future release. For production secret injection, use environment variables at the OS/container level before starting the process.
+> **Note on credential sources:** The `storage.CredentialSource` type in `pkg/storage` supports `value`, `env_var`, `file`, and `secret_manager`, but `secret_manager` currently accepts only `env:VAR_NAME` references. Cloud Secret Manager SDK lookups are not implemented; inject cloud-managed secrets into environment variables or mounted files before starting the process.
 
 ### S3 (AWS)
 

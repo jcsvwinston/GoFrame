@@ -20,8 +20,7 @@ jobs:
       fail-fast: false
       matrix:
         go-version:
-          - "1.25.x"
-          - "1.26.x"
+          - "1.26.3"
 
     steps:
       - name: Checkout
@@ -34,23 +33,37 @@ jobs:
           cache: true
 
       - name: Setup Node
-        if: matrix.go-version == '1.26.x'
         uses: actions/setup-node@v6
         with:
           node-version: "24"
 
+      - name: Verify Go Modules
+        run: go mod verify
+
       - name: Run Go Tests
         run: go test ./...
 
-      - name: Run Example Smoke
-        if: matrix.go-version == '1.26.x'
-        run: go test ./examples/mvc_api -run TestExampleMVCAPIAdmin_Smoke -v
+      - name: Run Go Vet
+        run: go vet ./...
 
-      - name: Check Admin UI JS Syntax
-        if: matrix.go-version == '1.26.x'
+      - name: Run Go Build
+        run: go build ./...
+
+      - name: Run Core Race Tests
+        run: go test -race ./pkg/... ./internal/cli ./cmd/goframe ./examples/mvc_api/... ./examples/plugins/...
+
+      - name: Run Example Smoke
+        run: go test ./examples/mvc_api/cmd/server -run '^TestExampleMVCAPIAdmin_Smoke$' -count=1 -v
+
+      - name: Build Admin UI
+        working-directory: pkg/admin/ui
         run: |
-          node --check pkg/admin/ui/components.js
-          node --check pkg/admin/ui/app.js
+          npm ci
+          npm run build
+          npm audit --omit=dev --audit-level=high
+
+      - name: Run govulncheck
+        run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...
 
   db-matrix-required:
     name: DB Matrix Required (${{ matrix.profile }})
@@ -98,7 +111,7 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v6
         with:
-          go-version: "1.26.x"
+          go-version: "1.26.3"
           cache: true
 
       - name: Run DB runtime smoke
@@ -132,7 +145,7 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v6
         with:
-          go-version: "1.26.x"
+          go-version: "1.26.3"
           cache: true
 
       - name: Wait for SQL Server port
@@ -177,7 +190,7 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v6
         with:
-          go-version: "1.26.x"
+          go-version: "1.26.3"
           cache: true
 
       - name: Wait for Oracle port
@@ -210,7 +223,7 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v6
         with:
-          go-version: "1.26.x"
+          go-version: "1.26.3"
           cache: true
 
       - name: Run fixture compatibility harness
@@ -239,7 +252,7 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v6
         with:
-          go-version: "1.26.x"
+          go-version: "1.26.3"
           cache: true
 
       - name: Validate stable contract freeze baselines

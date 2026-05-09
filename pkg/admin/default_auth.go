@@ -3,9 +3,9 @@ package admin
 import (
 	"context"
 	"database/sql"
-	"embed"
 	"errors"
 	"fmt"
+	"html"
 	"io/fs"
 	"net/http"
 	"strings"
@@ -21,9 +21,6 @@ const (
 	adminSessionEmailKey     = "__goframe_admin_email"
 	adminSessionSuperuserKey = "__goframe_admin_superuser"
 )
-
-//go:embed all:ui/dist/*
-var loginUIFS embed.FS
 
 // DatabaseAdminAuth is the default admin auth provider wired by pkg/app.
 // Behavior:
@@ -182,41 +179,65 @@ func (a *DatabaseAdminAuth) handleLoginPOST(w http.ResponseWriter, r *http.Reque
 }
 
 func (a *DatabaseAdminAuth) renderLoginPage(w http.ResponseWriter, status int, next, errorMsg, infoMsg string) {
-	// Serve the React login page from ui/dist/index.html
-	loginUIContent, err := fs.Sub(loginUIFS, "ui/dist")
-	if err != nil {
-		http.Error(w, "login UI not found", http.StatusInternalServerError)
-		return
-	}
-
-	content, err := fs.ReadFile(loginUIContent, "index.html")
-	if err != nil {
-		http.Error(w, "login UI not found", http.StatusInternalServerError)
-		return
-	}
-
-	// Inject admin prefix as a <meta> tag to avoid CSP issues with inline scripts.
 	adminPrefix := a.prefix
 	if adminPrefix == "" {
 		adminPrefix = DefaultPrefix
 	}
 
-	// Inject <meta name="goframe-admin-prefix" content="..."> immediately
-	// after <head>. This avoids Content-Security-Policy violations that
-	// occur with inline <script> tags.
-	injection := fmt.Sprintf(`<head><meta name="goframe-admin-prefix" content="%s">`, adminPrefix)
-	contentStr := string(content)
-	if strings.Contains(contentStr, "<head>") {
-		contentStr = strings.Replace(contentStr, "<head>", injection, 1)
-	} else {
-		// If no <head> tag, prepend the meta tag
-		contentStr = injection + "\n" + contentStr
+	if loginUIContent, ok := adminUIBuildFS(); ok {
+		content, err := fs.ReadFile(loginUIContent, "index.html")
+		if err == nil {
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			w.WriteHeader(status)
+			_, _ = w.Write(injectAdminPrefix(content, adminPrefix))
+			return
+		}
 	}
-	content = []byte(contentStr)
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(status)
-	_, _ = w.Write(content)
+	_, _ = w.Write([]byte(fallbackLoginPage(adminPrefix, next, errorMsg, infoMsg)))
+}
+
+func fallbackLoginPage(adminPrefix, next, errorMsg, infoMsg string) string {
+	var message string
+	if errorMsg != "" {
+		message = `<p role="alert">` + html.EscapeString(errorMsg) + `</p>`
+	} else if infoMsg != "" {
+		message = `<p>` + html.EscapeString(infoMsg) + `</p>`
+	}
+	return `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="goframe-admin-prefix" content="` + html.EscapeString(adminPrefix) + `">
+  <title>GoFrame Admin Login</title>
+  <style>
+    body { margin: 0; min-height: 100vh; display: grid; place-items: center; font-family: system-ui, sans-serif; background: #f6f7f9; color: #15171a; }
+    main { width: min(360px, calc(100vw - 32px)); background: #fff; border: 1px solid #d8dde6; border-radius: 8px; padding: 24px; box-shadow: 0 8px 24px rgba(15, 23, 42, 0.08); }
+    h1 { margin: 0 0 20px; font-size: 1.25rem; }
+    label { display: block; margin-top: 14px; font-weight: 600; }
+    input { box-sizing: border-box; width: 100%; margin-top: 6px; padding: 10px 12px; border: 1px solid #b9c0cc; border-radius: 6px; font: inherit; }
+    button { width: 100%; margin-top: 20px; padding: 11px 12px; border: 0; border-radius: 6px; background: #1f6feb; color: #fff; font: inherit; font-weight: 700; cursor: pointer; }
+    p[role="alert"] { padding: 10px 12px; border-radius: 6px; background: #fff1f2; color: #9f1239; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>GoFrame Admin</h1>
+    ` + message + `
+    <form method="post">
+      <input type="hidden" name="next" value="` + html.EscapeString(next) + `">
+      <label for="username">Username or email</label>
+      <input id="username" name="username" autocomplete="username" required>
+      <label for="password">Password</label>
+      <input id="password" name="password" type="password" autocomplete="current-password" required>
+      <button type="submit">Sign in</button>
+    </form>
+  </main>
+</body>
+</html>`
 }
 
 func (a *DatabaseAdminAuth) sanitizeNext(raw string) string {

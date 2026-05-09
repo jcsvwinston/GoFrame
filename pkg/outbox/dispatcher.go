@@ -9,7 +9,22 @@ import (
 	"time"
 )
 
-var ErrLeaseOwnerRequired = fmt.Errorf("outbox: lease owner is required")
+var (
+	ErrLeaseOwnerRequired = fmt.Errorf("outbox: lease owner is required")
+	ErrNoRouteMatched     = fmt.Errorf("outbox: no bridge route matched message topic")
+)
+
+// MissingRoutePolicy controls how bridge dispatch handles a message whose
+// topic has no configured bridge route.
+type MissingRoutePolicy string
+
+const (
+	// MissingRouteError keeps the message durable by retrying/failing it.
+	MissingRouteError MissingRoutePolicy = "error"
+	// MissingRouteIgnore preserves the old drop-on-the-floor behaviour only
+	// when an application has explicitly opted into it.
+	MissingRouteIgnore MissingRoutePolicy = "ignore"
+)
 
 // HandlerFunc delivers one claimed outbox message.
 //
@@ -31,19 +46,21 @@ type HandlerFunc func(context.Context, Message) error
 // MaxDelay is the maximum retry delay.
 // Registry is the bridge registry for external message delivery (optional).
 // Router is the topic router for determining which bridges receive messages (optional).
+// MissingRoutePolicy controls whether an unrouted bridge message is an error or intentionally ignored.
 //
 // If Registry and Router are configured, the dispatcher will use bridge-based routing.
 // Otherwise, it will use the traditional HandlerFunc for message delivery.
 type DispatcherConfig struct {
-	LeaseOwner    string
-	LeaseDuration time.Duration
-	PollInterval  time.Duration
-	BatchSize     int
-	MaxAttempts   int
-	BaseDelay     time.Duration
-	MaxDelay      time.Duration
-	Registry      *BridgeRegistry
-	Router        *Router
+	LeaseOwner         string
+	LeaseDuration      time.Duration
+	PollInterval       time.Duration
+	BatchSize          int
+	MaxAttempts        int
+	BaseDelay          time.Duration
+	MaxDelay           time.Duration
+	Registry           *BridgeRegistry
+	Router             *Router
+	MissingRoutePolicy MissingRoutePolicy
 }
 
 // DispatchResult summarizes one dispatcher pass.
@@ -79,13 +96,14 @@ type Dispatcher struct {
 // These defaults are suitable for development and can be overridden for production.
 func DefaultDispatcherConfig() DispatcherConfig {
 	return DispatcherConfig{
-		LeaseOwner:    "goframe-outbox",
-		LeaseDuration: 30 * time.Second,
-		PollInterval:  time.Second,
-		BatchSize:     10,
-		MaxAttempts:   5,
-		BaseDelay:     time.Second,
-		MaxDelay:      time.Minute,
+		LeaseOwner:         "goframe-outbox",
+		LeaseDuration:      30 * time.Second,
+		PollInterval:       time.Second,
+		BatchSize:          10,
+		MaxAttempts:        5,
+		BaseDelay:          time.Second,
+		MaxDelay:           time.Minute,
+		MissingRoutePolicy: MissingRouteError,
 	}
 }
 
@@ -205,14 +223,22 @@ func (d *Dispatcher) RunOnce(ctx context.Context) (DispatchResult, error) {
 // dispatchViaBridges delivers a message to all bridges that match its topic.
 //
 // This method uses the router to find matching bridges, then sends the message
-// to each bridge. If no bridges match, the message is treated as delivered.
+// to each bridge. If no bridges match, MissingRoutePolicy decides whether the
+// message is retried/failed or intentionally ignored.
 // If any bridge fails to send, all errors are collected and returned.
 func (d *Dispatcher) dispatchViaBridges(ctx context.Context, msg Message) error {
 	// Find bridges that match this topic
 	bridgeNames := d.cfg.Router.Match(msg.Topic)
 	if len(bridgeNames) == 0 {
-		// No bridges configured for this topic - treat as delivered
-		return nil
+		if d.cfg.MissingRoutePolicy == MissingRouteIgnore {
+			return nil
+		}
+		// No bridges configured for this topic: keep the message visible.
+		return fmt.Errorf("%w %q", ErrNoRouteMatched, msg.Topic)
+	}
+
+	if len(d.cfg.Registry.List()) == 0 && d.cfg.MissingRoutePolicy != MissingRouteIgnore {
+		return fmt.Errorf("outbox: bridge route matched topic %q but registry is empty", msg.Topic)
 	}
 
 	// Send to all matching bridges
@@ -233,6 +259,15 @@ func (d *Dispatcher) dispatchViaBridges(ctx context.Context, msg Message) error 
 		return fmt.Errorf("dispatch errors: %v", errs)
 	}
 	return nil
+}
+
+func normalizeMissingRoutePolicy(policy MissingRoutePolicy) MissingRoutePolicy {
+	switch MissingRoutePolicy(strings.ToLower(strings.TrimSpace(string(policy)))) {
+	case MissingRouteIgnore:
+		return MissingRouteIgnore
+	default:
+		return MissingRouteError
+	}
 }
 
 // normalizeDispatcherConfig fills in missing configuration values with defaults.
@@ -265,6 +300,7 @@ func normalizeDispatcherConfig(cfg DispatcherConfig) DispatcherConfig {
 	if cfg.MaxDelay < cfg.BaseDelay {
 		cfg.MaxDelay = cfg.BaseDelay
 	}
+	cfg.MissingRoutePolicy = normalizeMissingRoutePolicy(cfg.MissingRoutePolicy)
 	return cfg
 }
 

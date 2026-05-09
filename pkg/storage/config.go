@@ -36,20 +36,15 @@ type CredentialSource struct {
 	// Example: "/etc/secrets/gcs-sa.json"
 	File string `koanf:"file"`
 
-	// SecretManager references a cloud secret by name/ID.
-	// The framework will resolve this at startup using the appropriate SDK.
-	// Supported formats:
-	//   GCP:    "projects/PROJECT/secrets/SECRET/versions/latest"
-	//   AWS:    "arn:aws:secretsmanager:region:account:secret:NAME"
-	//   Azure:  "https://VAULT.vault.azure.net/secrets/NAME/VERSION"
-	// Or plain env var name prefixed with "env:": "env:MY_SECRET_KEY"
-	//
+	// SecretManager currently supports only env: references, for example
+	// "env:MY_SECRET_KEY". Cloud Secret Manager SDK lookups are deliberately
+	// not implemented yet; inject cloud-managed secrets into env vars or files.
 	// Resolution happens at startup. The secret value is read once and cached.
 	SecretManager string `koanf:"secret_manager"`
 }
 
 // Resolve returns the credential value from the configured source.
-// Priority: Value > EnvVar > File > SecretManager > env: prefixed SecretManager.
+// Priority: Value > EnvVar > File > SecretManager.
 // Only one source should be configured; the first non-empty wins.
 func (cs *CredentialSource) Resolve() (string, error) {
 	if cs == nil {
@@ -202,7 +197,7 @@ type AzureConfig struct {
 
 	// AccountKey credential source.
 	//   env_var: AZURE_STORAGE_KEY
-	//   secret_manager: https://myvault.vault.azure.net/secrets/storage-key/latest
+	//   secret_manager: env:AZURE_STORAGE_KEY
 	AccountKey CredentialSource `koanf:"account_key"`
 
 	// Container is the default (private) container name.

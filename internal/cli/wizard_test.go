@@ -46,8 +46,8 @@ func TestRunWizard(t *testing.T) {
 		var out bytes.Buffer
 		var errOut bytes.Buffer
 		err := runWizard([]string{"--type", "inspectdb"}, strings.NewReader("postgres://localhost:5432/db\n1\ninternal/models\nPascalCase\n"), &out, &errOut)
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
+		if err == nil {
+			t.Fatal("expected experimental wizard error")
 		}
 		if !strings.Contains(out.String(), "GoFrame inspectdb Wizard") {
 			t.Fatalf("expected wizard title, got: %s", out.String())
@@ -58,8 +58,8 @@ func TestRunWizard(t *testing.T) {
 		var out bytes.Buffer
 		var errOut bytes.Buffer
 		err := runWizard([]string{"--type", "new"}, strings.NewReader(""), &out, &errOut)
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
+		if err == nil {
+			t.Fatal("expected experimental wizard error")
 		}
 		if !strings.Contains(out.String(), "GoFrame new Wizard") {
 			t.Fatalf("expected wizard title, got: %s", out.String())
@@ -70,8 +70,8 @@ func TestRunWizard(t *testing.T) {
 		var out bytes.Buffer
 		var errOut bytes.Buffer
 		err := runWizard([]string{"--type", "startapp"}, strings.NewReader(""), &out, &errOut)
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
+		if err == nil {
+			t.Fatal("expected experimental wizard error")
 		}
 		if !strings.Contains(out.String(), "GoFrame startapp Wizard") {
 			t.Fatalf("expected wizard title, got: %s", out.String())
@@ -283,8 +283,8 @@ func TestRunInspectDBWizard(t *testing.T) {
 		var out bytes.Buffer
 		var errOut bytes.Buffer
 		err := runInspectDBWizard("goframe.yaml", strings.NewReader("postgres://localhost:5432/db\n1\ninternal/models\nPascalCase\n"), &out, &errOut)
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
+		if err == nil {
+			t.Fatal("expected experimental wizard error")
 		}
 		if !strings.Contains(out.String(), "GoFrame inspectdb Wizard") {
 			t.Fatalf("expected wizard title, got: %s", out.String())
@@ -299,8 +299,8 @@ func TestRunNewWizard(t *testing.T) {
 	var out bytes.Buffer
 	var errOut bytes.Buffer
 	err := runNewWizard("goframe.yaml", strings.NewReader(""), &out, &errOut)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+	if err == nil {
+		t.Fatal("expected experimental wizard error")
 	}
 	if !strings.Contains(out.String(), "GoFrame new Wizard") {
 		t.Fatalf("expected wizard title, got: %s", out.String())
@@ -311,8 +311,8 @@ func TestRunStartAppWizard(t *testing.T) {
 	var out bytes.Buffer
 	var errOut bytes.Buffer
 	err := runStartAppWizard("goframe.yaml", strings.NewReader(""), &out, &errOut)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+	if err == nil {
+		t.Fatal("expected experimental wizard error")
 	}
 	if !strings.Contains(out.String(), "GoFrame startapp Wizard") {
 		t.Fatalf("expected wizard title, got: %s", out.String())

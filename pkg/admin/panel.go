@@ -6,7 +6,6 @@ package admin
 import (
 	"bytes"
 	"context"
-	"embed"
 	"fmt"
 	"io/fs"
 	"log/slog"
@@ -27,9 +26,6 @@ import (
 	"github.com/jcsvwinston/GoFrame/pkg/storage"
 	"github.com/jcsvwinston/GoFrame/pkg/tasks"
 )
-
-//go:embed all:ui/dist/*
-var uiFS embed.FS
 
 type adminAuthContextKey struct{}
 
@@ -344,15 +340,14 @@ func (p *Panel) Handler() *router.Mux {
 }
 
 func (p *Panel) mountRoutes(r *router.Mux) {
-	// Serve embedded UI static assets unconditionally so the login page can use them
-	uiContent, _ := fs.Sub(uiFS, "ui/dist")
+	uiContent := adminUIContentFS()
 	fileServer := http.FileServer(http.FS(uiContent))
 	r.Get("/static/{filepath...}", router.FromHTTP(http.StripPrefix("/static", fileServer).ServeHTTP))
 
-	// Serve Vite build assets at /assets/ path (JS, CSS from React build)
-	assetsFS, _ := fs.Sub(uiFS, "ui/dist/assets")
-	assetsServer := http.FileServer(http.FS(assetsFS))
-	r.Get("/assets/{filepath...}", router.FromHTTP(http.StripPrefix("/assets", assetsServer).ServeHTTP))
+	if assetsFS, err := fs.Sub(uiContent, "assets"); err == nil {
+		assetsServer := http.FileServer(http.FS(assetsFS))
+		r.Get("/assets/{filepath...}", router.FromHTTP(http.StripPrefix("/assets", assetsServer).ServeHTTP))
+	}
 	r.Get("/favicon.svg", router.FromHandler(fileServer))
 
 	// API routes
@@ -477,21 +472,7 @@ func (p *Panel) handleSPA(fsys fs.FS) router.Handler {
 			return nil
 		}
 
-		// Inject admin prefix as a <meta> tag to avoid CSP issues with inline scripts.
-		adminPrefix := NormalizePrefix(p.config.Prefix)
-
-		// Inject <meta name="goframe-admin-prefix" content="..."> immediately
-		// after <head>. This avoids Content-Security-Policy violations that
-		// occur with inline <script> tags.
-		injection := fmt.Sprintf(`<head><meta name="goframe-admin-prefix" content="%s">`, adminPrefix)
-		contentStr := string(content)
-		if strings.Contains(contentStr, "<head>") {
-			contentStr = strings.Replace(contentStr, "<head>", injection, 1)
-		} else {
-			// If no <head> tag, prepend the meta tag
-			contentStr = injection + "\n" + contentStr
-		}
-		content = []byte(contentStr)
+		content = injectAdminPrefix(content, NormalizePrefix(p.config.Prefix))
 
 		http.ServeContent(w, r, "index.html", time.Time{}, bytes.NewReader(content))
 		return nil

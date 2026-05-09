@@ -91,8 +91,8 @@ run_profile() {
   profile_commands+=("$command")
 }
 
-run_profile "minimal-api" "go test ./examples/mvc_api -run '^TestExampleMVCAPI_Minimal_Smoke$' -count=1 -v"
-run_profile "admin-heavy" "go test ./examples/mvc_api -run '^TestExampleMVCAPIAdmin_Smoke$' -count=1 -v"
+run_profile "minimal-api" "go test ./examples/mvc_api/cmd/server -run '^TestExampleMVCAPI_Minimal_Smoke$' -count=1 -v"
+run_profile "admin-heavy" "go test ./examples/mvc_api/cmd/server -run '^TestExampleMVCAPIAdmin_Smoke$' -count=1 -v"
 run_profile "plugin-heavy" "go test ./examples/plugins/... -count=1 -v"
 
 pass_rate=$((profiles_passed * 100 / profiles_total))

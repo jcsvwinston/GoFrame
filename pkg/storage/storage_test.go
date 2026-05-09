@@ -2,12 +2,18 @@ package storage
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"io"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/jcsvwinston/GoFrame/pkg/router"
 )
 
 func TestLocalStore_PutAndGet(t *testing.T) {
@@ -177,6 +183,22 @@ func TestNormalizeKey(t *testing.T) {
 		got := normalizeKey(tt.input)
 		if got != tt.expected {
 			t.Errorf("normalizeKey(%q) = %q, want %q", tt.input, got, tt.expected)
+		}
+	}
+}
+
+func TestValidateKeyRejectsTraversal(t *testing.T) {
+	tests := []string{
+		"",
+		"../escape.txt",
+		"safe/../../escape.txt",
+		"safe/./file.txt",
+		"safe/file.txt/",
+		"safe/\x00/file.txt",
+	}
+	for _, input := range tests {
+		if err := validateKey(normalizeKey(input)); err == nil {
+			t.Fatalf("expected invalid key error for %q", input)
 		}
 	}
 }
@@ -495,11 +517,155 @@ func TestLocalStore_InvalidKey(t *testing.T) {
 	ctx := context.Background()
 	content := strings.NewReader("test")
 
-	// normalizeKey normalizes paths but doesn't validate path traversal
-	// Files can be created with ../ - this is current behavior
 	_, err = store.Put(ctx, "../escape.txt", content, PutOptions{})
-	// Just verify it doesn't crash - the behavior is permissive
-	_ = err
+	if err == nil {
+		t.Fatal("expected path traversal to be rejected")
+	}
+	if _, ok := err.(ErrInvalidKey); !ok {
+		t.Fatalf("expected ErrInvalidKey, got %T: %v", err, err)
+	}
+	if _, statErr := os.Stat(filepath.Join(dir, "..", "escape.txt")); statErr == nil {
+		t.Fatal("path traversal created a file outside the storage root")
+	}
+}
+
+func TestLocalStore_InvalidKeyAcrossOperations(t *testing.T) {
+	dir := t.TempDir()
+	store, err := NewLocalStore(LocalConfig{Path: dir})
+	if err != nil {
+		t.Fatalf("NewLocalStore: %v", err)
+	}
+	defer store.Close()
+
+	ctx := context.Background()
+	if _, _, err := store.Get(ctx, "../escape.txt"); err == nil {
+		t.Fatal("Get should reject traversal")
+	}
+	if err := store.Delete(ctx, "../escape.txt"); err == nil {
+		t.Fatal("Delete should reject traversal")
+	}
+	if _, err := store.Exists(ctx, "../escape.txt"); err == nil {
+		t.Fatal("Exists should reject traversal")
+	}
+	if _, err := store.List(ctx, ListOptions{Prefix: "../"}); err == nil {
+		t.Fatal("List should reject traversal")
+	}
+	if _, err := store.Copy(ctx, "source.txt", "../escape.txt"); err == nil {
+		t.Fatal("Copy should reject traversal")
+	}
+}
+
+func TestProviderMethodsValidateKeysBeforeClients(t *testing.T) {
+	ctx := context.Background()
+
+	s3 := &S3Store{}
+	if _, err := s3.Put(ctx, "../escape.txt", strings.NewReader("x"), PutOptions{}); err == nil {
+		t.Fatal("S3 Put should reject invalid keys before using client")
+	}
+	if _, _, err := s3.Get(ctx, "../escape.txt"); err == nil {
+		t.Fatal("S3 Get should reject invalid keys before using client")
+	}
+	if err := s3.Delete(ctx, "../escape.txt"); err == nil {
+		t.Fatal("S3 Delete should reject invalid keys before using client")
+	}
+	if _, err := s3.Exists(ctx, "../escape.txt"); err == nil {
+		t.Fatal("S3 Exists should reject invalid keys before using client")
+	}
+	if _, err := s3.List(ctx, ListOptions{Prefix: "../"}); err == nil {
+		t.Fatal("S3 List should reject invalid prefixes before using client")
+	}
+	if _, err := s3.PublicURL(ctx, "../escape.txt", URLConfig{}); err == nil {
+		t.Fatal("S3 PublicURL should reject invalid keys before using client")
+	}
+	if _, err := s3.SignedURL(ctx, "../escape.txt", time.Hour, URLConfig{}); err == nil {
+		t.Fatal("S3 SignedURL should reject invalid keys before using client")
+	}
+	if _, err := s3.Copy(ctx, "source.txt", "../escape.txt"); err == nil {
+		t.Fatal("S3 Copy should reject invalid keys before using client")
+	}
+
+	gcs := &gcsStore{}
+	if _, _, err := gcs.Get(ctx, "../escape.txt"); err == nil {
+		t.Fatal("GCS Get should reject invalid keys before using client")
+	}
+	if err := gcs.Delete(ctx, "../escape.txt"); err == nil {
+		t.Fatal("GCS Delete should reject invalid keys before using client")
+	}
+	if _, err := gcs.Exists(ctx, "../escape.txt"); err == nil {
+		t.Fatal("GCS Exists should reject invalid keys before using client")
+	}
+	if _, err := gcs.Copy(ctx, "source.txt", "../escape.txt"); err == nil {
+		t.Fatal("GCS Copy should reject invalid keys before using client")
+	}
+
+	azure := &azureStore{}
+	if _, _, err := azure.Get(ctx, "../escape.txt"); err == nil {
+		t.Fatal("Azure Get should reject invalid keys before using client")
+	}
+	if err := azure.Delete(ctx, "../escape.txt"); err == nil {
+		t.Fatal("Azure Delete should reject invalid keys before using client")
+	}
+	if _, err := azure.Exists(ctx, "../escape.txt"); err == nil {
+		t.Fatal("Azure Exists should reject invalid keys before using client")
+	}
+	if _, err := azure.Copy(ctx, "source.txt", "../escape.txt"); err == nil {
+		t.Fatal("Azure Copy should reject invalid keys before using client")
+	}
+}
+
+func TestS3Helpers(t *testing.T) {
+	store := &S3Store{bucket: "private-bucket", publicBucket: "public-bucket"}
+
+	if got := store.resolveBucket(PutOptions{}); got != "private-bucket" {
+		t.Fatalf("private bucket = %q", got)
+	}
+	if got := store.resolveBucket(PutOptions{Visibility: Public}); got != "public-bucket" {
+		t.Fatalf("public bucket = %q", got)
+	}
+	if got := store.detectContentType("image.png", PutOptions{}); got != "image/png" {
+		t.Fatalf("detected content type = %q", got)
+	}
+	if got := store.detectContentType("file.unknown", PutOptions{}); got != "application/octet-stream" {
+		t.Fatalf("fallback content type = %q", got)
+	}
+	if got := store.detectContentType("file.bin", PutOptions{ContentType: "application/custom"}); got != "application/custom" {
+		t.Fatalf("explicit content type = %q", got)
+	}
+	if err := store.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+	if got := store.PublicURLBase(context.Background(), URLConfig{ContentType: "https://cdn.example.com"}); got != "https://cdn.example.com" {
+		t.Fatalf("PublicURLBase = %q", got)
+	}
+	if !isS3NotFound(errors.New("NoSuchKey: missing")) {
+		t.Fatal("expected NoSuchKey to be treated as not found")
+	}
+	if isS3NotFound(nil) {
+		t.Fatal("nil should not be treated as not found")
+	}
+}
+
+func TestCloudURLHelpersValidateAndEscape(t *testing.T) {
+	ctx := context.Background()
+
+	gcs := &gcsStore{}
+	if url, err := gcs.PublicURL(ctx, "safe/file.txt", URLConfig{}); err != nil || url != "" {
+		t.Fatalf("GCS PublicURL without public bucket = %q, %v", url, err)
+	}
+	if _, err := gcs.PublicURL(ctx, "../escape.txt", URLConfig{}); err == nil {
+		t.Fatal("GCS PublicURL should validate keys")
+	}
+	if got := escapeURLPath("folder/a b.txt"); got != "folder/a%20b.txt" {
+		t.Fatalf("escapeURLPath = %q", got)
+	}
+
+	azure := &azureStore{}
+	if url, err := azure.PublicURL(ctx, "safe/file.txt", URLConfig{}); err != nil || url != "" {
+		t.Fatalf("Azure PublicURL without public container = %q, %v", url, err)
+	}
+	if _, err := azure.PublicURL(ctx, "../escape.txt", URLConfig{}); err == nil {
+		t.Fatal("Azure PublicURL should validate keys")
+	}
 }
 
 func TestTenantStore_Unwrap(t *testing.T) {
@@ -554,6 +720,64 @@ func TestTenantStore_TenantPrefixOverride(t *testing.T) {
 
 	if info.Key != "custom-tenant/uploads/file.txt" {
 		t.Errorf("expected custom-tenant prefix, got %s", info.Key)
+	}
+}
+
+func TestTenantStore_OperationsUseTenantPrefix(t *testing.T) {
+	dir := t.TempDir()
+	baseStore, err := NewLocalStore(LocalConfig{Path: dir})
+	if err != nil {
+		t.Fatalf("NewLocalStore: %v", err)
+	}
+	defer baseStore.Close()
+
+	store := NewTenantStore(baseStore, func(ctx context.Context) string {
+		if tenant, _ := ctx.Value(TenantKey{}).(string); tenant != "" {
+			return tenant
+		}
+		return ""
+	})
+	ctx := context.WithValue(context.Background(), TenantKey{}, "tenant-a")
+
+	if _, err := store.Put(ctx, "docs/source.txt", strings.NewReader("tenant data"), PutOptions{}); err != nil {
+		t.Fatalf("Put: %v", err)
+	}
+	reader, info, err := store.Get(ctx, "docs/source.txt")
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	body, _ := io.ReadAll(reader)
+	_ = reader.Close()
+	if string(body) != "tenant data" || info.Key != "tenant-a/docs/source.txt" {
+		t.Fatalf("Get returned body=%q info=%+v", string(body), info)
+	}
+	if exists, err := store.Exists(ctx, "docs/source.txt"); err != nil || !exists {
+		t.Fatalf("Exists = %v, %v", exists, err)
+	}
+	list, err := store.List(ctx, ListOptions{Prefix: "docs"})
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+	if len(list.Objects) != 1 || list.Objects[0].Key != "tenant-a/docs/source.txt" {
+		t.Fatalf("List returned %+v", list.Objects)
+	}
+	if _, err := store.Copy(ctx, "docs/source.txt", "docs/copy.txt"); err != nil {
+		t.Fatalf("Copy: %v", err)
+	}
+	if _, err := store.PublicURL(ctx, "docs/source.txt", URLConfig{}); err != nil {
+		t.Fatalf("PublicURL: %v", err)
+	}
+	if _, err := store.SignedURL(ctx, "docs/source.txt", time.Hour, URLConfig{}); err == nil {
+		t.Fatal("SignedURL should surface local store unsupported error")
+	}
+	if err := store.Delete(ctx, "docs/source.txt"); err != nil {
+		t.Fatalf("Delete: %v", err)
+	}
+	if exists, err := baseStore.Exists(ctx, "tenant-a/docs/source.txt"); err != nil || exists {
+		t.Fatalf("base Exists after tenant delete = %v, %v", exists, err)
+	}
+	if err := store.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
 	}
 }
 
@@ -615,6 +839,118 @@ func TestPublicMapper_NilStore(t *testing.T) {
 	expected := "https://cdn.example.com/media/file.txt"
 	if url != expected {
 		t.Errorf("expected %q, got %q", expected, url)
+	}
+}
+
+func TestPublicMapper_MountAndMountAll(t *testing.T) {
+	dir := t.TempDir()
+	store, err := NewLocalStore(LocalConfig{Path: dir})
+	if err != nil {
+		t.Fatalf("NewLocalStore: %v", err)
+	}
+	defer store.Close()
+
+	ctx := context.Background()
+	if _, err := store.Put(ctx, "storage/public/media/image.txt", strings.NewReader("hello"), PutOptions{ContentType: "text/plain"}); err != nil {
+		t.Fatalf("Put: %v", err)
+	}
+
+	mux := router.NewMux()
+	mapper := NewPublicMapper(store, map[string]string{"/media": "storage/public/media"}, "https://cdn.example.com")
+	mapper.MountAll(mux)
+
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	res, err := http.Get(srv.URL + "/media/image.txt")
+	if err != nil {
+		t.Fatalf("GET mounted public object: %v", err)
+	}
+	defer res.Body.Close()
+	body, _ := io.ReadAll(res.Body)
+	if res.StatusCode != http.StatusOK || string(body) != "hello" {
+		t.Fatalf("mounted response status=%d body=%q", res.StatusCode, string(body))
+	}
+	if got := res.Header.Get("X-Content-Type-Options"); got != "nosniff" {
+		t.Fatalf("missing nosniff header: %q", got)
+	}
+}
+
+func TestFactoryAndCleanupHelpers(t *testing.T) {
+	dir := t.TempDir()
+	store, err := New(Config{
+		Provider: ProviderLocal,
+		Local:    LocalConfig{Path: dir},
+	}, nil)
+	if err != nil {
+		t.Fatalf("New local store: %v", err)
+	}
+	defer store.Close()
+
+	wrapped := NewWithTenant(store, func(context.Context) string { return "tenant" })
+	if wrapped.Unwrap() != store {
+		t.Fatal("NewWithTenant did not wrap the provided store")
+	}
+	mapper := NewPublicMapperForConfig(store, Config{
+		PublicPaths:   map[string]string{"/media": "public"},
+		PublicURLBase: "https://cdn.example.com/",
+	})
+	if url, err := mapper.PublicURL(context.Background(), "public/file.txt", URLConfig{}); err != nil || url != "https://cdn.example.com/media/file.txt" {
+		t.Fatalf("NewPublicMapperForConfig URL = %q, %v", url, err)
+	}
+	if _, err := New(Config{Provider: "bogus"}, nil); err == nil {
+		t.Fatal("New should reject invalid config")
+	}
+
+	cleaner, err := NewCleaner(store, CleanupConfig{Enabled: false, MaxAge: "bad", Interval: "bad"}, nil)
+	if err != nil {
+		t.Fatalf("NewCleaner: %v", err)
+	}
+	if cleaner.maxAge != 24*time.Hour || cleaner.interval != time.Hour || cleaner.prefix != "_tmp/" {
+		t.Fatalf("unexpected cleaner defaults: maxAge=%s interval=%s prefix=%q", cleaner.maxAge, cleaner.interval, cleaner.prefix)
+	}
+	cleaner.Stop()
+
+	tempKey := CleanupTempKey("upload")
+	if !strings.HasPrefix(tempKey, "_tmp/upload_") {
+		t.Fatalf("CleanupTempKey = %q", tempKey)
+	}
+	if !IsTempKey("/_tmp/upload_20200101000000") || IsTempKey("uploads/file.txt") {
+		t.Fatal("IsTempKey returned unexpected result")
+	}
+}
+
+func TestCleanerRunCleanupDeletesExpiredObjects(t *testing.T) {
+	dir := t.TempDir()
+	store, err := NewLocalStore(LocalConfig{Path: dir})
+	if err != nil {
+		t.Fatalf("NewLocalStore: %v", err)
+	}
+	defer store.Close()
+
+	ctx := context.Background()
+	if _, err := store.Put(ctx, "_tmp/old.txt", strings.NewReader("old"), PutOptions{}); err != nil {
+		t.Fatalf("Put old: %v", err)
+	}
+	if _, err := store.Put(ctx, "_tmp/fresh.txt", strings.NewReader("fresh"), PutOptions{}); err != nil {
+		t.Fatalf("Put fresh: %v", err)
+	}
+	oldTime := time.Now().Add(-48 * time.Hour)
+	if err := os.Chtimes(filepath.Join(dir, "_tmp", "old.txt"), oldTime, oldTime); err != nil {
+		t.Fatalf("Chtimes old: %v", err)
+	}
+
+	cleaner, err := NewCleaner(store, CleanupConfig{Enabled: false, Prefix: "_tmp/", MaxAge: "24h", Interval: "1h"}, nil)
+	if err != nil {
+		t.Fatalf("NewCleaner: %v", err)
+	}
+	cleaner.runCleanup()
+
+	if exists, err := store.Exists(ctx, "_tmp/old.txt"); err != nil || exists {
+		t.Fatalf("old temp exists=%v err=%v", exists, err)
+	}
+	if exists, err := store.Exists(ctx, "_tmp/fresh.txt"); err != nil || !exists {
+		t.Fatalf("fresh temp exists=%v err=%v", exists, err)
 	}
 }
 

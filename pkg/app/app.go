@@ -336,7 +336,7 @@ func attachOutbox(a *App, cfg *Config, dbConn *db.DB) error {
 	managedOutbox, err := outbox.NewManagedOutbox(outbox.ManagedConfig{
 		DB:            sqlDB,
 		TableName:     cfg.Outbox.TableName,
-		Flavor:        outbox.FlavorSQLite, // TODO: detect from database URL
+		Flavor:        outboxFlavorForConfig(cfg),
 		LeaseOwner:    "goframe-app",
 		LeaseDuration: cfg.Outbox.LeaseDuration,
 		PollInterval:  time.Second,
@@ -373,23 +373,7 @@ func attachOutbox(a *App, cfg *Config, dbConn *db.DB) error {
 			}
 			managedOutbox.AddRoute(pattern, bridgeCfg.Name)
 		case "kafka":
-			kafkaCfg := outbox.KafkaConfig{
-				Name:    bridgeCfg.Name,
-				Brokers: getConfigStringSlice(bridgeCfg.Config, "brokers"),
-				Topic:   getConfigString(bridgeCfg.Config, "topic"),
-			}
-			bridge, err := outbox.NewKafkaBridge(kafkaCfg)
-			if err != nil {
-				return fmt.Errorf("outbox: create kafka bridge %q: %w", bridgeCfg.Name, err)
-			}
-			if err := managedOutbox.RegisterBridge(bridge); err != nil {
-				return fmt.Errorf("outbox: register kafka bridge %q: %w", bridgeCfg.Name, err)
-			}
-			pattern := getConfigString(bridgeCfg.Config, "pattern")
-			if pattern == "" {
-				pattern = "*"
-			}
-			managedOutbox.AddRoute(pattern, bridgeCfg.Name)
+			return fmt.Errorf("outbox: kafka bridge %q is experimental and disabled; configure webhook bridges or implement a real Kafka bridge before enabling this route", bridgeCfg.Name)
 		default:
 			a.Logger.Warn("outbox: unknown bridge type", "type", bridgeCfg.Type, "name", bridgeCfg.Name)
 		}
@@ -409,6 +393,29 @@ func attachOutbox(a *App, cfg *Config, dbConn *db.DB) error {
 
 	a.Logger.Info("outbox initialized", "table", cfg.Outbox.TableName, "bridges", len(cfg.Outbox.Bridges))
 	return nil
+}
+
+func outboxFlavorForConfig(cfg *Config) outbox.Flavor {
+	if cfg == nil {
+		return outbox.FlavorSQLite
+	}
+	dbCfg, ok := cfg.DatabaseByAlias(cfg.DefaultDatabaseAlias())
+	if !ok {
+		return outbox.FlavorSQLite
+	}
+	return outboxFlavorForDatabaseURL(dbCfg.URL)
+}
+
+func outboxFlavorForDatabaseURL(raw string) outbox.Flavor {
+	normalized := strings.ToLower(strings.TrimSpace(raw))
+	switch {
+	case strings.HasPrefix(normalized, "postgres://"), strings.HasPrefix(normalized, "postgresql://"):
+		return outbox.FlavorPostgres
+	case strings.HasPrefix(normalized, "mysql://"):
+		return outbox.FlavorMySQL
+	default:
+		return outbox.FlavorSQLite
+	}
 }
 
 func getConfigString(cfg map[string]interface{}, key string) string {

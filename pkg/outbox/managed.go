@@ -50,6 +50,8 @@ type ManagedOutbox struct {
 	registry   *BridgeRegistry
 	router     *Router
 	running    bool
+	cancel     context.CancelFunc
+	done       chan struct{}
 	mu         sync.Mutex
 	logger     *slog.Logger
 }
@@ -110,15 +112,16 @@ func NewManagedOutbox(cfg ManagedConfig) (*ManagedOutbox, error) {
 	// Create dispatcher with bridge support but no handler initially
 	// The dispatcher will use bridges when configured
 	dispatcherCfg := DispatcherConfig{
-		LeaseOwner:    cfg.LeaseOwner,
-		LeaseDuration: cfg.LeaseDuration,
-		PollInterval:  cfg.PollInterval,
-		BatchSize:     cfg.BatchSize,
-		MaxAttempts:   cfg.MaxAttempts,
-		BaseDelay:     cfg.BaseDelay,
-		MaxDelay:      cfg.MaxDelay,
-		Registry:      registry,
-		Router:        router,
+		LeaseOwner:         cfg.LeaseOwner,
+		LeaseDuration:      cfg.LeaseDuration,
+		PollInterval:       cfg.PollInterval,
+		BatchSize:          cfg.BatchSize,
+		MaxAttempts:        cfg.MaxAttempts,
+		BaseDelay:          cfg.BaseDelay,
+		MaxDelay:           cfg.MaxDelay,
+		Registry:           registry,
+		Router:             router,
+		MissingRoutePolicy: MissingRouteError,
 	}
 
 	// Create a no-op handler for now - will be replaced by bridge routing
@@ -209,17 +212,28 @@ func (m *ManagedOutbox) Start(ctx context.Context) error {
 	if m.running {
 		return fmt.Errorf("managed outbox: already running")
 	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	runCtx, cancel := context.WithCancel(ctx)
+	done := make(chan struct{})
 
 	m.running = true
+	m.cancel = cancel
+	m.done = done
 
 	go func() {
 		defer func() {
 			m.mu.Lock()
 			m.running = false
+			if m.done == done {
+				m.cancel = nil
+			}
 			m.mu.Unlock()
+			close(done)
 		}()
 
-		if err := m.dispatcher.Run(ctx); err != nil {
+		if err := m.dispatcher.Run(runCtx); err != nil && runCtx.Err() == nil {
 			m.logger.Error("outbox dispatcher stopped", "error", err)
 		}
 	}()
@@ -235,18 +249,41 @@ func (m *ManagedOutbox) Start(ctx context.Context) error {
 // this method returns nil immediately.
 func (m *ManagedOutbox) Stop(ctx context.Context) error {
 	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	if !m.running {
+	if !m.running && m.done == nil {
+		m.mu.Unlock()
 		return nil
 	}
+	cancel := m.cancel
+	done := m.done
+	m.mu.Unlock()
 
-	m.running = false
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if cancel != nil {
+		cancel()
+	}
+	if done != nil {
+		select {
+		case <-done:
+		case <-ctx.Done():
+			return fmt.Errorf("managed outbox: stop dispatcher: %w", ctx.Err())
+		}
+	}
 
 	// Close all bridges
 	if err := m.registry.Close(); err != nil {
 		m.logger.Error("outbox: error closing bridges", "error", err)
+		return err
 	}
+
+	m.mu.Lock()
+	if m.done == done {
+		m.done = nil
+		m.cancel = nil
+		m.running = false
+	}
+	m.mu.Unlock()
 
 	m.logger.Info("outbox stopped")
 	return nil
