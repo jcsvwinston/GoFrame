@@ -4,10 +4,10 @@ import (
 	"math/rand"
 
 	"github.com/jcsvwinston/nucleus/examples/ecommerce_dashboard/backend/models"
-	"github.com/jcsvwinston/nucleus/pkg/fluent"
+	"github.com/jcsvwinston/nucleus/pkg/nucleus"
 )
 
-func GetStats(c *fluent.Context) error {
+func GetStats(c *nucleus.Context) error {
 	stats := models.StatsResponse{
 		TotalProducts:  100000,
 		TotalOrders:    500000,
@@ -19,7 +19,7 @@ func GetStats(c *fluent.Context) error {
 	return c.JSON(200, stats)
 }
 
-func ListProducts(c *fluent.Context) error {
+func ListProducts(c *nucleus.Context) error {
 	return c.JSON(200, map[string]interface{}{
 		"products": []models.Product{
 			{Name: "Sample Product", Price: 99.99, Stock: 100},
@@ -28,7 +28,7 @@ func ListProducts(c *fluent.Context) error {
 	})
 }
 
-func CreateProduct(c *fluent.Context) error {
+func CreateProduct(c *nucleus.Context) error {
 	var product models.Product
 	if err := c.BindJSON(&product); err != nil {
 		return err
@@ -36,7 +36,7 @@ func CreateProduct(c *fluent.Context) error {
 	return c.JSON(201, product)
 }
 
-func GetProduct(c *fluent.Context) error {
+func GetProduct(c *nucleus.Context) error {
 	id := c.Param("id")
 	return c.JSON(200, models.Product{
 		Name:  "Product " + id,
@@ -44,14 +44,14 @@ func GetProduct(c *fluent.Context) error {
 	})
 }
 
-func ListOrders(c *fluent.Context) error {
+func ListOrders(c *nucleus.Context) error {
 	return c.JSON(200, map[string]interface{}{
 		"orders": []models.Order{},
 		"total":  500000,
 	})
 }
 
-func CreateOrder(c *fluent.Context) error {
+func CreateOrder(c *nucleus.Context) error {
 	var order models.Order
 	if err := c.BindJSON(&order); err != nil {
 		return err
@@ -59,14 +59,14 @@ func CreateOrder(c *fluent.Context) error {
 	return c.JSON(201, order)
 }
 
-func ListCustomers(c *fluent.Context) error {
+func ListCustomers(c *nucleus.Context) error {
 	return c.JSON(200, map[string]interface{}{
 		"customers": []models.Customer{},
 		"total":     50000,
 	})
 }
 
-func GetCustomer(c *fluent.Context) error {
+func GetCustomer(c *nucleus.Context) error {
 	id := c.Param("id")
 	return c.JSON(200, models.Customer{
 		Name:  "Customer " + id,
@@ -74,7 +74,7 @@ func GetCustomer(c *fluent.Context) error {
 	})
 }
 
-func ListCategories(c *fluent.Context) error {
+func ListCategories(c *nucleus.Context) error {
 	return c.JSON(200, []models.Category{
 		{Name: "Electronics", Icon: "📱"},
 		{Name: "Clothing", Icon: "👕"},

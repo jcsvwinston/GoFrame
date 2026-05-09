@@ -1,6 +1,7 @@
-// Package fluent provides a simplified, Gin/Fiber-like API for the GoFrame framework
-// while maintaining all enterprise capabilities (multi-tenancy, admin, observability).
-package fluent
+// Package nucleus provides a simplified, fluent API for assembling Nucleus
+// applications while keeping access to all enterprise capabilities
+// (multi-tenancy, admin, observability).
+package nucleus
 
 import (
 	"context"
@@ -16,7 +17,7 @@ import (
 	routerpkg "github.com/jcsvwinston/nucleus/pkg/router"
 )
 
-// AppBuilder provides a fluent API for configuring GoFrame applications
+// AppBuilder provides a fluent API for configuring Nucleus applications
 type AppBuilder struct {
 	config    app.Config
 	router    *routerpkg.Router

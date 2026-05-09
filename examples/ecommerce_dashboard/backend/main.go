@@ -6,11 +6,11 @@ import (
 	"github.com/jcsvwinston/nucleus/examples/ecommerce_dashboard/backend/handlers"
 	"github.com/jcsvwinston/nucleus/examples/ecommerce_dashboard/backend/models"
 	"github.com/jcsvwinston/nucleus/examples/ecommerce_dashboard/backend/seed"
-	"github.com/jcsvwinston/nucleus/pkg/fluent"
+	"github.com/jcsvwinston/nucleus/pkg/nucleus"
 )
 
 func main() {
-	app := fluent.New().
+	app := nucleus.New().
 		Port(8080).
 		SQLite("ecommerce.db").
 		Model(&models.Product{}).
@@ -33,7 +33,7 @@ func main() {
 	api.Get("/customers/:id", handlers.GetCustomer)
 	api.Get("/categories", handlers.ListCategories)
 
-	app.SPA("../frontend/dist", fluent.SPAConfig{
+	app.SPA("../frontend/dist", nucleus.SPAConfig{
 		IndexFile: "index.html",
 		APIPrefix: "/api",
 	})
