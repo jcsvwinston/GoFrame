@@ -8,9 +8,9 @@ import (
 	"sync"
 	"time"
 
-	gferrors "github.com/jcsvwinston/GoFrame/pkg/errors"
-	"github.com/jcsvwinston/GoFrame/pkg/router"
-	"github.com/jcsvwinston/GoFrame/pkg/tasks"
+	gferrors "github.com/jcsvwinston/nucleus/pkg/errors"
+	"github.com/jcsvwinston/nucleus/pkg/router"
+	"github.com/jcsvwinston/nucleus/pkg/tasks"
 )
 
 type featureFlagStore struct {

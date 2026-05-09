@@ -10,8 +10,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/jcsvwinston/GoFrame/pkg/admin"
-	"github.com/jcsvwinston/GoFrame/pkg/storage"
+	"github.com/jcsvwinston/nucleus/pkg/admin"
+	"github.com/jcsvwinston/nucleus/pkg/storage"
 	"github.com/knadh/koanf/parsers/yaml"
 	"github.com/knadh/koanf/providers/env"
 	"github.com/knadh/koanf/providers/file"

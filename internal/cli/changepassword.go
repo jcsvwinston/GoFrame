@@ -9,7 +9,7 @@ import (
 	"io"
 	"strings"
 
-	"github.com/jcsvwinston/GoFrame/pkg/auth"
+	"github.com/jcsvwinston/nucleus/pkg/auth"
 )
 
 func runChangePassword(args []string, stdin io.Reader, stdout, stderr io.Writer) error {

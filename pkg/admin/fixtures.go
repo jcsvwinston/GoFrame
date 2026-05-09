@@ -12,10 +12,10 @@ import (
 	"strconv"
 	"time"
 
-	gferrors "github.com/jcsvwinston/GoFrame/pkg/errors"
-	"github.com/jcsvwinston/GoFrame/pkg/model"
-	"github.com/jcsvwinston/GoFrame/pkg/router"
-	"github.com/jcsvwinston/GoFrame/pkg/storage"
+	gferrors "github.com/jcsvwinston/nucleus/pkg/errors"
+	"github.com/jcsvwinston/nucleus/pkg/model"
+	"github.com/jcsvwinston/nucleus/pkg/router"
+	"github.com/jcsvwinston/nucleus/pkg/storage"
 )
 
 // DjangoFixtureRecord represents a single record in Django-style fixture format.

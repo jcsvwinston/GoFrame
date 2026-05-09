@@ -46,7 +46,7 @@ GoFrame separates error handling into two distinct concerns:
 - **Render**: HTTP response to the user
 
 ```go
-import "github.com/jcsvwinston/GoFrame/pkg/errors"
+import "github.com/jcsvwinston/nucleus/pkg/errors"
 
 handler := errors.NewErrorHandler(logger, nil)
 
@@ -104,7 +104,7 @@ GoFrame defines standard domain errors:
 ### Using error constructors
 
 ```go
-import "github.com/jcsvwinston/GoFrame/pkg/errors"
+import "github.com/jcsvwinston/nucleus/pkg/errors"
 
 // Simple domain error
 err := errors.NotFound("article", "42")
@@ -194,7 +194,7 @@ handler.Render(w, r, err) // Uses custom Render method
 ### Basic usage (convenience function)
 
 ```go
-import "github.com/jcsvwinston/GoFrame/pkg/errors"
+import "github.com/jcsvwinston/nucleus/pkg/errors"
 
 func GetArticle(w http.ResponseWriter, r *http.Request) {
     id := chi.URLParam(r, "id")
@@ -438,7 +438,7 @@ import (
     "errors"
     "fmt"
 
-    gferrors "github.com/jcsvwinston/GoFrame/pkg/errors"
+    gferrors "github.com/jcsvwinston/nucleus/pkg/errors"
 )
 
 // Wrap domain error with context

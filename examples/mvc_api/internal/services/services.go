@@ -5,12 +5,12 @@ import (
 	"database/sql"
 	"time"
 
-	"github.com/jcsvwinston/GoFrame/examples/mvc_api/internal/dtos"
-	"github.com/jcsvwinston/GoFrame/examples/mvc_api/internal/repositories"
-	"github.com/jcsvwinston/GoFrame/pkg/app"
-	"github.com/jcsvwinston/GoFrame/pkg/outbox"
-	"github.com/jcsvwinston/GoFrame/pkg/tasks"
-	asynqprovider "github.com/jcsvwinston/GoFrame/pkg/tasks/providers/asynq"
+	"github.com/jcsvwinston/nucleus/examples/mvc_api/internal/dtos"
+	"github.com/jcsvwinston/nucleus/examples/mvc_api/internal/repositories"
+	"github.com/jcsvwinston/nucleus/pkg/app"
+	"github.com/jcsvwinston/nucleus/pkg/outbox"
+	"github.com/jcsvwinston/nucleus/pkg/tasks"
+	asynqprovider "github.com/jcsvwinston/nucleus/pkg/tasks/providers/asynq"
 )
 
 type Services struct {

@@ -7,14 +7,14 @@ import (
 	"log"
 	"net/http"
 
-	"github.com/jcsvwinston/GoFrame/examples/mvc_api/internal/config"
-	"github.com/jcsvwinston/GoFrame/examples/mvc_api/internal/controllers"
-	"github.com/jcsvwinston/GoFrame/examples/mvc_api/internal/models"
-	"github.com/jcsvwinston/GoFrame/examples/mvc_api/internal/services"
-	"github.com/jcsvwinston/GoFrame/pkg/app"
-	"github.com/jcsvwinston/GoFrame/pkg/model"
-	"github.com/jcsvwinston/GoFrame/pkg/openapi"
-	"github.com/jcsvwinston/GoFrame/pkg/router"
+	"github.com/jcsvwinston/nucleus/examples/mvc_api/internal/config"
+	"github.com/jcsvwinston/nucleus/examples/mvc_api/internal/controllers"
+	"github.com/jcsvwinston/nucleus/examples/mvc_api/internal/models"
+	"github.com/jcsvwinston/nucleus/examples/mvc_api/internal/services"
+	"github.com/jcsvwinston/nucleus/pkg/app"
+	"github.com/jcsvwinston/nucleus/pkg/model"
+	"github.com/jcsvwinston/nucleus/pkg/openapi"
+	"github.com/jcsvwinston/nucleus/pkg/router"
 )
 
 //go:embed templates/*.html

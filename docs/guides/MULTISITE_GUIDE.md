@@ -84,7 +84,7 @@ Matches:
 ### Accessing current site in handlers
 
 ```go
-import "github.com/jcsvwinston/GoFrame/pkg/app"
+import "github.com/jcsvwinston/nucleus/pkg/app"
 
 func (h *Handler) Home(w http.ResponseWriter, r *http.Request) {
     scope := app.RequestScopeFromContext(r.Context())

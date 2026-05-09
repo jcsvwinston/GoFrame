@@ -12,8 +12,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jcsvwinston/GoFrame/pkg/openapi"
-	"github.com/jcsvwinston/GoFrame/pkg/router"
+	"github.com/jcsvwinston/nucleus/pkg/openapi"
+	"github.com/jcsvwinston/nucleus/pkg/router"
 )
 
 func testAppConfig() *Config {

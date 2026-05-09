@@ -10,7 +10,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/jcsvwinston/GoFrame/pkg/plugins"
+	"github.com/jcsvwinston/nucleus/pkg/plugins"
 )
 
 // Message represents one outbound email.

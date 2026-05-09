@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jcsvwinston/GoFrame/pkg/observe"
+	"github.com/jcsvwinston/nucleus/pkg/observe"
 )
 
 func TestSQLMatrix_ConnectAndPing(t *testing.T) {

@@ -17,14 +17,14 @@ import (
 	"sync"
 	"time"
 
-	"github.com/jcsvwinston/GoFrame/pkg/auth"
-	"github.com/jcsvwinston/GoFrame/pkg/authz"
-	"github.com/jcsvwinston/GoFrame/pkg/db"
-	"github.com/jcsvwinston/GoFrame/pkg/model"
-	"github.com/jcsvwinston/GoFrame/pkg/router"
-	"github.com/jcsvwinston/GoFrame/pkg/signals"
-	"github.com/jcsvwinston/GoFrame/pkg/storage"
-	"github.com/jcsvwinston/GoFrame/pkg/tasks"
+	"github.com/jcsvwinston/nucleus/pkg/auth"
+	"github.com/jcsvwinston/nucleus/pkg/authz"
+	"github.com/jcsvwinston/nucleus/pkg/db"
+	"github.com/jcsvwinston/nucleus/pkg/model"
+	"github.com/jcsvwinston/nucleus/pkg/router"
+	"github.com/jcsvwinston/nucleus/pkg/signals"
+	"github.com/jcsvwinston/nucleus/pkg/storage"
+	"github.com/jcsvwinston/nucleus/pkg/tasks"
 )
 
 type adminAuthContextKey struct{}

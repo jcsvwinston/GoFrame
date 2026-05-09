@@ -29,7 +29,7 @@ Create the model in `internal/models`:
 ```go
 package models
 
-import "github.com/jcsvwinston/GoFrame/pkg/model"
+import "github.com/jcsvwinston/nucleus/pkg/model"
 
 type Customer struct {
 	model.BaseModel

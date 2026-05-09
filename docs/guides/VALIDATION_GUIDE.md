@@ -34,7 +34,7 @@ GoFrame uses `github.com/go-playground/validator/v10` as its validation engine, 
 Define validation rules using struct tags:
 
 ```go
-import "github.com/jcsvwinston/GoFrame/pkg/validate"
+import "github.com/jcsvwinston/nucleus/pkg/validate"
 
 type CreateArticleRequest struct {
     Title    string   `validate:"required,min=3,max=200"`
@@ -108,7 +108,7 @@ import (
     "regexp"
 
     "github.com/go-playground/validator/v10"
-    "github.com/jcsvwinston/GoFrame/pkg/validate"
+    "github.com/jcsvwinston/nucleus/pkg/validate"
 )
 
 func init() {

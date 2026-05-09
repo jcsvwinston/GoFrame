@@ -3,8 +3,8 @@ package handlers
 import (
 	"math/rand"
 
-	"github.com/jcsvwinston/GoFrame/examples/ecommerce_dashboard/backend/models"
-	"github.com/jcsvwinston/GoFrame/pkg/fluent"
+	"github.com/jcsvwinston/nucleus/examples/ecommerce_dashboard/backend/models"
+	"github.com/jcsvwinston/nucleus/pkg/fluent"
 )
 
 func GetStats(c *fluent.Context) error {

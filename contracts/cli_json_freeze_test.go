@@ -11,7 +11,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/jcsvwinston/GoFrame/internal/cli"
+	"github.com/jcsvwinston/nucleus/internal/cli"
 	_ "modernc.org/sqlite"
 )
 

@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/jcsvwinston/GoFrame/pkg/observe"
+	"github.com/jcsvwinston/nucleus/pkg/observe"
 )
 
 // DefaultStack returns the standard middleware chain for GoFrame applications.

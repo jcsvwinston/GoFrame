@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"strconv"
 	"github.com/jcsvwinston/fleetmanager/internal/services"
-	"github.com/jcsvwinston/GoFrame/pkg/router"
+	"github.com/jcsvwinston/nucleus/pkg/router"
 )
 
 type AlertHandler struct {

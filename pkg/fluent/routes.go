@@ -3,7 +3,7 @@ package fluent
 import (
 	"net/http"
 
-	routerpkg "github.com/jcsvwinston/GoFrame/pkg/router"
+	routerpkg "github.com/jcsvwinston/nucleus/pkg/router"
 )
 
 // Handler is the simplified handler function signature

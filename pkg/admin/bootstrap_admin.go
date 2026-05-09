@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/jcsvwinston/GoFrame/pkg/auth"
+	"github.com/jcsvwinston/nucleus/pkg/auth"
 )
 
 // BootstrapAdminConfig defines how the framework should initialize the first

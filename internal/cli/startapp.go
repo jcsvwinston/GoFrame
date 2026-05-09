@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/jcsvwinston/GoFrame/pkg/model"
+	"github.com/jcsvwinston/nucleus/pkg/model"
 )
 
 type startAppGeneratedFile struct {
@@ -212,7 +212,7 @@ func runStartApp(args []string, _ io.Reader, stdout, stderr io.Writer) error {
 
 const startAppModelTemplate = `package models
 
-import "github.com/jcsvwinston/GoFrame/pkg/model"
+import "github.com/jcsvwinston/nucleus/pkg/model"
 
 type %s struct {
 	model.BaseModel
@@ -246,7 +246,7 @@ import (
 	"strings"
 	"sync"
 
-	gfrender "github.com/jcsvwinston/GoFrame/pkg/router"
+	gfrender "github.com/jcsvwinston/nucleus/pkg/router"
 )
 
 type create%[1]sInput struct {
@@ -310,7 +310,7 @@ import (
 	"strings"
 
 	"%[1]s/internal/services"
-	gfrender "github.com/jcsvwinston/GoFrame/pkg/router"
+	gfrender "github.com/jcsvwinston/nucleus/pkg/router"
 )
 
 func List%[2]s(service *services.%[3]sService) gfrender.Handler {
@@ -532,7 +532,7 @@ const startAppPageTemplate = `package controllers
 import (
 	"html/template"
 
-	gfrender "github.com/jcsvwinston/GoFrame/pkg/router"
+	gfrender "github.com/jcsvwinston/nucleus/pkg/router"
 )
 
 func %sPage(tpl *template.Template) gfrender.Handler {
@@ -549,7 +549,7 @@ import (
 	"context"
 	"log"
 
-	gftasks "github.com/jcsvwinston/GoFrame/pkg/tasks"
+	gftasks "github.com/jcsvwinston/nucleus/pkg/tasks"
 )
 
 const Task%sCreated = "%s.created"
@@ -579,7 +579,7 @@ import (
 	"context"
 
 	"%s/internal/services"
-	gftasks "github.com/jcsvwinston/GoFrame/pkg/tasks"
+	gftasks "github.com/jcsvwinston/nucleus/pkg/tasks"
 )
 
 const Task%sCreated = "%s.created"
@@ -608,7 +608,7 @@ func handle%sCreated(ctx context.Context, task gftasks.Task, service *services.%
 
 const startAppContractTemplate = `package contracts
 
-import "github.com/jcsvwinston/GoFrame/pkg/openapi"
+import "github.com/jcsvwinston/nucleus/pkg/openapi"
 
 func init() {
 	RegisterContract(Register%[1]sContract)

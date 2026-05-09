@@ -161,8 +161,8 @@ func runNew(args []string, _ io.Reader, stdout, stderr io.Writer) error {
 	}
 	fmt.Fprintf(stdout, "\n")
 	fmt.Fprintf(stdout, "Maintenance (no local GoFrame source needed):\n")
-	fmt.Fprintf(stdout, "  go run github.com/jcsvwinston/GoFrame/cmd/goframe@latest migrate --config goframe.yaml\n")
-	fmt.Fprintf(stdout, "  go run github.com/jcsvwinston/GoFrame/cmd/goframe@latest seed --config goframe.yaml --seeds seeds\n")
+	fmt.Fprintf(stdout, "  go run github.com/jcsvwinston/nucleus/cmd/goframe@latest migrate --config goframe.yaml\n")
+	fmt.Fprintf(stdout, "  go run github.com/jcsvwinston/nucleus/cmd/goframe@latest seed --config goframe.yaml --seeds seeds\n")
 	fmt.Fprintf(stdout, "\n")
 	fmt.Fprintf(stdout, "Access:\n")
 	if tmpl == "api" {
@@ -209,7 +209,7 @@ const newGoModTemplate = `module %s
 
 go 1.25
 
-require github.com/jcsvwinston/GoFrame %s
+require github.com/jcsvwinston/nucleus %s
 `
 
 const newConfigTemplate = `database_default: default
@@ -289,9 +289,9 @@ import (
 	"%s/internal/models"
 	"%s/internal/repositories"
 	"%s/internal/services"
-	"github.com/jcsvwinston/GoFrame/pkg/app"
-	"github.com/jcsvwinston/GoFrame/pkg/model"
-	"github.com/jcsvwinston/GoFrame/pkg/router"
+	"github.com/jcsvwinston/nucleus/pkg/app"
+	"github.com/jcsvwinston/nucleus/pkg/model"
+	"github.com/jcsvwinston/nucleus/pkg/router"
 )
 
 func main() {
@@ -395,9 +395,9 @@ import (
 	"%s/internal/repositories"
 	"%s/internal/services"
 	projecttasks "%s/internal/tasks"
-	"github.com/jcsvwinston/GoFrame/pkg/app"
-	gftasks "github.com/jcsvwinston/GoFrame/pkg/tasks"
-	asynqprovider "github.com/jcsvwinston/GoFrame/pkg/tasks/providers/asynq"
+	"github.com/jcsvwinston/nucleus/pkg/app"
+	gftasks "github.com/jcsvwinston/nucleus/pkg/tasks"
+	asynqprovider "github.com/jcsvwinston/nucleus/pkg/tasks/providers/asynq"
 )
 
 func main() {
@@ -445,7 +445,7 @@ func main() {
 
 const newArticleModelTemplate = `package models
 
-import "github.com/jcsvwinston/GoFrame/pkg/model"
+import "github.com/jcsvwinston/nucleus/pkg/model"
 
 type Article struct {
 	model.BaseModel
@@ -461,7 +461,7 @@ import (
 	"html/template"
 	"net/http"
 
-	gfrender "github.com/jcsvwinston/GoFrame/pkg/router"
+	gfrender "github.com/jcsvwinston/nucleus/pkg/router"
 )
 
 func HomePage(tpl *template.Template) gfrender.Handler {
@@ -479,7 +479,7 @@ import (
 	"net/http"
 
 	"%s/internal/services"
-	gfrender "github.com/jcsvwinston/GoFrame/pkg/router"
+	gfrender "github.com/jcsvwinston/nucleus/pkg/router"
 )
 
 type createArticleInput struct {
@@ -624,7 +624,7 @@ func articleFromRepository(record repositories.Article) Article {
 
 const newArticleContractTemplate = `package contracts
 
-import "github.com/jcsvwinston/GoFrame/pkg/openapi"
+import "github.com/jcsvwinston/nucleus/pkg/openapi"
 
 func init() {
 	RegisterContract(RegisterArticleContract)
@@ -773,7 +773,7 @@ import (
 	"context"
 
 	"%s/internal/services"
-	gftasks "github.com/jcsvwinston/GoFrame/pkg/tasks"
+	gftasks "github.com/jcsvwinston/nucleus/pkg/tasks"
 )
 
 const TaskArticleCreated = "articles.created"
@@ -909,8 +909,8 @@ import (
 	"%s/internal/contracts"
 	"%s/internal/repositories"
 	"%s/internal/services"
-	"github.com/jcsvwinston/GoFrame/pkg/app"
-	"github.com/jcsvwinston/GoFrame/pkg/router"
+	"github.com/jcsvwinston/nucleus/pkg/app"
+	"github.com/jcsvwinston/nucleus/pkg/router"
 )
 
 func main() {

@@ -7,7 +7,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/jcsvwinston/GoFrame/pkg/storage"
+	"github.com/jcsvwinston/nucleus/pkg/storage"
 )
 
 const adminStorageBrowseRoot = "uploads"

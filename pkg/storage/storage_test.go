@@ -13,7 +13,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jcsvwinston/GoFrame/pkg/router"
+	"github.com/jcsvwinston/nucleus/pkg/router"
 )
 
 func TestLocalStore_PutAndGet(t *testing.T) {

@@ -112,7 +112,7 @@ import (
     "net/http/httptest"
     "testing"
 
-    "github.com/jcsvwinston/GoFrame/pkg/router"
+    "github.com/jcsvwinston/nucleus/pkg/router"
 )
 
 func TestListArticlesHandler(t *testing.T) {
@@ -174,8 +174,8 @@ func TestAdminHandler_RequiresSession(t *testing.T) {
 
 ```go
 import (
-    "github.com/jcsvwinston/GoFrame/pkg/auth"
-    "github.com/jcsvwinston/GoFrame/pkg/observe"
+    "github.com/jcsvwinston/nucleus/pkg/auth"
+    "github.com/jcsvwinston/nucleus/pkg/observe"
 )
 
 func TestProfileHandler_WithJWTContext(t *testing.T) {
@@ -208,7 +208,7 @@ package internal
 import (
     "testing"
 
-    "github.com/jcsvwinston/GoFrame/pkg/app"
+    "github.com/jcsvwinston/nucleus/pkg/app"
 )
 
 func TestAppWiring(t *testing.T) {
@@ -428,7 +428,7 @@ func TestArticleCRUD(t *testing.T) {
 ### Testing model metadata
 
 ```go
-import "github.com/jcsvwinston/GoFrame/pkg/model"
+import "github.com/jcsvwinston/nucleus/pkg/model"
 
 func TestArticleModel_Metadata(t *testing.T) {
     article := Article{}
@@ -479,7 +479,7 @@ func TestArticleModel_BeforeSave(t *testing.T) {
 ### Testing mail plugins
 
 ```go
-import "github.com/jcsvwinston/GoFrame/pkg/plugins"
+import "github.com/jcsvwinston/nucleus/pkg/plugins"
 
 func TestMailPlugin_Contract(t *testing.T) {
     // Create test plugin binary path

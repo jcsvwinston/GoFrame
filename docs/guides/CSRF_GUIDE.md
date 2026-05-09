@@ -9,7 +9,7 @@ GoFrame provides enhanced CSRF protection with a Laravel-style two-layer approac
 Default configuration (recommended for most apps):
 
 ```go
-import "github.com/jcsvwinston/GoFrame/pkg/router"
+import "github.com/jcsvwinston/nucleus/pkg/router"
 
 // CSRF is enabled by default with origin verification
 r := router.New(logger,

@@ -3,7 +3,7 @@ module github.com/jcsvwinston/fleetmanager
 go 1.26.3
 
 require (
-	github.com/jcsvwinston/GoFrame v0.0.0
+	github.com/jcsvwinston/nucleus v0.0.0
 	github.com/mattn/go-sqlite3 v1.14.16
 )
 
@@ -136,4 +136,4 @@ require (
 	modernc.org/token v1.0.1 // indirect
 )
 
-replace github.com/jcsvwinston/GoFrame => ../..
+replace github.com/jcsvwinston/nucleus => ../..

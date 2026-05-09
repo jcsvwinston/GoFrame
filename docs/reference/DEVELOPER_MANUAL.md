@@ -77,7 +77,7 @@ There are two recommended paths.
 
 Download from official releases:
 
-- `https://github.com/jcsvwinston/GoFrame/releases`
+- `https://github.com/jcsvwinston/nucleus/releases`
 
 Assets per release:
 
@@ -97,7 +97,7 @@ Recommended validation:
 ## 4.2 From source code
 
 ```bash
-git clone https://github.com/jcsvwinston/GoFrame.git
+git clone https://github.com/jcsvwinston/nucleus.git
 cd GoFrame
 go build -o goframe ./cmd/goframe
 ./goframe version
@@ -107,7 +107,7 @@ go build -o goframe ./cmd/goframe
 
 Currently, `go.mod` declares:
 
-- `module github.com/jcsvwinston/GoFrame`
+- `module github.com/jcsvwinston/nucleus`
 
 If you consume GoFrame as a dependency in an external project, keep imports/scripts aligned with that module path until canonical module migration is fully closed.
 

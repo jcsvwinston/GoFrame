@@ -10,7 +10,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/jcsvwinston/GoFrame/pkg/observe"
+	"github.com/jcsvwinston/nucleus/pkg/observe"
 	"github.com/redis/go-redis/v9"
 )
 

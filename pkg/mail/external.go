@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/jcsvwinston/GoFrame/pkg/plugins"
+	"github.com/jcsvwinston/nucleus/pkg/plugins"
 )
 
 type externalSenderMode string

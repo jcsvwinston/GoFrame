@@ -110,7 +110,7 @@ import (
 	"os"
 
 	"%[1]s/internal/contracts"
-	"github.com/jcsvwinston/GoFrame/pkg/openapi"
+	"github.com/jcsvwinston/nucleus/pkg/openapi"
 )
 
 func main() {

@@ -8,7 +8,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/jcsvwinston/GoFrame/pkg/db"
+	"github.com/jcsvwinston/nucleus/pkg/db"
 )
 
 func runMigrate(args []string, stdin io.Reader, stdout, stderr io.Writer) error {

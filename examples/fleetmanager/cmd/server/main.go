@@ -13,9 +13,9 @@ import (
 	"github.com/jcsvwinston/fleetmanager/internal/models"
 	"github.com/jcsvwinston/fleetmanager/internal/repositories"
 	"github.com/jcsvwinston/fleetmanager/internal/services"
-	"github.com/jcsvwinston/GoFrame/pkg/admin"
-	"github.com/jcsvwinston/GoFrame/pkg/app"
-	"github.com/jcsvwinston/GoFrame/pkg/model"
+	"github.com/jcsvwinston/nucleus/pkg/admin"
+	"github.com/jcsvwinston/nucleus/pkg/app"
+	"github.com/jcsvwinston/nucleus/pkg/model"
 )
 
 func main() {

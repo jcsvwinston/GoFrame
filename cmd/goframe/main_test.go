@@ -15,8 +15,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/jcsvwinston/GoFrame/pkg/auth"
-	"github.com/jcsvwinston/GoFrame/pkg/openapi"
+	"github.com/jcsvwinston/nucleus/pkg/auth"
+	"github.com/jcsvwinston/nucleus/pkg/openapi"
 	_ "modernc.org/sqlite"
 )
 
@@ -809,9 +809,9 @@ func TestRun_GenerateModelAndHandler(t *testing.T) {
 
 go 1.25.0
 
-require github.com/jcsvwinston/GoFrame v0.0.0
+require github.com/jcsvwinston/nucleus v0.0.0
 
-replace github.com/jcsvwinston/GoFrame => %s
+replace github.com/jcsvwinston/nucleus => %s
 `, filepath.ToSlash(repoRoot(t))))
 
 	out.Reset()
@@ -882,9 +882,9 @@ func TestRun_GenerateResource(t *testing.T) {
 
 go 1.25.0
 
-require github.com/jcsvwinston/GoFrame v0.0.0
+require github.com/jcsvwinston/nucleus v0.0.0
 
-replace github.com/jcsvwinston/GoFrame => %s
+replace github.com/jcsvwinston/nucleus => %s
 `, filepath.ToSlash(repoRoot(t))))
 
 	var out bytes.Buffer
@@ -1005,7 +1005,7 @@ replace github.com/jcsvwinston/GoFrame => %s
 		t.Fatalf("read generated contract failed: %v", err)
 	}
 	contractText := string(contractRaw)
-	if !strings.Contains(contractText, `"github.com/jcsvwinston/GoFrame/pkg/openapi"`) {
+	if !strings.Contains(contractText, `"github.com/jcsvwinston/nucleus/pkg/openapi"`) {
 		t.Fatalf("expected openapi import in generated contract scaffold: %s", contractText)
 	}
 	if !strings.Contains(contractText, "RegisterContract(RegisterCategoryContract)") {
@@ -1203,7 +1203,7 @@ func TestRun_NewProjectScaffold(t *testing.T) {
 		t.Fatalf("read article contract failed: %v", err)
 	}
 	contractText := string(contractRaw)
-	if !strings.Contains(contractText, `"github.com/jcsvwinston/GoFrame/pkg/openapi"`) {
+	if !strings.Contains(contractText, `"github.com/jcsvwinston/nucleus/pkg/openapi"`) {
 		t.Fatalf("expected article contract to import openapi: %s", contractText)
 	}
 	if !strings.Contains(contractText, "RegisterContract(RegisterArticleContract)") {
@@ -1350,9 +1350,9 @@ func TestRun_StartAppScaffold(t *testing.T) {
 
 go 1.25.0
 
-require github.com/jcsvwinston/GoFrame v0.0.0
+require github.com/jcsvwinston/nucleus v0.0.0
 
-replace github.com/jcsvwinston/GoFrame => %s
+replace github.com/jcsvwinston/nucleus => %s
 `, filepath.ToSlash(repoRoot(t))))
 
 	var out bytes.Buffer
@@ -1520,7 +1520,7 @@ replace github.com/jcsvwinston/GoFrame => %s
 		t.Fatalf("read billing contract failed: %v", err)
 	}
 	contractText := string(contractRaw)
-	if !strings.Contains(contractText, `"github.com/jcsvwinston/GoFrame/pkg/openapi"`) {
+	if !strings.Contains(contractText, `"github.com/jcsvwinston/nucleus/pkg/openapi"`) {
 		t.Fatalf("expected startapp contract to import openapi: %s", contractText)
 	}
 	if !strings.Contains(contractText, "RegisterContract(RegisterBillingContract)") {
@@ -1715,7 +1715,7 @@ import (
 	"testing"
 
 	"example.com/contractapp/internal/contracts"
-	"github.com/jcsvwinston/GoFrame/pkg/app"
+	"github.com/jcsvwinston/nucleus/pkg/app"
 )
 
 	func TestRuntimeOpenAPIEndpointMatchesContractsDocument(t *testing.T) {
@@ -3557,15 +3557,15 @@ func wireGeneratedModuleToRepo(t *testing.T, dir string) {
 	}
 
 	body := string(raw)
-	if strings.Contains(body, "replace github.com/jcsvwinston/GoFrame =>") {
+	if strings.Contains(body, "replace github.com/jcsvwinston/nucleus =>") {
 		return
 	}
 
 	body = strings.TrimSpace(body) + fmt.Sprintf(`
 
-require github.com/jcsvwinston/GoFrame v0.0.0
+require github.com/jcsvwinston/nucleus v0.0.0
 
-replace github.com/jcsvwinston/GoFrame => %s
+replace github.com/jcsvwinston/nucleus => %s
 `, filepath.ToSlash(repoRoot(t)))
 	writeFile(t, goModPath, body+"\n")
 }

@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jcsvwinston/GoFrame/pkg/observe"
+	"github.com/jcsvwinston/nucleus/pkg/observe"
 )
 
 const testSecret = "test-secret-key-at-least-32-chars!"

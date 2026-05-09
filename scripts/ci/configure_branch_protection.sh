@@ -18,7 +18,7 @@ Options:
 
 Examples:
   bash scripts/ci/configure_branch_protection.sh --dry-run
-  bash scripts/ci/configure_branch_protection.sh --repo jcsvwinston/GoFrame --branch main
+  bash scripts/ci/configure_branch_protection.sh --repo jcsvwinston/nucleus --branch main
 EOF
 }
 

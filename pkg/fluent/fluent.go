@@ -12,8 +12,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/jcsvwinston/GoFrame/pkg/app"
-	routerpkg "github.com/jcsvwinston/GoFrame/pkg/router"
+	"github.com/jcsvwinston/nucleus/pkg/app"
+	routerpkg "github.com/jcsvwinston/nucleus/pkg/router"
 )
 
 // AppBuilder provides a fluent API for configuring GoFrame applications

@@ -8,7 +8,7 @@ import (
 
 const contractsAggregatorTemplate = `package contracts
 
-import "github.com/jcsvwinston/GoFrame/pkg/openapi"
+import "github.com/jcsvwinston/nucleus/pkg/openapi"
 
 type Registrar func(doc *openapi.Document)
 

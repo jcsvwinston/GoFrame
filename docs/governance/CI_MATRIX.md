@@ -24,7 +24,7 @@ Apply branch protection (requires repo-admin permissions):
 
 ```bash
 gh auth login
-bash scripts/ci/configure_branch_protection.sh --repo jcsvwinston/GoFrame --branch main
+bash scripts/ci/configure_branch_protection.sh --repo jcsvwinston/nucleus --branch main
 ```
 
 Preview payload without applying:
@@ -123,7 +123,7 @@ Optional explicit repo/branch:
 
 ```bash
 bash scripts/ci/run_exploratory_stability.sh \
-  --repo jcsvwinston/GoFrame \
+  --repo jcsvwinston/nucleus \
   --branch <feature-or-release-branch> \
   --runs 10
 ```

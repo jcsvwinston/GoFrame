@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	routerpkg "github.com/jcsvwinston/GoFrame/pkg/router"
+	routerpkg "github.com/jcsvwinston/nucleus/pkg/router"
 )
 
 func TestContext_Query(t *testing.T) {

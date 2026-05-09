@@ -146,7 +146,7 @@ rate_limit_by_route: true
 Define route-specific limits in code:
 
 ```go
-import "github.com/jcsvwinston/GoFrame/pkg/router"
+import "github.com/jcsvwinston/nucleus/pkg/router"
 
 r := router.New()
 

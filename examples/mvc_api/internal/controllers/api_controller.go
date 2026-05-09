@@ -4,10 +4,10 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/jcsvwinston/GoFrame/examples/mvc_api/internal/dtos"
-	"github.com/jcsvwinston/GoFrame/examples/mvc_api/internal/services"
-	"github.com/jcsvwinston/GoFrame/pkg/app"
-	"github.com/jcsvwinston/GoFrame/pkg/router"
+	"github.com/jcsvwinston/nucleus/examples/mvc_api/internal/dtos"
+	"github.com/jcsvwinston/nucleus/examples/mvc_api/internal/services"
+	"github.com/jcsvwinston/nucleus/pkg/app"
+	"github.com/jcsvwinston/nucleus/pkg/router"
 )
 
 func Health() http.HandlerFunc {

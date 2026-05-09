@@ -1,6 +1,6 @@
 package models
 
-import "github.com/jcsvwinston/GoFrame/pkg/model"
+import "github.com/jcsvwinston/nucleus/pkg/model"
 
 type Product struct {
 	model.BaseModel

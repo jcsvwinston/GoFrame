@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/jcsvwinston/GoFrame/pkg/app"
+	"github.com/jcsvwinston/nucleus/pkg/app"
 )
 
 func runServe(args []string, _ io.Reader, stdout, stderr io.Writer) error {

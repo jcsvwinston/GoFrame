@@ -53,7 +53,7 @@ jwt_issuer: myapp
 #### Generating Tokens
 
 ```go
-import "github.com/jcsvwinston/GoFrame/pkg/auth"
+import "github.com/jcsvwinston/nucleus/pkg/auth"
 
 // Create a JWT manager
 manager := auth.NewJWTManager(cfg.JWTSecret, cfg.JWTExpiry, cfg.JWTIssuer)
@@ -80,7 +80,7 @@ return ctx.JSON(200, map[string]string{"access_token": token})
 GoFrame's router includes JWT middleware that validates tokens and enriches the request context:
 
 ```go
-import "github.com/jcsvwinston/GoFrame/pkg/router"
+import "github.com/jcsvwinston/nucleus/pkg/router"
 
 r := router.New()
 
@@ -165,7 +165,7 @@ session_table: goframe_sessions
 #### Session Usage
 
 ```go
-import "github.com/jcsvwinston/GoFrame/pkg/auth"
+import "github.com/jcsvwinston/nucleus/pkg/auth"
 
 // In handler (session middleware wired by app.New)
 session := auth.SessionFromContext(r.Context())
@@ -218,7 +218,7 @@ goframe clearsessions --all --force --config goframe.yaml
 GoFrame uses `bcrypt` for password hashing via `golang.org/x/crypto/bcrypt`.
 
 ```go
-import "github.com/jcsvwinston/GoFrame/pkg/auth"
+import "github.com/jcsvwinston/nucleus/pkg/auth"
 
 // Hash a password (use default cost=10 in production)
 hash, err := auth.HashPassword("plaintext_password")
@@ -329,7 +329,7 @@ p, anonymous, /login, POST
 #### Enforcer Usage
 
 ```go
-import "github.com/jcsvwinston/GoFrame/pkg/authz"
+import "github.com/jcsvwinston/nucleus/pkg/authz"
 
 // Initialize enforcer
 enforcer, err := authz.NewEnforcer(cfg.AuthzModelPath, cfg.AuthzPolicyPath)
@@ -352,7 +352,7 @@ if !allowed {
 Apply authorization middleware to routes:
 
 ```go
-import "github.com/jcsvwinston/GoFrame/pkg/authz"
+import "github.com/jcsvwinston/nucleus/pkg/authz"
 
 // Role-based middleware
 r.Use(authz.RoleMiddleware(enforcer, "admin", "editor"))

@@ -1,7 +1,7 @@
 # GoFrame
 
-[![CI](https://github.com/jcsvwinston/GoFrame/actions/workflows/ci.yml/badge.svg)](https://github.com/jcsvwinston/GoFrame/actions/workflows/ci.yml)
-[![Go Reference](https://pkg.go.dev/badge/github.com/jcsvwinston/GoFrame.svg)](https://pkg.go.dev/github.com/jcsvwinston/GoFrame)
+[![CI](https://github.com/jcsvwinston/nucleus/actions/workflows/ci.yml/badge.svg)](https://github.com/jcsvwinston/nucleus/actions/workflows/ci.yml)
+[![Go Reference](https://pkg.go.dev/badge/github.com/jcsvwinston/nucleus.svg)](https://pkg.go.dev/github.com/jcsvwinston/nucleus)
 
 **Enterprise web framework for Go** — Simple like Gin, powerful like Django.
 
@@ -18,7 +18,7 @@
 ### Install CLI
 
 ```bash
-go install github.com/jcsvwinston/GoFrame/cmd/goframe@latest
+go install github.com/jcsvwinston/nucleus/cmd/goframe@latest
 ```
 
 ### Create Project
@@ -41,7 +41,7 @@ Open:
 package main
 
 import (
-    "github.com/jcsvwinston/GoFrame/pkg/goframe"
+    "github.com/jcsvwinston/nucleus/pkg/goframe"
 )
 
 type Article struct {

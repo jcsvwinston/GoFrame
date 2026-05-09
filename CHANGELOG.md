@@ -30,7 +30,7 @@ while in pre-1.0 mode (`v0.x.y`).
   - Next step: Execute stability drills to validate promotion thresholds (MSSQL >= 80%, Oracle >= 80%)
 
 - **Standalone scaffold** — `goframe new` now generates a self-contained project:
-  - `go.mod` includes `require github.com/jcsvwinston/GoFrame <version>`
+  - `go.mod` includes `require github.com/jcsvwinston/nucleus <version>`
   - release builds embed the exact version tag via goreleaser ldflags
   - dev builds use `latest` so `go mod tidy` resolves the newest published tag
   - projects compile without a `replace` directive or local GoFrame source
@@ -382,7 +382,7 @@ while in pre-1.0 mode (`v0.x.y`).
 ### Fixed
 
 - Public module path alignment for external consumers:
-  - `go.mod` now declares `github.com/jcsvwinston/GoFrame`
+  - `go.mod` now declares `github.com/jcsvwinston/nucleus`
   - all internal imports updated to the public module path
   - GoReleaser ldflags updated to inject version with the new module path
 - CLI scaffold/runtime references updated to the public module path so generated apps can resolve dependencies from `@latest`.
@@ -468,11 +468,11 @@ while in pre-1.0 mode (`v0.x.y`).
 
 ---
 
-[Unreleased]: https://github.com/jcsvwinston/GoFrame/compare/v0.5.4...HEAD
-[0.5.4]: https://github.com/jcsvwinston/GoFrame/compare/v0.5.3...v0.5.4
-[0.5.3]: https://github.com/jcsvwinston/GoFrame/compare/v0.5.2...v0.5.3
-[0.5.2]: https://github.com/jcsvwinston/GoFrame/compare/v0.5.1...v0.5.2
-[0.5.1]: https://github.com/jcsvwinston/GoFrame/compare/v0.5.0...v0.5.1
-[0.5.0]: https://github.com/jcsvwinston/GoFrame/compare/v0.5.0-rc1...v0.5.0
-[0.5.0-rc1]: https://github.com/jcsvwinston/GoFrame/compare/v0.4.0...v0.5.0-rc1
-[0.4.0]: https://github.com/jcsvwinston/GoFrame/releases/tag/v0.4.0
+[Unreleased]: https://github.com/jcsvwinston/nucleus/compare/v0.5.4...HEAD
+[0.5.4]: https://github.com/jcsvwinston/nucleus/compare/v0.5.3...v0.5.4
+[0.5.3]: https://github.com/jcsvwinston/nucleus/compare/v0.5.2...v0.5.3
+[0.5.2]: https://github.com/jcsvwinston/nucleus/compare/v0.5.1...v0.5.2
+[0.5.1]: https://github.com/jcsvwinston/nucleus/compare/v0.5.0...v0.5.1
+[0.5.0]: https://github.com/jcsvwinston/nucleus/compare/v0.5.0-rc1...v0.5.0
+[0.5.0-rc1]: https://github.com/jcsvwinston/nucleus/compare/v0.4.0...v0.5.0-rc1
+[0.4.0]: https://github.com/jcsvwinston/nucleus/releases/tag/v0.4.0

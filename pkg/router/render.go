@@ -7,8 +7,8 @@ import (
 	"net/http"
 	"strconv"
 
-	gferrors "github.com/jcsvwinston/GoFrame/pkg/errors"
-	"github.com/jcsvwinston/GoFrame/pkg/validate"
+	gferrors "github.com/jcsvwinston/nucleus/pkg/errors"
+	"github.com/jcsvwinston/nucleus/pkg/validate"
 )
 
 // JSON writes a JSON response with the given status code and data.

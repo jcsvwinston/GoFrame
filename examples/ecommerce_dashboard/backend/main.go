@@ -3,10 +3,10 @@ package main
 import (
 	"fmt"
 
-	"github.com/jcsvwinston/GoFrame/examples/ecommerce_dashboard/backend/handlers"
-	"github.com/jcsvwinston/GoFrame/examples/ecommerce_dashboard/backend/models"
-	"github.com/jcsvwinston/GoFrame/examples/ecommerce_dashboard/backend/seed"
-	"github.com/jcsvwinston/GoFrame/pkg/fluent"
+	"github.com/jcsvwinston/nucleus/examples/ecommerce_dashboard/backend/handlers"
+	"github.com/jcsvwinston/nucleus/examples/ecommerce_dashboard/backend/models"
+	"github.com/jcsvwinston/nucleus/examples/ecommerce_dashboard/backend/seed"
+	"github.com/jcsvwinston/nucleus/pkg/fluent"
 )
 
 func main() {

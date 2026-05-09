@@ -11,8 +11,8 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/jcsvwinston/GoFrame/pkg/mail"
-	"github.com/jcsvwinston/GoFrame/pkg/plugins"
+	"github.com/jcsvwinston/nucleus/pkg/mail"
+	"github.com/jcsvwinston/nucleus/pkg/plugins"
 )
 
 type mailProviderInfo struct {

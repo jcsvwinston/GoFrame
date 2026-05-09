@@ -13,7 +13,7 @@ This guide gets you from zero to a running GoFrame app quickly.
 ## 1. Install CLI
 
 ```bash
-go install github.com/jcsvwinston/GoFrame/cmd/goframe@latest
+go install github.com/jcsvwinston/nucleus/cmd/goframe@latest
 ```
 
 ## 2. Create Project
@@ -59,10 +59,10 @@ go run ./cmd/worker
 ## 5. Maintenance (no local CLI install needed)
 
 ```bash
-go run github.com/jcsvwinston/GoFrame/cmd/goframe@latest migrate --config goframe.yaml
-go run github.com/jcsvwinston/GoFrame/cmd/goframe@latest seed --config goframe.yaml --seeds seeds
-go run github.com/jcsvwinston/GoFrame/cmd/goframe@latest routes --config goframe.yaml
-go run github.com/jcsvwinston/GoFrame/cmd/goframe@latest health --config goframe.yaml
+go run github.com/jcsvwinston/nucleus/cmd/goframe@latest migrate --config goframe.yaml
+go run github.com/jcsvwinston/nucleus/cmd/goframe@latest seed --config goframe.yaml --seeds seeds
+go run github.com/jcsvwinston/nucleus/cmd/goframe@latest routes --config goframe.yaml
+go run github.com/jcsvwinston/nucleus/cmd/goframe@latest health --config goframe.yaml
 ```
 
 ## 6. Enterprise SQL Drivers (optional)

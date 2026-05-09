@@ -4,7 +4,7 @@ import (
 	"html/template"
 	"net/http"
 
-	gfrender "github.com/jcsvwinston/GoFrame/pkg/router"
+	gfrender "github.com/jcsvwinston/nucleus/pkg/router"
 )
 
 func HomePage(tpl *template.Template) gfrender.Handler {

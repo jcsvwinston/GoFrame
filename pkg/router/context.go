@@ -13,8 +13,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/jcsvwinston/GoFrame/pkg/auth"
-	gferrors "github.com/jcsvwinston/GoFrame/pkg/errors"
+	"github.com/jcsvwinston/nucleus/pkg/auth"
+	gferrors "github.com/jcsvwinston/nucleus/pkg/errors"
 )
 
 type contextKey string

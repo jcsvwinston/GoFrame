@@ -69,5 +69,5 @@ myapp/
 
 ## Support
 
-- GitHub Issues: https://github.com/jcsvwinston/GoFrame/issues
-- Go Package: https://pkg.go.dev/github.com/jcsvwinston/GoFrame
+- GitHub Issues: https://github.com/jcsvwinston/nucleus/issues
+- Go Package: https://pkg.go.dev/github.com/jcsvwinston/nucleus

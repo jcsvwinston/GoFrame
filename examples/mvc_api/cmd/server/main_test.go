@@ -8,9 +8,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jcsvwinston/GoFrame/examples/mvc_api/internal/config"
-	"github.com/jcsvwinston/GoFrame/examples/mvc_api/internal/services"
-	"github.com/jcsvwinston/GoFrame/pkg/app"
+	"github.com/jcsvwinston/nucleus/examples/mvc_api/internal/config"
+	"github.com/jcsvwinston/nucleus/examples/mvc_api/internal/services"
+	"github.com/jcsvwinston/nucleus/pkg/app"
 )
 
 func TestExampleMVCAPI_Minimal_Smoke(t *testing.T) {

@@ -4,7 +4,7 @@ import (
 	"io"
 	"os"
 
-	"github.com/jcsvwinston/GoFrame/internal/cli"
+	"github.com/jcsvwinston/nucleus/internal/cli"
 )
 
 func main() {

@@ -6,7 +6,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/jcsvwinston/GoFrame/pkg/auth"
+	"github.com/jcsvwinston/nucleus/pkg/auth"
 	"html/template"
 )
 

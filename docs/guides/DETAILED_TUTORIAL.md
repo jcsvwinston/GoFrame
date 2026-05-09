@@ -78,7 +78,7 @@ Edit `models/project.go` to match your real use case:
 ```go
 package models
 
-import "github.com/jcsvwinston/GoFrame/pkg/model"
+import "github.com/jcsvwinston/nucleus/pkg/model"
 
 type Project struct {
 	model.BaseModel
@@ -143,8 +143,8 @@ import (
 	"log"
 	"net/http"
 
-	"github.com/jcsvwinston/GoFrame/pkg/app"
-	"github.com/jcsvwinston/GoFrame/pkg/model"
+	"github.com/jcsvwinston/nucleus/pkg/app"
+	"github.com/jcsvwinston/nucleus/pkg/model"
 	"myapp/models"
 )
 

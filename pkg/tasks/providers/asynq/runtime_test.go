@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 	"github.com/alicebob/miniredis/v2"
-	"github.com/jcsvwinston/GoFrame/pkg/tasks"
+	"github.com/jcsvwinston/nucleus/pkg/tasks"
 )
 
 func TestInspectRuntime_WithoutRedisURL(t *testing.T) {

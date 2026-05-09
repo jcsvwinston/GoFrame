@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/jcsvwinston/GoFrame/pkg/app"
-	"github.com/jcsvwinston/GoFrame/pkg/mail"
+	"github.com/jcsvwinston/nucleus/pkg/app"
+	"github.com/jcsvwinston/nucleus/pkg/mail"
 )
 
 func runSendTestEmail(args []string, _ io.Reader, stdout, stderr io.Writer) error {

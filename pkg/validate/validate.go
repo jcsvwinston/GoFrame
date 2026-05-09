@@ -8,7 +8,7 @@ import (
 	"sync"
 
 	"github.com/go-playground/validator/v10"
-	gferrors "github.com/jcsvwinston/GoFrame/pkg/errors"
+	gferrors "github.com/jcsvwinston/nucleus/pkg/errors"
 )
 
 var (
