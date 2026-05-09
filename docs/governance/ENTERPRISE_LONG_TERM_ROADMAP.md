@@ -3,11 +3,11 @@
 Reference date: 2026-04-07.
 Status: Current strategic source of truth.
 
-This roadmap defines how GoFrame will become an enterprise-grade, developer-friendly framework designed for very long production lifecycles.
+This roadmap defines how Nucleus will become an enterprise-grade, developer-friendly framework designed for very long production lifecycles.
 
 ## Strategic Positioning
 
-GoFrame has its own product identity and technical direction.
+Nucleus has its own product identity and technical direction.
 
 We are building:
 
@@ -34,7 +34,7 @@ Not allowed in `v1.x`:
 
 ## Success Criteria (Enterprise Grade)
 
-GoFrame reaches enterprise category when all are true:
+Nucleus reaches enterprise category when all are true:
 
 1. Upgrade safety:
 - stable contracts are preserved and continuously verified.
@@ -392,7 +392,7 @@ This file is the canonical roadmap for enterprise and long-term strategy.
 
 ### Versioning Strategy
 
-GoFrame follows Semantic Versioning while in pre-1.0 mode.
+Nucleus follows Semantic Versioning while in pre-1.0 mode.
 
 **Current Policy:**
 - Format: `v0.x.y`

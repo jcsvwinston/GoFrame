@@ -1,9 +1,9 @@
-# Detailed Tutorial: Build an App with GoFrame (MVC + API)
+# Detailed Tutorial: Build an App with Nucleus (MVC + API)
 
 Reference date: 2026-04-07.
 Status: Current.
 
-This tutorial walks through the full flow to build a real app with GoFrame:
+This tutorial walks through the full flow to build a real app with Nucleus:
 
 1. Project bootstrap
 2. Domain modeling
@@ -204,7 +204,7 @@ func registerMVCRoutes(a *app.App) {
   </head>
   <body>
     <h1>{{ .Title }}</h1>
-    <p>MVC + API app with GoFrame</p>
+    <p>MVC + API app with Nucleus</p>
   </body>
 </html>
 ```
@@ -254,7 +254,7 @@ go run ./cmd/nucleus shell --config nucleus.yml -c "SELECT count(*) FROM project
 
 ## 9) Production guardrails
 
-With `env: production`, GoFrame protects sensitive actions (`seed`, `migrate down/reset/refresh`):
+With `env: production`, Nucleus protects sensitive actions (`seed`, `migrate down/reset/refresh`):
 
 - Use `--force` in non-interactive CI/CD.
 - Or use `--yes` to confirm without a prompt.
@@ -268,17 +268,17 @@ go run ./cmd/nucleus migrate --config nucleus.yml reset --force
 
 ## 10) Extend CLI per project
 
-You can add custom commands without touching core by creating executables named `goframe-<name>` in `PATH`.
+You can add custom commands without touching core by creating executables named `nucleus-<name>` in `PATH`.
 
 Example:
 
-- If `goframe-report` exists in `PATH`, then:
+- If `nucleus-report` exists in `PATH`, then:
 
 ```bash
 go run ./cmd/nucleus report --from 2026-01-01
 ```
 
-GoFrame automatically delegates to that external command.
+Nucleus automatically delegates to that external command.
 
 ## 11) Suggested next evolution
 

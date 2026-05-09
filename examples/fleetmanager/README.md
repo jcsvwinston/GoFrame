@@ -1,6 +1,6 @@
 # fleetmanager
 
-Proyecto generado con goframe CLI.
+Proyecto generado con nucleus CLI.
 
 ## Arranque rapido
 

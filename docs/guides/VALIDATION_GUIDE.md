@@ -3,7 +3,7 @@
 Reference date: 2026-04-10.
 Status: Current.
 
-This guide covers GoFrame's validation system (`pkg/validate`), including built-in rules, custom validators, and error handling patterns.
+This guide covers Nucleus's validation system (`pkg/validate`), including built-in rules, custom validators, and error handling patterns.
 
 ## Table of Contents
 
@@ -20,7 +20,7 @@ This guide covers GoFrame's validation system (`pkg/validate`), including built-
 
 ## Overview
 
-GoFrame uses `github.com/go-playground/validator/v10` as its validation engine, exposed through `pkg/validate`. Validation is triggered via struct tags and supports:
+Nucleus uses `github.com/go-playground/validator/v10` as its validation engine, exposed through `pkg/validate`. Validation is triggered via struct tags and supports:
 
 - Field-level validation rules
 - Cross-field validation
@@ -65,7 +65,7 @@ func (h *ArticleHandler) Create(w http.ResponseWriter, r *http.Request) {
 
 ## Built-in Rules
 
-GoFrame exposes all validator/v10 rules. The most commonly used:
+Nucleus exposes all validator/v10 rules. The most commonly used:
 
 ### String Rules
 

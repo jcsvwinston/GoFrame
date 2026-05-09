@@ -1,6 +1,6 @@
-# Contributing to GoFrame
+# Contributing to Nucleus
 
-Thanks for your interest in improving GoFrame.
+Thanks for your interest in improving Nucleus.
 
 This document describes the preferred workflow for contributing code, docs, and tests.
 

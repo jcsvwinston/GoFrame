@@ -3,7 +3,7 @@
 Reference date: 2026-04-07.
 Status: Current.
 
-This guide explains how to add models to GoFrame with a long-term, backward-compatible strategy across multiple database engines.
+This guide explains how to add models to Nucleus with a long-term, backward-compatible strategy across multiple database engines.
 
 ## 1. Stable Contract (v1 mindset)
 
@@ -57,8 +57,8 @@ if err := a.RegisterModel(&models.Customer{}, model.ModelConfig{
 Then create/apply SQL migrations:
 
 ```bash
-goframe migrate --config nucleus.yml create create_customers_table
-goframe migrate --config nucleus.yml up
+nucleus migrate --config nucleus.yml create create_customers_table
+nucleus migrate --config nucleus.yml up
 ```
 
 ## 2.2 Database-first (existing schema / legacy systems)
@@ -66,7 +66,7 @@ goframe migrate --config nucleus.yml up
 Use introspection:
 
 ```bash
-goframe inspectdb --config nucleus.yml --tables customers,orders --output internal/models/legacy_models.go
+nucleus inspectdb --config nucleus.yml --tables customers,orders --output internal/models/legacy_models.go
 ```
 
 Then:
@@ -85,7 +85,7 @@ Current inspect output includes schema-derived metadata tags when available:
 For geospatial schemas:
 
 ```bash
-goframe ogrinspect --config nucleus.yml --output internal/models/geospatial_models.go
+nucleus ogrinspect --config nucleus.yml --output internal/models/geospatial_models.go
 ```
 
 ## 2.3 Automated Bootstrap From `.sql` (Bash + PowerShell)
@@ -105,13 +105,13 @@ Both variants execute the same flow:
 1. Import `schema.sql` into the database configured in `nucleus.yml`.
 2. Generate models with `inspectdb`.
 3. Create a baseline migration and copy schema SQL into `<id>_<name>.up.sql`.
-4. Stamp baseline in `goframe_schema_migrations` so environments stay aligned.
+4. Stamp baseline in `nucleus_schema_migrations` so environments stay aligned.
 
 Important: `nucleus.yml` is the single source of truth for connection targeting. If you use `databases.<alias>.url`, set `database_default` (or pass a config that points to the alias you want) before running these scripts.
 
 ## 2.4 Advanced Model Tag Contract (PK/FK/Indexes)
 
-GoFrame model metadata supports explicit primary key naming, FK targets, and index declarations.
+Nucleus model metadata supports explicit primary key naming, FK targets, and index declarations.
 
 Example:
 
@@ -149,8 +149,8 @@ Validation rules:
 
 Scaffold generators now build SQL from model metadata contracts:
 
-- `goframe generate resource <Name>`
-- `goframe startapp <Name>`
+- `nucleus generate resource <Name>`
+- `nucleus startapp <Name>`
 
 Behavior:
 

@@ -27,7 +27,7 @@ Every migration assistant spec must include:
 
 2. Detection
 - explicit patterns to detect impacted usage.
-- include command examples (`rg`, `goframe diffsettings --json`, etc.) when applicable.
+- include command examples (`rg`, `nucleus diffsettings --json`, etc.) when applicable.
 
 3. Rewrite Plan
 - old -> new mapping table.

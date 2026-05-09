@@ -3,7 +3,7 @@
 Reference date: 2026-04-10.
 Status: Current.
 
-This guide covers GoFrame's authentication (`pkg/auth`) and authorization (`pkg/authz`) systems, including JWT flows, session management, password handling, and Casbin-backed policy enforcement.
+This guide covers Nucleus's authentication (`pkg/auth`) and authorization (`pkg/authz`) systems, including JWT flows, session management, password handling, and Casbin-backed policy enforcement.
 
 ## Table of Contents
 
@@ -24,7 +24,7 @@ This guide covers GoFrame's authentication (`pkg/auth`) and authorization (`pkg/
 
 ## Overview
 
-GoFrame provides two complementary authentication mechanisms:
+Nucleus provides two complementary authentication mechanisms:
 
 | Mechanism | Best For | Storage Options |
 |-----------|----------|-----------------|
@@ -77,7 +77,7 @@ return ctx.JSON(200, map[string]string{"access_token": token})
 
 #### Validating Tokens (Middleware)
 
-GoFrame's router includes JWT middleware that validates tokens and enriches the request context:
+Nucleus's router includes JWT middleware that validates tokens and enriches the request context:
 
 ```go
 import "github.com/jcsvwinston/nucleus/pkg/router"
@@ -146,12 +146,12 @@ Sessions are required for server-rendered applications, admin panel, and CSRF-pr
 ```yaml
 # nucleus.yml
 session_store: sql          # Options: memory, sql, redis
-session_cookie_name: goframe_session
+session_cookie_name: nucleus_session
 session_cookie_secure: true # Set true in production (HTTPS only)
 session_cookie_http_only: true
 session_cookie_same_site: strict
 session_idle_timeout: 30m
-session_table: goframe_sessions
+session_table: nucleus_sessions
 ```
 
 #### Store Backends
@@ -159,7 +159,7 @@ session_table: goframe_sessions
 | Store | Use Case | Configuration |
 |-------|----------|---------------|
 | **Memory** | Development, single-instance testing | `session_store: memory` |
-| **SQL** | Production, multi-replica without Redis | `session_store: sql`, `session_table: goframe_sessions` |
+| **SQL** | Production, multi-replica without Redis | `session_store: sql`, `session_table: nucleus_sessions` |
 | **Redis** | High-scale, distributed sessions | `session_store: redis`, `session_redis_url: redis://localhost:6379/0` |
 
 #### Session Usage
@@ -187,7 +187,7 @@ session.Destroy(r.Context())
 
 #### Session Runtime Metadata
 
-GoFrame automatically enriches sessions with serving-node identity for cluster diagnostics:
+Nucleus automatically enriches sessions with serving-node identity for cluster diagnostics:
 
 ```go
 // Session metadata includes:
@@ -204,18 +204,18 @@ View active sessions via admin UI at `/admin#/sessions` or API at `GET /admin/ap
 
 ```bash
 # Create SQL session table (if using sql store)
-goframe createcachetable --config nucleus.yml
+nucleus createcachetable --config nucleus.yml
 
 # Clear expired sessions (production-safe)
-goframe clearsessions --config nucleus.yml
+nucleus clearsessions --config nucleus.yml
 
 # Clear all sessions (use with caution)
-goframe clearsessions --all --force --config nucleus.yml
+nucleus clearsessions --all --force --config nucleus.yml
 ```
 
 ### Password Hashing
 
-GoFrame uses `bcrypt` for password hashing via `golang.org/x/crypto/bcrypt`.
+Nucleus uses `bcrypt` for password hashing via `golang.org/x/crypto/bcrypt`.
 
 ```go
 import "github.com/jcsvwinston/nucleus/pkg/auth"
@@ -245,7 +245,7 @@ hash, err = auth.HashPasswordWithCost("password", bcrypt.MaxCost)
 
 ### User Model
 
-GoFrame provides a minimal user structure in `pkg/auth`:
+Nucleus provides a minimal user structure in `pkg/auth`:
 
 ```go
 type User struct {
@@ -263,17 +263,17 @@ Admin users are managed via CLI commands:
 
 ```bash
 # Create admin user
-goframe createuser --config nucleus.yml --username admin --email admin@example.com
+nucleus createuser --config nucleus.yml --username admin --email admin@example.com
 
 # Interactive password prompt
-goframe createuser --config nucleus.yml --username admin
+nucleus createuser --config nucleus.yml --username admin
 
 # Non-interactive (CI/CD)
-goframe createuser --config nucleus.yml --username admin --password "secure-password" --no-input
+nucleus createuser --config nucleus.yml --username admin --password "secure-password" --no-input
 
 # Change password
-goframe changepassword --config nucleus.yml --username admin
-goframe changepassword --config nucleus.yml --username admin --password "new-password" --no-input
+nucleus changepassword --config nucleus.yml --username admin
+nucleus changepassword --config nucleus.yml --username admin --password "new-password" --no-input
 ```
 
 ---
@@ -282,7 +282,7 @@ goframe changepassword --config nucleus.yml --username admin --password "new-pas
 
 ### Casbin Integration
 
-GoFrame integrates with [Casbin](https://casbin.org/) for policy-based authorization.
+Nucleus integrates with [Casbin](https://casbin.org/) for policy-based authorization.
 
 #### Configuration
 
@@ -395,7 +395,7 @@ The admin panel has two authentication modes:
 
 ### Bootstrap Mode
 
-When there are **no rows** in `goframe_admin_users`, `/admin` is accessible without login to help with initial setup.
+When there are **no rows** in `nucleus_admin_users`, `/admin` is accessible without login to help with initial setup.
 
 ```bash
 # First access after install - no authentication required
@@ -408,7 +408,7 @@ Once at least one admin user exists, `/admin` requires login at `/admin/login`.
 
 ```bash
 # Create first admin user
-goframe createuser --config nucleus.yml --username admin --email admin@example.com
+nucleus createuser --config nucleus.yml --username admin --email admin@example.com
 
 # All subsequent accesses require login
 # Login at http://localhost:8080/admin/login
@@ -431,6 +431,6 @@ goframe createuser --config nucleus.yml --username admin --email admin@example.c
 - [ ] Implement rate limiting on login endpoints (`rate_limit_by_route` or `rate_limit_burst`).
 - [ ] Use Casbin policies for fine-grained authorization.
 - [ ] Store `authz_policy.csv` in version control; reload on changes.
-- [ ] Run `goframe clearsessions` on a cron schedule to clean expired sessions.
+- [ ] Run `nucleus clearsessions` on a cron schedule to clean expired sessions.
 - [ ] Monitor admin session dashboard for unusual access patterns.
 - [ ] Rotate `jwt_secret` periodically (requires token re-issuance).

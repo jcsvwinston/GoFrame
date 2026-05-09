@@ -1,6 +1,6 @@
 # E-Commerce Dashboard Example
 
-Full-stack e-commerce dashboard with GoFrame backend API and React frontend.
+Full-stack e-commerce dashboard with Nucleus backend API and React frontend.
 
 ## Architecture
 
@@ -21,11 +21,11 @@ frontend/
 
 ## Backend Structure
 
-The backend demonstrates the simplified GoFrame API:
+The backend demonstrates the simplified Nucleus API:
 
 - **Models**: Define schema with struct tags
-- **Handlers**: HTTP handlers using `*goframe.Context`
-- **Fluent API**: Chain configuration with `goframe.New()`
+- **Handlers**: HTTP handlers using `*nucleus.Context`
+- **Fluent API**: Chain configuration with `nucleus.New()`
 
 ## Run
 
@@ -76,7 +76,7 @@ go build -o server
 
 Use this example as a reference for:
 
-- Building APIs with the simplified `pkg/goframe` fluent API
+- Building APIs with the simplified `pkg/nucleus` fluent API
 - Organizing code with handlers/models separation
 - Serving SPAs with `app.SPA()`
-- Full-stack GoFrame applications
+- Full-stack Nucleus applications

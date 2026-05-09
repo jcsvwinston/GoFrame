@@ -3,17 +3,17 @@
 Reference date: 2026-04-07.
 Status: Current.
 
-This file is the configuration key contract registry for GoFrame.
+This file is the configuration key contract registry for Nucleus.
 
 Source of truth:
 
 - `pkg/app/config.go` (`Config` struct tags + defaults)
-- environment override prefix: `GOFRAME_`
+- environment override prefix: `NUCLEUS_`
 
 Example mapping:
 
-- `port` -> `GOFRAME_PORT`
-- `databases.analytics.url` -> `GOFRAME_DATABASES__ANALYTICS__URL`
+- `port` -> `NUCLEUS_PORT`
+- `databases.analytics.url` -> `NUCLEUS_DATABASES__ANALYTICS__URL`
 
 ## Lifecycle Tags
 
@@ -36,7 +36,7 @@ Example mapping:
 | Key | Default | Lifecycle | Notes |
 | --- | --- | --- | --- |
 | `database_default` | `default` | `stable` | Primary DB alias used by `app.DB`. |
-| `databases.<alias>.url` | `databases.default.url=sqlite://goframe.db` | `stable` + `experimental` | Stable schemes: `sqlite://`, `postgres://`, `postgresql://`, `mysql://`; exploratory schemes: `sqlserver://`/`mssql://`, `oracle://`. |
+| `databases.<alias>.url` | `databases.default.url=sqlite://nucleus.db` | `stable` + `experimental` | Stable schemes: `sqlite://`, `postgres://`, `postgresql://`, `mysql://`; exploratory schemes: `sqlserver://`/`mssql://`, `oracle://`. |
 | `databases.<alias>.max_open` | `25` | `stable` | Per-alias pool max open conns (inherits primary if omitted). |
 | `databases.<alias>.max_idle` | `5` | `stable` | Per-alias pool max idle conns (inherits primary if omitted). |
 | `databases.<alias>.max_lifetime` | `5m` | `stable` | Per-alias conn max lifetime (inherits primary if omitted). |
@@ -67,14 +67,14 @@ Example mapping:
 | `session_lifetime` | `72h` | `stable` | Server-side session lifetime. |
 | `session_store` | `memory` | `stable` | Supported values: `memory`, `sql`, `redis`. |
 | `session_redis_url` | `""` | `stable` | Redis override for session backend. |
-| `session_table` | `goframe_sessions` | `stable` | SQL session table name. |
+| `session_table` | `nucleus_sessions` | `stable` | SQL session table name. |
 | `session_cookie_name` | `session` | `stable` | Session cookie name. |
 | `session_cookie_domain` | `""` | `stable` | Session cookie domain. |
 | `session_cookie_path` | `/` | `stable` | Session cookie path. |
 | `session_cookie_secure` | `false` | `stable` | Secure cookie requirement (set true in TLS/prod). |
 | `session_cookie_samesite` | `lax` | `stable` | SameSite policy string. |
 | `session_idle_timeout` | `0` | `stable` | Optional idle timeout override. |
-| `session_redis_prefix` | `goframe:sessions:` | `stable` | Session Redis key prefix. |
+| `session_redis_prefix` | `nucleus:sessions:` | `stable` | Session Redis key prefix. |
 
 ## Auth
 
@@ -88,7 +88,7 @@ Example mapping:
 | Key | Default | Lifecycle | Notes |
 | --- | --- | --- | --- |
 | `admin_prefix` | `/admin` | `stable` | Admin mount prefix. |
-| `admin_title` | `GoFrame Admin` | `transitional` | UI labeling may evolve with admin UX maturation. |
+| `admin_title` | `Nucleus Admin` | `transitional` | UI labeling may evolve with admin UX maturation. |
 | `admin_auth_database` | `""` | `stable` | Optional dedicated DB alias for admin auth user store. |
 | `admin_bootstrap_username` | `""` | `stable` | Initial admin user created on first boot (one-time). |
 | `admin_bootstrap_email` | `""` | `stable` | Email for the bootstrap admin user. |
@@ -96,7 +96,7 @@ Example mapping:
 | `admin_live_exclude_patterns[]` | `[/admin]` | `stable` | Path patterns excluded from live HTTP capture. |
 | `admin_cluster_enabled` | `false` | `stable` | Enables cluster-aware admin live telemetry relay. |
 | `admin_cluster_redis_url` | `""` | `stable` | Redis URL override for admin cluster relay (falls back to `redis_url`). |
-| `admin_cluster_channel` | `goframe:admin:live:v1` | `stable` | Pub/Sub channel used by the admin live cluster relay. |
+| `admin_cluster_channel` | `nucleus:admin:live:v1` | `stable` | Pub/Sub channel used by the admin live cluster relay. |
 | `admin_cluster_node_id` | `""` | `stable` | Optional explicit runtime node id used in cluster telemetry events. |
 | `admin_cluster_token` | `""` | `stable` | Optional shared token to reject untrusted cluster relay events. |
 | `admin_trace_url_template` | `""` | `stable` | Optional external trace URL template (`{trace_id}` placeholder) used by admin trace links. |

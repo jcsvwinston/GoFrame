@@ -1,13 +1,13 @@
-# GoFrame Developer Manual
+# Nucleus Developer Manual
 
 Reference date: 2026-04-23.
 Status: Current.
 
-This is the main guide to build, operate, and deploy applications with GoFrame.
+This is the main guide to build, operate, and deploy applications with Nucleus.
 
 ## 1. Objective
 
-GoFrame is a Go web framework built for long-lived production systems, focused on:
+Nucleus is a Go web framework built for long-lived production systems, focused on:
 
 - MVC + REST API applications
 - integrated admin panel
@@ -16,7 +16,7 @@ GoFrame is a Go web framework built for long-lived production systems, focused o
 
 ## 2. Current Scope
 
-Current GoFrame scope includes:
+Current Nucleus scope includes:
 
 - `pkg/app`: application container (config, logger, router, DB, admin, lifecycle)
 - `pkg/db`: SQL connectivity (`database/sql` runtime), health checks, file-based SQL migrations
@@ -81,26 +81,26 @@ Download from official releases:
 
 Assets per release:
 
-- `goframe_<version>_linux_amd64.tar.gz`
-- `goframe_<version>_linux_arm64.tar.gz`
-- `goframe_<version>_darwin_amd64.tar.gz`
-- `goframe_<version>_darwin_arm64.tar.gz`
-- `goframe_<version>_windows_amd64.zip`
-- `goframe_<version>_windows_arm64.zip`
+- `nucleus_<version>_linux_amd64.tar.gz`
+- `nucleus_<version>_linux_arm64.tar.gz`
+- `nucleus_<version>_darwin_amd64.tar.gz`
+- `nucleus_<version>_darwin_arm64.tar.gz`
+- `nucleus_<version>_windows_amd64.zip`
+- `nucleus_<version>_windows_arm64.zip`
 - `checksums.txt`
 
 Recommended validation:
 
 1. Verify checksum.
-2. Run `goframe version`.
+2. Run `nucleus version`.
 
 ## 4.2 From source code
 
 ```bash
 git clone https://github.com/jcsvwinston/nucleus.git
-cd GoFrame
-go build -o goframe ./cmd/nucleus
-./goframe version
+cd Nucleus
+go build -o nucleus ./cmd/nucleus
+./nucleus version
 ```
 
 ## 4.3 Canonical import path note
@@ -109,14 +109,14 @@ Currently, `go.mod` declares:
 
 - `module github.com/jcsvwinston/nucleus`
 
-If you consume GoFrame as a dependency in an external project, keep imports/scripts aligned with that module path until canonical module migration is fully closed.
+If you consume Nucleus as a dependency in an external project, keep imports/scripts aligned with that module path until canonical module migration is fully closed.
 
 ## 5. First Project in 5 Minutes
 
 ## 5.1 Generate scaffold
 
 ```bash
-goframe new myapp --module example.com/myapp --out . --port 8080 --template mvc
+nucleus new myapp --module example.com/myapp --out . --port 8080 --template mvc
 cd myapp
 go mod tidy
 ```
@@ -159,7 +159,7 @@ Generated projects now include an experimental but real contract lane based on `
 Export the current project contract:
 
 ```bash
-goframe openapi --out openapi.json
+nucleus openapi --out openapi.json
 ```
 
 Serve the same document at runtime:
@@ -196,7 +196,7 @@ Current extension guidance:
 - keep contract files explicit and readable; helpers should reduce repetition, not hide the final document shape
 - prefer shared helpers for common `data`/`count` JSON envelopes, error envelopes, empty responses, and `id`/query parameters before adding new ad hoc schema literals
 - CLI export and runtime serving must continue to use the same `contracts.NewDocument()` source of truth
-- runtime serving stays explicit through `app.MountOpenAPI(...)` for now; GoFrame does not auto-mount OpenAPI documents behind the application's back
+- runtime serving stays explicit through `app.MountOpenAPI(...)` for now; Nucleus does not auto-mount OpenAPI documents behind the application's back
 
 Not in scope yet:
 
@@ -239,7 +239,7 @@ Key methods:
 
 ## 6.2 Router and lifecycle
 
-- native GoFrame router stack over `net/http`
+- native Nucleus router stack over `net/http`
 - `Run` starts HTTP server
 - clean shutdown by context cancel or `SIGINT/SIGTERM`
 
@@ -249,7 +249,7 @@ Key methods:
 
 ## 7. Configuration
 
-Configuration is managed via `nucleus.yml` with environment variable overrides (`GOFRAME_`).
+Configuration is managed via `nucleus.yml` with environment variable overrides (`NUCLEUS_`).
 
 For the complete key reference, see `docs/reference/CONFIG_KEY_REGISTRY.md`.
 
@@ -326,7 +326,7 @@ err := a.RegisterModel(&User{}, model.ModelConfig{
 
 ## 9. MVC + API
 
-In GoFrame, MVC and API run side by side in the same router.
+In Nucleus, MVC and API run side by side in the same router.
 
 Example:
 
@@ -413,7 +413,7 @@ For detailed setup, capabilities, API routes, and the multi-node cluster lab, se
 Root command:
 
 ```bash
-goframe migrate [flags] [action]
+nucleus migrate [flags] [action]
 ```
 
 Flags:
@@ -436,12 +436,12 @@ Actions:
 Examples:
 
 ```bash
-goframe migrate --config nucleus.yml create add_project_owner
-goframe migrate --config nucleus.yml
-goframe migrate --config nucleus.yml status
-goframe migrate --config nucleus.yml down 1
-goframe migrate --config nucleus.yml steps -1
-goframe migrate --config nucleus.yml --force reset
+nucleus migrate --config nucleus.yml create add_project_owner
+nucleus migrate --config nucleus.yml
+nucleus migrate --config nucleus.yml status
+nucleus migrate --config nucleus.yml down 1
+nucleus migrate --config nucleus.yml steps -1
+nucleus migrate --config nucleus.yml --force reset
 ```
 
 ## 12. Seeds
@@ -449,7 +449,7 @@ goframe migrate --config nucleus.yml --force reset
 Command:
 
 ```bash
-goframe seed --config nucleus.yml --seeds seeds
+nucleus seed --config nucleus.yml --seeds seeds
 ```
 
 Flags:
@@ -462,15 +462,15 @@ Flags:
 Examples:
 
 ```bash
-goframe seed --config nucleus.yml --seeds seeds --dry-run
-goframe seed --config nucleus.yml --seeds seeds --file 001_users.sql
-goframe seed --config nucleus.yml --seeds seeds --force
+nucleus seed --config nucleus.yml --seeds seeds --dry-run
+nucleus seed --config nucleus.yml --seeds seeds --file 001_users.sql
+nucleus seed --config nucleus.yml --seeds seeds --force
 ```
 
 ## 13. Admin User Creation
 
 ```bash
-goframe createuser --config nucleus.yml \
+nucleus createuser --config nucleus.yml \
   --username admin \
   --email admin@example.com \
   --password supersecret123 \
@@ -490,7 +490,7 @@ Notes:
 Change an existing admin password:
 
 ```bash
-goframe changepassword admin --config nucleus.yml --password newsecret123 --no-input
+nucleus changepassword admin --config nucleus.yml --password newsecret123 --no-input
 ```
 
 ## 13.1 Cache and sessions
@@ -498,16 +498,16 @@ goframe changepassword admin --config nucleus.yml --password newsecret123 --no-i
 Create SQL table for DB-based cache:
 
 ```bash
-goframe createcachetable --config nucleus.yml
-goframe createcachetable --config nucleus.yml --dry-run
+nucleus createcachetable --config nucleus.yml
+nucleus createcachetable --config nucleus.yml --dry-run
 ```
 
 Clear expired sessions (or all sessions):
 
 ```bash
-goframe clearsessions --config nucleus.yml
-goframe clearsessions --config nucleus.yml --all
-goframe clearsessions --config nucleus.yml --dry-run
+nucleus clearsessions --config nucleus.yml
+nucleus clearsessions --config nucleus.yml --all
+nucleus clearsessions --config nucleus.yml --dry-run
 ```
 
 ## 13.2 Additional CLI Commands
@@ -519,14 +519,14 @@ For i18n (`makemessages`, `compilemessages`), static file management (`collectst
 Ad hoc execution:
 
 ```bash
-goframe shell --config nucleus.yml -c "SELECT count(*) FROM users"
-goframe shell --config nucleus.yml --sandbox -c "SELECT count(*) FROM users"
+nucleus shell --config nucleus.yml -c "SELECT count(*) FROM users"
+nucleus shell --config nucleus.yml --sandbox -c "SELECT count(*) FROM users"
 ```
 
 Interactive mode:
 
 ```bash
-goframe shell --config nucleus.yml
+nucleus shell --config nucleus.yml
 ```
 
 It also supports `stdin` input (SQL scripts).
@@ -534,7 +534,7 @@ With `--sandbox`, execution is limited to read-only SQL statements.
 
 ## 14.1 Background tasks (Asynq)
 
-The `goframe new` scaffold generates:
+The `nucleus new` scaffold generates:
 
 - `cmd/worker/main.go`: worker entrypoint
 - `internal/tasks/article_events.go`: sample handler registration
@@ -636,7 +636,7 @@ Not in scope today:
 
 ## 14.3 Signals and distributed relay
 
-`pkg/signals` remains the main in-process event bus. For cross-process delivery, GoFrame now also exposes a small Redis relay instead of a hidden event framework.
+`pkg/signals` remains the main in-process event bus. For cross-process delivery, Nucleus now also exposes a small Redis relay instead of a hidden event framework.
 
 ```go
 bus := signals.NewBus(logger)
@@ -732,10 +732,10 @@ Not in scope today:
 ## 15. Generators (`generate`)
 
 ```bash
-goframe generate model User
-goframe generate handler User
-goframe generate migration add_users_table
-goframe generate resource Project
+nucleus generate model User
+nucleus generate handler User
+nucleus generate migration add_users_table
+nucleus generate resource Project
 ```
 
 Flags:
@@ -756,16 +756,16 @@ Flags:
 ## 16.1 routes
 
 ```bash
-goframe routes --config nucleus.yml
-goframe routes --config nucleus.yml --json
-goframe routes --config nucleus.yml --path /api --verbose
+nucleus routes --config nucleus.yml
+nucleus routes --config nucleus.yml --json
+nucleus routes --config nucleus.yml --path /api --verbose
 ```
 
 ## 16.2 health
 
 ```bash
-goframe health --config nucleus.yml
-goframe health --config nucleus.yml --json --timeout 5s
+nucleus health --config nucleus.yml
+nucleus health --config nucleus.yml --json --timeout 5s
 ```
 
 ## 17. Production Guardrails
@@ -782,7 +782,7 @@ CI/CD recommendation:
 
 ## 18. Recommended Development Flow
 
-1. Generate project/module with `goframe new`.
+1. Generate project/module with `nucleus new`.
 2. Define models and tags.
 3. Register models in `main`.
 4. Adjust SQL migrations.
@@ -807,69 +807,69 @@ For common issues and resolution steps, see the individual guides referenced thr
 ## 22. Quick Command Reference
 
 ```bash
-goframe help
-goframe version
-goframe new <name> [--module ...] [--out ...] [--port ...] [--template mvc] [--force]
-goframe startapp <name> [--out ...] [--migrations ...] [--skip-migration] [--force]
-goframe serve [--config ...] [--host ...] [--port ...]
-goframe migrate [--config ...] [--migrations ...] [--force] [--yes] [action]
-goframe sqlmigrate [--migrations ...] [--down] <migration_id_or_name>
-goframe sqlflush [--config ...]
-goframe sqlsequencereset [--config ...] [tables...]
-goframe flush [--config ...] [--force] [--yes] [--dry-run]
-goframe diffsettings [--config ...] [--all] [--json]
-goframe createcachetable [--config ...] [--table goframe_cache_entries] [--dry-run]
-goframe remove_stale_contenttypes [--config ...] [--table goframe_content_types] [--column model] [--keep custom1,custom2] [--dry-run] [--force] [--yes]
-goframe makemessages [--config ...] [--locale es] [--domain messages] [--input .] [--extensions .go,.html,.templ] [--locales-path locales] [--output ...] [--dry-run]
-goframe compilemessages [--config ...] [--locale es] [--domain messages] [--locales-path locales] [--output ...] [--dry-run]
-goframe collectstatic [--config ...] [--output static_collected] [--source internal/web/static] [--clear] [--dry-run]
-goframe findstatic [--config ...] [--source internal/web/static] [--first] [--json] <asset_path_or_glob> [more...]
-goframe optimizemigration [--migrations migrations] [--down] [--write] <migration_id_or_name>
-goframe squashmigrations [--migrations migrations] --from <migration> --to <migration> [--name baseline] [--write] [--archive-old] [--force] [--dry-run] [--print-sql]
-goframe sendtestemail [--config ...] --to dev@example.com[,ops@example.com] [--from ...] [--subject ...] [--body ...] [--timeout 10s] [--dry-run]
-goframe mailproviders [--config ...] [--json]
-goframe plugin list [--config ...] [--timeout 2s] [--json]
-goframe plugin doctor [--config ...] [--timeout 2s] [--json]
-goframe plugin test [--config ...] --provider <name> --capability <domain.action> [--timeout 2s] [--execute] [--json]
-goframe inspectdb [--config ...] [--tables users,posts] [--exclude ...] [--package models] [--output internal/models/inspected.go]
-goframe ogrinspect [--config ...] [--tables places,roads] [--exclude ...] [--package models] [--output internal/models/geospatial.go] [--all]
-goframe dumpdata [--config ...] [--tables users,posts] [--exclude ...] [--output fixtures.json]
-goframe loaddata [--config ...] [--tables users] [--truncate] [--dry-run] [--force] [--yes] <fixture.json>
-goframe seed [--config ...] [--seeds ...] [--file ...] [--dry-run] [--force] [--yes]
-goframe createuser [--config ...] [--username ...] [--email ...] [--password ...] [--superuser] [--no-input]
-goframe changepassword [--config ...] [--username ...] [--password ...] [--no-input] <username>
-goframe clearsessions [--config ...] [--table goframe_sessions] [--all] [--dry-run]
-goframe shell [--config ...] [--command ...|-c ...] [--timeout 10s] [--sandbox]
-goframe generate [--out ...] [--migrations ...] [--force] <model|handler|migration|resource> <name>
-goframe test [--run ...] [--count 1] [--race] [--v] [--failfast] [--cover] [--timeout ...] [--dry-run] [packages...]
-goframe testserver [--config ...] [--fixture ...] [--tables users] [--truncate] [--dry-run] [--host ...] [--port ...] <fixture.json>
-goframe routes [--config ...] [--path ...] [--json] [--verbose]
-goframe health [--config ...] [--timeout 3s] [--json] [--deploy]
+nucleus help
+nucleus version
+nucleus new <name> [--module ...] [--out ...] [--port ...] [--template mvc] [--force]
+nucleus startapp <name> [--out ...] [--migrations ...] [--skip-migration] [--force]
+nucleus serve [--config ...] [--host ...] [--port ...]
+nucleus migrate [--config ...] [--migrations ...] [--force] [--yes] [action]
+nucleus sqlmigrate [--migrations ...] [--down] <migration_id_or_name>
+nucleus sqlflush [--config ...]
+nucleus sqlsequencereset [--config ...] [tables...]
+nucleus flush [--config ...] [--force] [--yes] [--dry-run]
+nucleus diffsettings [--config ...] [--all] [--json]
+nucleus createcachetable [--config ...] [--table nucleus_cache_entries] [--dry-run]
+nucleus remove_stale_contenttypes [--config ...] [--table nucleus_content_types] [--column model] [--keep custom1,custom2] [--dry-run] [--force] [--yes]
+nucleus makemessages [--config ...] [--locale es] [--domain messages] [--input .] [--extensions .go,.html,.templ] [--locales-path locales] [--output ...] [--dry-run]
+nucleus compilemessages [--config ...] [--locale es] [--domain messages] [--locales-path locales] [--output ...] [--dry-run]
+nucleus collectstatic [--config ...] [--output static_collected] [--source internal/web/static] [--clear] [--dry-run]
+nucleus findstatic [--config ...] [--source internal/web/static] [--first] [--json] <asset_path_or_glob> [more...]
+nucleus optimizemigration [--migrations migrations] [--down] [--write] <migration_id_or_name>
+nucleus squashmigrations [--migrations migrations] --from <migration> --to <migration> [--name baseline] [--write] [--archive-old] [--force] [--dry-run] [--print-sql]
+nucleus sendtestemail [--config ...] --to dev@example.com[,ops@example.com] [--from ...] [--subject ...] [--body ...] [--timeout 10s] [--dry-run]
+nucleus mailproviders [--config ...] [--json]
+nucleus plugin list [--config ...] [--timeout 2s] [--json]
+nucleus plugin doctor [--config ...] [--timeout 2s] [--json]
+nucleus plugin test [--config ...] --provider <name> --capability <domain.action> [--timeout 2s] [--execute] [--json]
+nucleus inspectdb [--config ...] [--tables users,posts] [--exclude ...] [--package models] [--output internal/models/inspected.go]
+nucleus ogrinspect [--config ...] [--tables places,roads] [--exclude ...] [--package models] [--output internal/models/geospatial.go] [--all]
+nucleus dumpdata [--config ...] [--tables users,posts] [--exclude ...] [--output fixtures.json]
+nucleus loaddata [--config ...] [--tables users] [--truncate] [--dry-run] [--force] [--yes] <fixture.json>
+nucleus seed [--config ...] [--seeds ...] [--file ...] [--dry-run] [--force] [--yes]
+nucleus createuser [--config ...] [--username ...] [--email ...] [--password ...] [--superuser] [--no-input]
+nucleus changepassword [--config ...] [--username ...] [--password ...] [--no-input] <username>
+nucleus clearsessions [--config ...] [--table nucleus_sessions] [--all] [--dry-run]
+nucleus shell [--config ...] [--command ...|-c ...] [--timeout 10s] [--sandbox]
+nucleus generate [--out ...] [--migrations ...] [--force] <model|handler|migration|resource> <name>
+nucleus test [--run ...] [--count 1] [--race] [--v] [--failfast] [--cover] [--timeout ...] [--dry-run] [packages...]
+nucleus testserver [--config ...] [--fixture ...] [--tables users] [--truncate] [--dry-run] [--host ...] [--port ...] <fixture.json>
+nucleus routes [--config ...] [--path ...] [--json] [--verbose]
+nucleus health [--config ...] [--timeout 3s] [--json] [--deploy]
 ```
 
 Global output options (before command):
 
 ```bash
-goframe --output plain|pretty|json <command> ...
-goframe --color auto|always|never <command> ...
-goframe --symbols|--no-symbols <command> ...
-goframe --json <command> ...            # shorthand for --output json
+nucleus --output plain|pretty|json <command> ...
+nucleus --color auto|always|never <command> ...
+nucleus --symbols|--no-symbols <command> ...
+nucleus --json <command> ...            # shorthand for --output json
 ```
 
 Compatibility aliases:
 
 ```bash
-goframe runserver [addr:port]
-goframe startproject <name> [new flags]
-goframe makemigrations <name>
-goframe showmigrations [--config ...] [--migrations ...]
-goframe createsuperuser [createuser flags]
-goframe dbshell [shell flags]
-goframe check [health flags]             # health alias
-goframe check --deploy [--config ...]    # deployment hardening checks
+nucleus runserver [addr:port]
+nucleus startproject <name> [new flags]
+nucleus makemigrations <name>
+nucleus showmigrations [--config ...] [--migrations ...]
+nucleus createsuperuser [createuser flags]
+nucleus dbshell [shell flags]
+nucleus check [health flags]             # health alias
+nucleus check --deploy [--config ...]    # deployment hardening checks
 ```
 
-In projects generated with `goframe new`, you also have:
+In projects generated with `nucleus new`, you also have:
 
 ```bash
 go run ./cmd/server

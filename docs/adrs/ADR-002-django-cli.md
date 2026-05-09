@@ -6,7 +6,7 @@
 
 ## Context
 
-GoFrame targets developers who value:
+Nucleus targets developers who value:
 
 1. **Convention over configuration**: Predictable project structure and command patterns.
 2. **Operational completeness**: All lifecycle tasks available from a single CLI.
@@ -17,9 +17,9 @@ Django's `manage.py` has proven these patterns effective for long-lived systems 
 
 ## Decision
 
-GoFrame's CLI (`goframe`) adopts Django-inspired command naming and workflow:
+Nucleus's CLI (`nucleus`) adopts Django-inspired command naming and workflow:
 
-| Django Command | GoFrame Equivalent | Purpose |
+| Django Command | Nucleus Equivalent | Purpose |
 |---------------|-------------------|---------|
 | `runserver` | `serve` (alias: `runserver`) | Start development server |
 | `startproject` | `new` (alias: `startproject`) | Create new project |

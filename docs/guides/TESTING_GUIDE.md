@@ -3,7 +3,7 @@
 Reference date: 2026-04-10.
 Status: Current.
 
-This guide covers testing strategies for GoFrame applications, including HTTP handler tests, database fixture patterns, plugin contract tests, and integration tests across multiple database engines.
+This guide covers testing strategies for Nucleus applications, including HTTP handler tests, database fixture patterns, plugin contract tests, and integration tests across multiple database engines.
 
 ## Table of Contents
 
@@ -22,7 +22,7 @@ This guide covers testing strategies for GoFrame applications, including HTTP ha
 
 ## Overview
 
-GoFrame applications should be tested at multiple levels:
+Nucleus applications should be tested at multiple levels:
 
 | Level | What to Test | Speed |
 |-------|-------------|-------|
@@ -60,11 +60,11 @@ go test -race ./...
 ### Framework test command
 
 ```bash
-# GoFrame's built-in test command (runs with framework-friendly defaults)
-goframe test
+# Nucleus's built-in test command (runs with framework-friendly defaults)
+nucleus test
 
 # Dry run (show what would be tested)
-goframe test --dry-run
+nucleus test --dry-run
 ```
 
 ---
@@ -344,7 +344,7 @@ func TestArticleModel_FindAll(t *testing.T) {
 }
 ```
 
-### JSON fixture pattern (using GoFrame dumpdata/loaddata)
+### JSON fixture pattern (using Nucleus dumpdata/loaddata)
 
 ```json
 // testdata/articles.json
@@ -483,7 +483,7 @@ import "github.com/jcsvwinston/nucleus/pkg/plugins"
 
 func TestMailPlugin_Contract(t *testing.T) {
     // Create test plugin binary path
-    pluginPath := filepath.Join(t.TempDir(), "goframe-plugin-testmail")
+    pluginPath := filepath.Join(t.TempDir(), "nucleus-plugin-testmail")
     buildTestPlugin(t, pluginPath, mailPluginSource)
 
     // Probe capabilities
@@ -581,29 +581,29 @@ func main() {
 
 ### SQL matrix testing
 
-GoFrame supports testing across multiple database engines using environment variables:
+Nucleus supports testing across multiple database engines using environment variables:
 
 ```bash
 # PostgreSQL
-GOFRAME_SQL_MATRIX_URL="postgres://user:pass@localhost/goframe_test" go test ./...
+NUCLEUS_SQL_MATRIX_URL="postgres://user:pass@localhost/nucleus_test" go test ./...
 
 # MySQL
-GOFRAME_SQL_MATRIX_URL="mysql://user:pass@localhost/goframe_test" go test ./...
+NUCLEUS_SQL_MATRIX_URL="mysql://user:pass@localhost/nucleus_test" go test ./...
 
 # MS SQL Server (exploratory)
-GOFRAME_SQL_EXPLORATORY_URL="sqlserver://user:pass@localhost/goframe_test" go test ./...
+NUCLEUS_SQL_EXPLORATORY_URL="sqlserver://user:pass@localhost/nucleus_test" go test ./...
 
 # Oracle (exploratory)
-GOFRAME_SQL_EXPLORATORY_URL="oracle://user:pass@localhost/goframe_test" go test ./...
+NUCLEUS_SQL_EXPLORATORY_URL="oracle://user:pass@localhost/nucleus_test" go test ./...
 ```
 
 ### Writing DB-agnostic tests
 
 ```go
 func TestMigrations_AcrossEngines(t *testing.T) {
-    dbURL := os.Getenv("GOFRAME_SQL_MATRIX_URL")
+    dbURL := os.Getenv("NUCLEUS_SQL_MATRIX_URL")
     if dbURL == "" {
-        t.Skip("GOFRAME_SQL_MATRIX_URL not set")
+        t.Skip("NUCLEUS_SQL_MATRIX_URL not set")
     }
 
     // Run migrations
@@ -619,7 +619,7 @@ func TestMigrations_AcrossEngines(t *testing.T) {
     }
 
     expectedTables := []string{
-        "goframe_migrations",
+        "nucleus_migrations",
         "articles",
         "users",
     }
@@ -637,7 +637,7 @@ func TestMigrations_AcrossEngines(t *testing.T) {
 ```go
 func TestFixtureServer(t *testing.T) {
     // Load fixtures and start server for integration testing
-    // This is what `goframe testserver` does internally
+    // This is what `nucleus testserver` does internally
 }
 ```
 
@@ -799,11 +799,11 @@ go tool cover -html=coverage.out
 go test -race ./...
 
 # Run SQL matrix tests
-GOFRAME_SQL_MATRIX_URL="postgres://..." go test ./...
+NUCLEUS_SQL_MATRIX_URL="postgres://..." go test ./...
 
 # Run fixture server test
-goframe testserver --fixtures testdata/fixtures
+nucleus testserver --fixtures testdata/fixtures
 
 # CLI integration tests
-goframe test
+nucleus test
 ```

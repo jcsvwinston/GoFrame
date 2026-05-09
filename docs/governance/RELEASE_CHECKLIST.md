@@ -3,7 +3,7 @@
 Reference date: 2026-04-23.
 Status: Current release validation checklist.
 
-This checklist defines the required validation steps for GoFrame release candidates.
+This checklist defines the required validation steps for Nucleus release candidates.
 
 ## Pre-Release Validation
 
@@ -104,5 +104,5 @@ Contract inventory references:
 
 ## 11. Post-Release
 
-- [ ] Verify `goframe version` prints the expected release version
+- [ ] Verify `nucleus version` prints the expected release version
 - [ ] Update strategic/status docs when milestone posture changes

@@ -5,7 +5,7 @@ Status: Current (pre-v1 - React-based UI).
 
 ## Overview
 
-The GoFrame admin panel (`/admin`) is an embedded **React + TypeScript** application with Tailwind CSS and Base UI components. It provides:
+The Nucleus admin panel (`/admin`) is an embedded **React + TypeScript** application with Tailwind CSS and Base UI components. It provides:
 
 - Modern authentication UI with dark/light theme support
 - Data management (CRUD) for registered models with AG Grid
@@ -109,17 +109,17 @@ Output: `ui/dist/` (embedded in Go binary via `//go:embed`)
 ### Authentication Flow
 
 1. **GET** `/admin/login` → React login page rendered
-2. **POST** `/admin/login` → Go validates credentials against `goframe_admin_users` table
+2. **POST** `/admin/login` → Go validates credentials against `nucleus_admin_users` table
 3. **Success** → Session created, redirect to `/admin/`
 4. **Failure** → React login page shown with error toast
 
 ### Session Management
 
 Sessions are stored in the configured backend (`memory|sql|redis`) with keys:
-- `__goframe_admin_user_id`
-- `__goframe_admin_username`
-- `__goframe_admin_email`
-- `__goframe_admin_superuser`
+- `__nucleus_admin_user_id`
+- `__nucleus_admin_username`
+- `__nucleus_admin_email`
+- `__nucleus_admin_superuser`
 
 ## Configuration
 
@@ -127,7 +127,7 @@ Sessions are stored in the configured backend (`memory|sql|redis`) with keys:
 
 ```yaml
 admin_prefix: /admin           # URL prefix (default: /admin)
-admin_title: GoFrame Admin     # Panel title
+admin_title: Nucleus Admin     # Panel title
 admin_auth_database: default   # Database for admin users table
 admin_bootstrap_username: admin
 admin_bootstrap_email: admin@localhost
@@ -299,7 +299,7 @@ Edit `src/services/api.ts` and add new endpoint functions.
 
 ## Security Considerations
 
-1. **Authentication**: Session-based via `goframe_admin_users` table
+1. **Authentication**: Session-based via `nucleus_admin_users` table
 2. **Authorization**: RBAC via Casbin (optional but recommended for multi-user environments)
 3. **Tenant Isolation**: Auto-filtered when multi-tenant enabled
 4. **Audit Trail**: All CRUD operations logged automatically
@@ -312,7 +312,7 @@ Edit `src/services/api.ts` and add new endpoint functions.
 
 ### Admin panel not accessible
 - Check `admin_prefix` configuration
-- Verify database has `goframe_admin_users` table
+- Verify database has `nucleus_admin_users` table
 - Check bootstrap credentials in logs
 
 ### RBAC not working

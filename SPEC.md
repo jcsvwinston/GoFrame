@@ -1,9 +1,9 @@
-# GoFrame Technical Specification
+# Nucleus Technical Specification
 
 Reference date: 2026-04-23.
 Status: Current pre-v1 baseline.
 
-This document defines the current, implemented technical baseline for GoFrame.
+This document defines the current, implemented technical baseline for Nucleus.
 It replaces older design notes that referenced superseded architecture choices.
 
 ## 1. Scope and Precedence
@@ -87,7 +87,7 @@ Scaffold templates:
 
 ## 3.2 HTTP and Middleware (`pkg/router`)
 
-GoFrame uses its own router/mux abstractions (not Chi as a runtime dependency):
+Nucleus uses its own router/mux abstractions (not Chi as a runtime dependency):
 
 - route registration + mounting
 - request middleware chain
@@ -192,8 +192,7 @@ Mail:
 Plugin runtime:
 
 - provider discovery and capability schema handling
-- `goframe-plugin-<provider>` primary external naming
-- `goframe-mail-<driver>` legacy compatibility fallback
+- `nucleus-plugin-<provider>` external naming convention (single, no legacy fallback)
 
 ## 3.8 Storage (`pkg/storage`)
 
@@ -324,7 +323,7 @@ Canonical DB configuration is alias-based only:
 database_default: default
 databases:
   default:
-    url: sqlite://goframe.db
+    url: sqlite://nucleus.db
   analytics:
     url: postgres://...
 ```
@@ -362,7 +361,7 @@ Isolation guardrail behavior:
 
 ## 7. CLI Contract Baseline (`cmd/nucleus`, `internal/cli`)
 
-GoFrame ships stable operational CLI coverage for:
+Nucleus ships stable operational CLI coverage for:
 
 - runtime and diagnostics (`serve`, `routes`, `health`)
 - scaffolding (`new`, `startapp`, `generate`)
@@ -389,7 +388,7 @@ Current experimental API contract lane:
 
 - projects aggregate generated API contracts in `internal/contracts`
 - `internal/contracts/contracts.go` exposes the package-level document builder (`DefaultConfig`, `NewDocument`, `NewDocumentWithConfig`)
-- `goframe openapi --out openapi.json` exports the current project contract as OpenAPI JSON
+- `nucleus openapi --out openapi.json` exports the current project contract as OpenAPI JSON
 - generated server scaffolds can serve that same contract explicitly at `/openapi.json` via `app.MountOpenAPI`
 
 ## 8. Compatibility Governance

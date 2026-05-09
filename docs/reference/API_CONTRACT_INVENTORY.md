@@ -3,7 +3,7 @@
 Reference date: 2026-04-23.
 Status: Current.
 
-This file defines lifecycle tags for GoFrame public API surfaces and documents extension points and non-contract zones.
+This file defines lifecycle tags for Nucleus public API surfaces and documents extension points and non-contract zones.
 
 ## Lifecycle Tags
 
@@ -26,9 +26,9 @@ Policy references:
 | `pkg/router` | `stable` | Router construction, middleware hooks, unified request context helpers (`Context`, `ContextHandler`), rendering/binding/pagination helpers | Request/response helper behavior is contract surface. |
 | `pkg/auth` | `stable` | JWT manager, claims context helpers, session manager/store APIs | Multi-store session surface is contracted (`memory`, `sql`, `redis`). |
 | `pkg/authz` | `stable` | Enforcer creation and authorization middleware helpers | Casbin-backed authz boundary for apps. |
-| `pkg/mail` | `stable` | Mail sender abstraction, provider registry (`RegisterProvider`), sender construction (`NewSender`) | Built-ins + external plugin/legacy bridge are supported. |
+| `pkg/mail` | `stable` | Mail sender abstraction, provider registry (`RegisterProvider`), sender construction (`NewSender`) | Built-in providers plus external capability plugins (`nucleus-plugin-<provider>` advertising `mail.send`) are supported. |
 | `pkg/plugins` | `stable` | Plugin SDK v1 envelopes/capability constants, inventory/probe/runtime execution APIs | SDK `v1` contract is intended stable through `v1.x`. |
-| `pkg/openapi` | `experimental` | Minimal OpenAPI 3.1 document model, JSON serialization helpers, runtime document handler helpers, and small schema/response/parameter helpers for scaffolded contracts | Official experimental base layer for project-level API contracts via `internal/contracts`, `goframe openapi`, and explicit runtime serving; the current helper subset covers repeated JSON schema shapes, shared `data`/`count` response envelopes, structured JSON error responses, empty responses, and explicit path/query parameters including the scaffolded optional `q` search convention, but the overall surface may still expand before `v1.0`. |
+| `pkg/openapi` | `experimental` | Minimal OpenAPI 3.1 document model, JSON serialization helpers, runtime document handler helpers, and small schema/response/parameter helpers for scaffolded contracts | Official experimental base layer for project-level API contracts via `internal/contracts`, `nucleus openapi`, and explicit runtime serving; the current helper subset covers repeated JSON schema shapes, shared `data`/`count` response envelopes, structured JSON error responses, empty responses, and explicit path/query parameters including the scaffolded optional `q` search convention, but the overall surface may still expand before `v1.0`. |
 | `pkg/tasks` | `stable` | Task manager config/runtime, explicit enqueue-policy helpers, explicit scheduler helpers, queue runtime operations, and JSON task helpers | Queue runtime boundary for app code, including explicit queue action helpers, periodic scheduling helpers, and runtime inspection used by admin/runtime operations. |
 | `pkg/outbox` | `transitional` | SQL-backed outbox store, runtime inspection, and dispatcher APIs (`NewStore`, `Enqueue`, `EnqueueTx`, `InspectRuntime`, `NewDispatcher`, `Run`, `RunOnce`) | Small transactional outbox surface intended for durable intra-app delivery; public and supported, but still early enough that non-essential ergonomics may tighten before `v1.0`. |
 | `pkg/observe` | `stable` | Logger/context correlation helpers and OTel setup entrypoint | Telemetry backend internals are not part of app contract. |
@@ -42,9 +42,8 @@ Policy references:
 | Extension Point | Lifecycle | Contract |
 | --- | --- | --- |
 | In-process mail provider registration (`mail.RegisterProvider`) | `stable` | Register custom provider factories without forking framework internals. |
-| External capability plugins (`goframe-plugin-<provider>`) using SDK `v1` | `stable` | Capability envelopes, exit-code mapping, and probe flow are contracted. |
-| Legacy mail plugin bridge (`goframe-mail-<driver>`) | `transitional` | Supported for compatibility; capability plugin path is preferred. |
-| External CLI command bridge (`goframe-<name>`) | `transitional` | Command delegation interface is supported but kept intentionally minimal. |
+| External capability plugins (`nucleus-plugin-<provider>`) using SDK `v1` | `stable` | Capability envelopes, exit-code mapping, and probe flow are contracted. |
+| External CLI command bridge (`nucleus-<name>`) | `transitional` | Command delegation interface is supported but kept intentionally minimal. |
 
 ## Explicit Non-Contract Surfaces
 
@@ -75,6 +74,6 @@ Stable no-removal freeze is enforced in `contracts/freeze_test.go` with baseline
 Intentional baseline refresh workflow:
 
 ```bash
-GOFRAME_UPDATE_CONTRACT_BASELINE=1 go test ./contracts -run '^TestContractFreeze_APIExportedSymbols_NoRemovals$' -count=1
+NUCLEUS_UPDATE_CONTRACT_BASELINE=1 go test ./contracts -run '^TestContractFreeze_APIExportedSymbols_NoRemovals$' -count=1
 bash scripts/ci/check_contract_freeze.sh
 ```

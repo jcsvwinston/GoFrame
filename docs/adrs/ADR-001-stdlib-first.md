@@ -15,7 +15,7 @@ Go's standard library provides robust, production-ready building blocks: `net/ht
 
 ## Decision
 
-GoFrame is designed **stdlib-first**:
+Nucleus is designed **stdlib-first**:
 
 - **HTTP**: Uses `net/http` directly with a custom lightweight router (`pkg/router`). No Chi, Gin, or Echo as runtime dependencies.
 - **Database**: Uses `database/sql` directly with driver-specific connection strings. No ORM abstraction (no GORM, Bun, or universal SQL layer).
@@ -38,7 +38,7 @@ Third-party libraries are used **only when stdlib doesn't provide equivalent fun
 
 ### Positive
 
-- **Portability**: GoFrame applications use idiomatic Go patterns transferable to any Go project.
+- **Portability**: Nucleus applications use idiomatic Go patterns transferable to any Go project.
 - **Debuggability**: Stack traces are shallow; errors originate from stdlib or application code.
 - **Upgrade safety**: Go version bumps don't break framework internals.
 - **Smaller dependency tree**: Fewer transitive dependencies mean fewer security vulnerabilities and faster builds.
@@ -46,13 +46,13 @@ Third-party libraries are used **only when stdlib doesn't provide equivalent fun
 
 ### Negative
 
-- **More framework code**: GoFrame must implement routing, middleware chains, and request context helpers that other frameworks get from dependencies.
+- **More framework code**: Nucleus must implement routing, middleware chains, and request context helpers that other frameworks get from dependencies.
 - **Reinvention risk**: Custom router/middleware must be thoroughly tested to match battle-tested alternatives.
 - **Feature gap**: Some advanced features (e.g., automatic OpenAPI generation) may require third-party integration work.
 
 ## Compliance
 
-All new code in GoFrame must:
+All new code in Nucleus must:
 
 1. Prefer stdlib packages over third-party alternatives when functionally equivalent.
 2. Justify any new runtime dependency in the PR description.

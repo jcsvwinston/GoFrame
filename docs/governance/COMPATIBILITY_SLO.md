@@ -3,7 +3,7 @@
 Reference date: 2026-04-07.
 Status: Current.
 
-This policy defines the measurable compatibility service levels that GoFrame must satisfy before and after `v1.0`.
+This policy defines the measurable compatibility service levels that Nucleus must satisfy before and after `v1.0`.
 
 ## Objective
 

@@ -3,7 +3,7 @@
 Reference date: 2026-04-07.
 Status: Current.
 
-This document defines the recommended minimum dashboards and alerts for GoFrame services in production.
+This document defines the recommended minimum dashboards and alerts for Nucleus services in production.
 
 ## Scope
 

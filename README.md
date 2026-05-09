@@ -1,11 +1,11 @@
-# GoFrame
+# Nucleus
 
 [![CI](https://github.com/jcsvwinston/nucleus/actions/workflows/ci.yml/badge.svg)](https://github.com/jcsvwinston/nucleus/actions/workflows/ci.yml)
 [![Go Reference](https://pkg.go.dev/badge/github.com/jcsvwinston/nucleus.svg)](https://pkg.go.dev/github.com/jcsvwinston/nucleus)
 
 **Enterprise web framework for Go** — Simple like Gin, powerful like Django.
 
-## Why GoFrame
+## Why Nucleus
 
 - **MVC + REST API**: Build web apps and APIs with the same framework
 - **Auto-generated Admin**: CRUD interface from your models
@@ -24,7 +24,7 @@ go install github.com/jcsvwinston/nucleus/cmd/nucleus@latest
 ### Create Project
 
 ```bash
-goframe new myapp
+nucleus new myapp
 cd myapp
 go mod tidy
 go run ./cmd/server
@@ -41,7 +41,7 @@ Open:
 package main
 
 import (
-    "github.com/jcsvwinston/nucleus/pkg/goframe"
+    "github.com/jcsvwinston/nucleus/pkg/nucleus"
 )
 
 type Article struct {
@@ -50,12 +50,12 @@ type Article struct {
 }
 
 func main() {
-    goframe.New().
+    nucleus.New().
         Port(8080).
         SQLite("app.db").
         Model(&Article{}).
         AutoMigrate().
-        Get("/api/articles", func(c *goframe.Context) error {
+        Get("/api/articles", func(c *nucleus.Context) error {
             return c.JSON(200, []Article{{ID: 1, Title: "Hello"}})
         }).
         Run()
@@ -102,13 +102,13 @@ myapp/
 ## CLI Commands
 
 ```bash
-goframe new myapp          # Create project
-goframe serve              # Run server
-goframe migrate            # Run migrations
-goframe seed               # Load seed data
-goframe createuser         # Create admin user
-goframe routes             # List routes
-goframe health             # Check health
+nucleus new myapp          # Create project
+nucleus serve              # Run server
+nucleus migrate            # Run migrations
+nucleus seed               # Load seed data
+nucleus createuser         # Create admin user
+nucleus routes             # List routes
+nucleus health             # Check health
 ```
 
 ## Requirements

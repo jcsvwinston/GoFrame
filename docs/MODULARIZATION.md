@@ -5,8 +5,8 @@ Status: **In progress**.
 
 ## Objective
 
-Make GoFrame-generated projects fully self-contained: compilable, runnable,
-and deployable without the GoFrame source tree, without a local `replace`
+Make Nucleus-generated projects fully self-contained: compilable, runnable,
+and deployable without the Nucleus source tree, without a local `replace`
 directive, and without unnecessary dependency weight.
 
 ## Phases
@@ -15,7 +15,7 @@ directive, and without unnecessary dependency weight.
 
 **Status: Complete.**
 
-The `goframe new` scaffold now generates a `go.mod` with an explicit
+The `nucleus new` scaffold now generates a `go.mod` with an explicit
 `require github.com/jcsvwinston/nucleus <version>` line.
 
 - Release builds embed the exact version tag (e.g. `v0.5.5`) via goreleaser ldflags.
@@ -167,7 +167,7 @@ independent Go modules with their own `go.mod` files. This approach was
 2. Multi-module releases require coordinated tagging infrastructure that
    doesn't exist yet.
 3. Phases 1-3 already achieve the stated goal: scaffolded projects are
-   self-contained, modular, and can run without the GoFrame binary or source.
+   self-contained, modular, and can run without the Nucleus binary or source.
 
 #### What was tried and reverted
 

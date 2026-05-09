@@ -3,7 +3,7 @@
 Reference date: 2026-05-07.
 Status: Current.
 
-This guide covers GoFrame's error handling system (`pkg/errors`), including Laravel-style features like report/render separation, configurable log levels, global context, and exception throttling.
+This guide covers Nucleus's error handling system (`pkg/errors`), including Laravel-style features like report/render separation, configurable log levels, global context, and exception throttling.
 
 ## Table of Contents
 
@@ -25,7 +25,7 @@ This guide covers GoFrame's error handling system (`pkg/errors`), including Lara
 
 ## Overview
 
-GoFrame provides a structured error system in `pkg/errors` with Laravel-style features:
+Nucleus provides a structured error system in `pkg/errors` with Laravel-style features:
 
 1. **Report/Render Separation**: Separate logging (report) from HTTP responses (render)
 2. **Reportable Exceptions**: Custom reporting logic for external services (Sentry, Flare)
@@ -40,7 +40,7 @@ GoFrame provides a structured error system in `pkg/errors` with Laravel-style fe
 
 ### Report/Render Separation
 
-GoFrame separates error handling into two distinct concerns:
+Nucleus separates error handling into two distinct concerns:
 
 - **Report**: Logging, sending to external services (Sentry, Flare)
 - **Render**: HTTP response to the user
@@ -85,7 +85,7 @@ type LogLevelProvider interface {
 
 ## Domain Error Types
 
-GoFrame defines standard domain errors:
+Nucleus defines standard domain errors:
 
 | Error Code | HTTP Status | Description |
 |------------|-------------|-------------|
@@ -431,7 +431,7 @@ func (e *IgnorableError) Report(ctx context.Context, logger *slog.Logger) bool {
 
 ## Error Wrapping and Unwrapping
 
-GoFrame errors support Go 1.13+ error wrapping:
+Nucleus errors support Go 1.13+ error wrapping:
 
 ```go
 import (

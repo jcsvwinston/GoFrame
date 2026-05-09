@@ -3,7 +3,7 @@
 Reference date: 2026-04-23.
 Status: Current.
 
-This document defines GoFrame CI SQL matrix profiles, required vs exploratory lanes, and local reproduction commands.
+This document defines Nucleus CI SQL matrix profiles, required vs exploratory lanes, and local reproduction commands.
 
 Manual CI dispatch is available via `workflow_dispatch` for stability drills.
 
@@ -62,13 +62,13 @@ Validated baselines:
 ## PostgreSQL required profile
 
 ```bash
-docker run --rm --name goframe-pg \
-  -e POSTGRES_DB=goframe \
+docker run --rm --name nucleus-pg \
+  -e POSTGRES_DB=nucleus \
   -e POSTGRES_USER=postgres \
   -e POSTGRES_PASSWORD=postgres \
   -p 5432:5432 -d postgres:16
 
-export GOFRAME_SQL_MATRIX_URL='postgres://postgres:postgres@127.0.0.1:5432/goframe?sslmode=disable'
+export NUCLEUS_SQL_MATRIX_URL='postgres://postgres:postgres@127.0.0.1:5432/nucleus?sslmode=disable'
 go test ./pkg/db -run '^TestSQLMatrix_ConnectAndPing$' -v
 go test ./internal/cli -run '^TestSQLMatrix_CriticalCommands$' -v
 ```
@@ -76,12 +76,12 @@ go test ./internal/cli -run '^TestSQLMatrix_CriticalCommands$' -v
 ## MySQL required profile
 
 ```bash
-docker run --rm --name goframe-mysql \
-  -e MYSQL_DATABASE=goframe \
+docker run --rm --name nucleus-mysql \
+  -e MYSQL_DATABASE=nucleus \
   -e MYSQL_ROOT_PASSWORD=root \
   -p 3306:3306 -d mysql:8.4
 
-export GOFRAME_SQL_MATRIX_URL='mysql://root:root@127.0.0.1:3306/goframe'
+export NUCLEUS_SQL_MATRIX_URL='mysql://root:root@127.0.0.1:3306/nucleus'
 go test ./pkg/db -run '^TestSQLMatrix_ConnectAndPing$' -v
 go test ./internal/cli -run '^TestSQLMatrix_CriticalCommands$' -v
 ```
@@ -92,20 +92,20 @@ go test ./internal/cli -run '^TestSQLMatrix_CriticalCommands$' -v
 > You must pass `-tags mssql` or `-tags oracle` when running these tests.
 
 ```bash
-docker run --rm --name goframe-mssql \
+docker run --rm --name nucleus-mssql \
   -e ACCEPT_EULA=Y \
   -e MSSQL_SA_PASSWORD='StrongPassw0rd!' \
   -p 1433:1433 -d mcr.microsoft.com/mssql/server:2022-latest
 
-export GOFRAME_SQL_EXPLORATORY_URL='sqlserver://sa:StrongPassw0rd!@127.0.0.1:1433/master'
+export NUCLEUS_SQL_EXPLORATORY_URL='sqlserver://sa:StrongPassw0rd!@127.0.0.1:1433/master'
 go test -tags mssql ./pkg/db -run '^TestSQLMatrix_ExploratoryLiveConnectAndPing$' -v
 go test -tags mssql ./internal/cli -run '^TestSQLMatrix_ExploratoryCriticalCommands$' -v
 
-docker run --rm --name goframe-oracle \
+docker run --rm --name nucleus-oracle \
   -e ORACLE_PASSWORD='oracle' \
   -p 1521:1521 -d gvenzl/oracle-free:23-slim
 
-export GOFRAME_SQL_EXPLORATORY_URL='oracle://system:oracle@127.0.0.1:1521/FREEPDB1'
+export NUCLEUS_SQL_EXPLORATORY_URL='oracle://system:oracle@127.0.0.1:1521/FREEPDB1'
 go test -tags oracle ./pkg/db -run '^TestSQLMatrix_ExploratoryLiveConnectAndPing$' -v
 go test -tags oracle ./internal/cli -run '^TestSQLMatrix_ExploratoryCriticalCommands$' -v
 ```
