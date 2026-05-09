@@ -10,6 +10,8 @@ import (
 	"net/http/cookiejar"
 	"net/http/httptest"
 	"net/url"
+	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"testing"
@@ -430,6 +432,19 @@ func TestPanel_Authorization_ActionLevelExportDenied(t *testing.T) {
 }
 
 func TestPanel_UIAssetsServedUnderCustomPrefix(t *testing.T) {
+	distDir := t.TempDir()
+	assetsDir := filepath.Join(distDir, "assets")
+	if err := os.MkdirAll(assetsDir, 0o755); err != nil {
+		t.Fatalf("create assets dir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(distDir, "index.html"), []byte(`<!doctype html><html><head></head><body><script type="module" src="./assets/app.js"></script></body></html>`), 0o644); err != nil {
+		t.Fatalf("write index: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(assetsDir, "app.js"), []byte(`import { createRoot } from "react-dom/client";`), 0o644); err != nil {
+		t.Fatalf("write asset: %v", err)
+	}
+	t.Setenv(adminUIDirEnv, distDir)
+
 	panel, cleanup := setupPanelForTest(t, db.EngineSQL)
 	defer cleanup()
 	panel.config.Prefix = "/goframe-admin"

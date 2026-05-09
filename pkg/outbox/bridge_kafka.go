@@ -5,21 +5,10 @@ import (
 	"fmt"
 )
 
-// KafkaBridge delivers outbox messages to Apache Kafka.
-//
-// This is a placeholder implementation that demonstrates the interface structure.
-// A production implementation would use a Kafka client library such as:
-//   - github.com/segmentio/kafka-go
-//   - github.com/IBM/sarama
-//   - github.com/Shopify/sarama
-//
-// To implement a production Kafka bridge:
-// 1. Import a Kafka client library
-// 2. Create a Kafka writer/producer in NewKafkaBridge
-// 3. Serialize the message payload in Send()
-// 4. Handle delivery acknowledgments and retries
-// 5. Implement proper health checks
-// 6. Close the producer in Close()
+// KafkaBridge is reserved for a future Kafka implementation.
+// It is intentionally disabled until the package wires a maintained Kafka
+// client and real delivery/health semantics. Applications must not configure
+// Kafka as a production bridge in this release.
 type KafkaBridge struct {
 	name    string
 	brokers []string
@@ -36,10 +25,8 @@ type KafkaConfig struct {
 	Topic   string
 }
 
-// NewKafkaBridge creates a new Kafka bridge (placeholder).
-//
-// This placeholder validates the configuration but does not create a real Kafka connection.
-// Returns an error if name, brokers, or topic are empty.
+// NewKafkaBridge validates Kafka bridge configuration and then returns a clear
+// error because Kafka delivery is not implemented in this release.
 func NewKafkaBridge(cfg KafkaConfig) (*KafkaBridge, error) {
 	if cfg.Name == "" {
 		return nil, fmt.Errorf("kafka: name is required")
@@ -51,11 +38,7 @@ func NewKafkaBridge(cfg KafkaConfig) (*KafkaBridge, error) {
 		return nil, fmt.Errorf("kafka: topic is required")
 	}
 
-	return &KafkaBridge{
-		name:    cfg.Name,
-		brokers: cfg.Brokers,
-		topic:   cfg.Topic,
-	}, nil
+	return nil, fmt.Errorf("kafka: bridge is experimental and disabled; use a supported bridge or add a real Kafka implementation")
 }
 
 // Name returns the bridge name.
@@ -63,34 +46,17 @@ func (b *KafkaBridge) Name() string {
 	return b.name
 }
 
-// Send delivers a message to Kafka (placeholder).
-//
-// TODO: Implement actual Kafka delivery using a Kafka client library.
-// A production implementation would:
-// 1. Create a Kafka writer/producer
-// 2. Serialize the message payload (likely as JSON or Avro)
-// 3. Send to the configured topic with a message key
-// 4. Handle delivery acknowledgments
-// 5. Return an error if delivery fails
+// Send returns an explicit unsupported error.
 func (b *KafkaBridge) Send(ctx context.Context, msg Message) error {
-	return fmt.Errorf("kafka: not yet implemented (placeholder)")
+	return fmt.Errorf("kafka: bridge is experimental and disabled")
 }
 
-// Healthy checks if Kafka brokers are reachable (placeholder).
-//
-// TODO: Implement actual Kafka health check.
-// A production implementation would:
-// 1. Connect to the configured brokers
-// 2. Query cluster metadata
-// 3. Verify the topic exists
-// 4. Check broker connectivity
+// Healthy returns an explicit unsupported error.
 func (b *KafkaBridge) Healthy(ctx context.Context) error {
-	return fmt.Errorf("kafka: health check not yet implemented (placeholder)")
+	return fmt.Errorf("kafka: bridge is experimental and disabled")
 }
 
-// Close closes the Kafka connection (placeholder).
-//
-// TODO: Close Kafka writer/producer and release resources.
+// Close is a no-op because no Kafka resources are acquired.
 func (b *KafkaBridge) Close() error {
 	return nil
 }

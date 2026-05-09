@@ -1,15 +1,17 @@
 module example.com/showcase_clean
 
-go 1.25.7
+go 1.26.3
 
 require (
 	github.com/jcsvwinston/GoFrame v0.5.4
 	github.com/jcsvwinston/quark v0.1.0
+	github.com/yuin/goldmark v1.8.2
 	modernc.org/sqlite v1.23.1
 )
 
 require (
 	github.com/alexedwards/scs/v2 v2.9.0 // indirect
+	github.com/bradfitz/gomemcache v0.0.0-20260422231931-4d751bb6e37c // indirect
 	github.com/cenkalti/backoff/v4 v4.3.0 // indirect
 	github.com/cenkalti/backoff/v5 v5.0.3 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
@@ -31,7 +33,6 @@ require (
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/redis/go-redis/v9 v9.14.1 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
-	github.com/yuin/goldmark v1.8.2 // indirect
 	go.opentelemetry.io/auto/sdk v1.2.1 // indirect
 	go.opentelemetry.io/otel v1.43.0 // indirect
 	go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp v1.35.0 // indirect
@@ -64,4 +65,4 @@ require (
 	modernc.org/token v1.0.1 // indirect
 )
 
-replace github.com/jcsvwinston/GoFrame => /Users/jcsv/GolandProjects/GoFrame/GoFrame
+replace github.com/jcsvwinston/GoFrame => ../..

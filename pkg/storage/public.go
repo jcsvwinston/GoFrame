@@ -30,6 +30,9 @@ func NewPublicMapper(store Store, publicPaths map[string]string, publicURLBase s
 // the corresponding public URL. Returns empty string if no mapping exists.
 func (m *PublicMapper) PublicURL(ctx context.Context, key string, opts URLConfig) (string, error) {
 	key = normalizeKey(key)
+	if err := validateKey(key); err != nil {
+		return "", err
+	}
 
 	// Check if this key matches any public path
 	for publicPath, storagePrefix := range m.publicPaths {
@@ -65,6 +68,10 @@ func (m *PublicMapper) Mount(mux interface {
 	mux.Get(publicPath+"/{filepath...}", func(c *router.Context) error {
 		filepath := c.Param("filepath")
 		key := storagePrefix + "/" + filepath
+		key = normalizeKey(key)
+		if err := validateKey(key); err != nil {
+			return err
+		}
 
 		reader, info, err := m.store.Get(c.Request.Context(), key)
 		if err != nil {

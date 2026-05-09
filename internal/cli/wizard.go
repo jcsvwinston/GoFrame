@@ -5,7 +5,6 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"os"
 	"strings"
 )
 
@@ -18,7 +17,7 @@ type wizardPrompt struct {
 	multiSelect bool
 }
 
-func runWizard(args []string, _ io.Reader, stdout, stderr io.Writer) error {
+func runWizard(args []string, stdin io.Reader, stdout, stderr io.Writer) error {
 	fs := flag.NewFlagSet("wizard", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 
@@ -40,11 +39,11 @@ func runWizard(args []string, _ io.Reader, stdout, stderr io.Writer) error {
 
 	switch *wizardType {
 	case "inspectdb":
-		return runInspectDBWizard(*configPath, os.Stdin, stdout, stderr)
+		return runInspectDBWizard(*configPath, stdin, stdout, stderr)
 	case "new":
-		return runNewWizard(*configPath, os.Stdin, stdout, stderr)
+		return runNewWizard(*configPath, stdin, stdout, stderr)
 	case "startapp":
-		return runStartAppWizard(*configPath, os.Stdin, stdout, stderr)
+		return runStartAppWizard(*configPath, stdin, stdout, stderr)
 	default:
 		return fmt.Errorf("unknown wizard type: %s (use inspectdb|new|startapp)", *wizardType)
 	}
@@ -214,20 +213,22 @@ func runInspectDBWizard(configPath string, stdin io.Reader, stdout, stderr io.Wr
 	fmt.Fprintf(stdout, "Output package: %s\n", outputPackage)
 	fmt.Fprintf(stdout, "Naming convention: %s\n", namingConvention)
 
-	// TODO: Actually run inspectdb with these parameters
-	fmt.Fprintf(stdout, "\nWizard mode is a framework placeholder. Use: goframe inspectdb --config goframe.yaml\n")
-
-	return nil
+	return fmt.Errorf("wizard inspectdb is experimental and did not execute changes; run goframe inspectdb --config %s --output %s", configPathOrDefault(configPath), outputPackage)
 }
 
 func runNewWizard(configPath string, stdin io.Reader, stdout, stderr io.Writer) error {
 	fmt.Fprintf(stdout, "=== GoFrame new Wizard ===\n\n")
-	fmt.Fprintf(stdout, "Wizard mode is a framework placeholder. Use: goframe new <name> --module <module>\n")
-	return nil
+	return fmt.Errorf("wizard new is experimental and did not execute changes; run goframe new <name> --module <module>")
 }
 
 func runStartAppWizard(configPath string, stdin io.Reader, stdout, stderr io.Writer) error {
 	fmt.Fprintf(stdout, "=== GoFrame startapp Wizard ===\n\n")
-	fmt.Fprintf(stdout, "Wizard mode is a framework placeholder. Use: goframe startapp <name> --out <path>\n")
-	return nil
+	return fmt.Errorf("wizard startapp is experimental and did not execute changes; run goframe startapp <name> --out <path>")
+}
+
+func configPathOrDefault(path string) string {
+	if strings.TrimSpace(path) == "" {
+		return "goframe.yaml"
+	}
+	return path
 }

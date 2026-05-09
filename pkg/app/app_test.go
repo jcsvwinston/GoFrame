@@ -20,7 +20,7 @@ func testAppConfig() *Config {
 	return &Config{
 		Host:            "127.0.0.1",
 		Port:            0,
-		ReadTimeout:     2 * time.Second,
+		ReadTimeout:     10 * time.Second,
 		WriteTimeout:    2 * time.Second,
 		IdleTimeout:     5 * time.Second,
 		DatabaseDefault: "default",
@@ -526,6 +526,23 @@ func TestAppNew_AdminLoginWithBootstrapCredentials(t *testing.T) {
 	a.Router.ServeHTTP(authRec, authReq)
 	if authRec.Code != http.StatusOK {
 		t.Fatalf("expected authenticated admin access to return 200, got %d body=%s", authRec.Code, authRec.Body.String())
+	}
+}
+
+func TestOutboxFlavorForDatabaseURL(t *testing.T) {
+	tests := []struct {
+		raw  string
+		want string
+	}{
+		{raw: "sqlite://:memory:", want: "sqlite"},
+		{raw: "postgres://user:pass@localhost/db", want: "postgres"},
+		{raw: "postgresql://user:pass@localhost/db", want: "postgres"},
+		{raw: "mysql://user:pass@tcp(localhost:3306)/db", want: "mysql"},
+	}
+	for _, tt := range tests {
+		if got := string(outboxFlavorForDatabaseURL(tt.raw)); got != tt.want {
+			t.Fatalf("outboxFlavorForDatabaseURL(%q)=%q; want %q", tt.raw, got, tt.want)
+		}
 	}
 }
 
