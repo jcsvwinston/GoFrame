@@ -8,7 +8,7 @@ Usage:
 
 Options:
   --schema <path>            Path to SQL schema file to import (required)
-  --config <path>            nucleus config path (default: goframe.yaml)
+  --config <path>            nucleus config path (default: nucleus.yml)
   --nucleus-bin <name/path>  nucleus executable (default: nucleus)
   --migrations <dir>         migrations directory (default: migrations)
   --baseline-name <name>     baseline migration suffix (default: baseline_existing_schema)
@@ -51,7 +51,7 @@ sql_quote() {
 }
 
 SCHEMA_FILE=""
-CONFIG_PATH="goframe.yaml"
+CONFIG_PATH="nucleus.yml"
 NUCLEUS_BIN="nucleus"
 MIGRATIONS_DIR="migrations"
 BASELINE_NAME="baseline_existing_schema"

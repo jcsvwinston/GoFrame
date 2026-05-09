@@ -19,7 +19,7 @@ import (
 )
 
 func main() {
-	cfg, err := app.LoadConfig("goframe.yaml")
+	cfg, err := app.LoadConfig("nucleus.yml")
 	if err != nil {
 		log.Fatal(err)
 	}

@@ -83,7 +83,7 @@ USER appuser
 
 COPY --from=builder /bin/server /bin/server
 COPY --from=builder /bin/worker /bin/worker
-COPY goframe.yaml /etc/app/goframe.yaml
+COPY nucleus.yml /etc/app/nucleus.yml
 COPY internal/config/ /etc/app/config/
 
 WORKDIR /etc/app
@@ -111,7 +111,7 @@ USER appuser
 COPY --from=builder /bin/server /bin/server
 COPY --from=builder /bin/worker /bin/worker
 COPY --from=builder /bin/goframe /bin/goframe
-COPY goframe.yaml /etc/app/goframe.yaml
+COPY nucleus.yml /etc/app/nucleus.yml
 COPY migrations/ /etc/app/migrations/
 
 WORKDIR /etc/app
@@ -137,7 +137,7 @@ services:
     depends_on:
       - redis
     volumes:
-      - ./goframe.yaml:/etc/app/goframe.yaml
+      - ./nucleus.yml:/etc/app/nucleus.yml
 
   worker:
     build: .
@@ -512,7 +512,7 @@ sudo certbot renew --dry-run
 If TLS is terminated upstream:
 
 ```yaml
-# goframe.yaml
+# nucleus.yml
 server:
   host: "0.0.0.0"
   port: 8080
@@ -595,7 +595,7 @@ mysql -u goframe -p goframe < backup_20260410_120000.sql
 ```bash
 # Backup (while running)
 # Use goframe dumpdata for application data
-goframe dumpdata --config goframe.yaml > fixture.json
+goframe dumpdata --config nucleus.yml > fixture.json
 
 # File-level backup (stop server first)
 cp goframe.db goframe.db.backup
@@ -608,13 +608,13 @@ sqlite3 goframe.db ".backup 'goframe.db.backup'"
 
 ```bash
 # Export all data as JSON fixtures
-goframe dumpdata --config goframe.yaml > fixtures.json
+goframe dumpdata --config nucleus.yml > fixtures.json
 
 # Import fixtures
-goframe loaddata --config goframe.yaml fixtures.json
+goframe loaddata --config nucleus.yml fixtures.json
 
 # Import with truncate (production requires --force)
-goframe loaddata --config goframe.yaml --truncate --force fixtures.json
+goframe loaddata --config nucleus.yml --truncate --force fixtures.json
 ```
 
 ### Backup schedule
@@ -637,7 +637,7 @@ GoFrame uses structured logging via `log/slog` and exports traces/metrics via Op
 ### Log output formats
 
 ```yaml
-# goframe.yaml
+# nucleus.yml
 log_level: info
 log_format: json   # Options: text, json
 ```
@@ -732,7 +732,7 @@ service:
 ```
 
 ```yaml
-# goframe.yaml
+# nucleus.yml
 otlp_endpoint: http://otel-collector:4318
 ```
 

@@ -35,7 +35,7 @@ Both features work together and are resolved at the middleware level before reac
 ## MultiSite Configuration
 
 ```yaml
-# goframe.yaml
+# nucleus.yml
 multisite:
   enabled: true
   sites:
@@ -105,7 +105,7 @@ func (h *Handler) Home(w http.ResponseWriter, r *http.Request) {
 ## MultiTenant Configuration
 
 ```yaml
-# goframe.yaml
+# nucleus.yml
 multitenant:
   enabled: true
   resolver: subdomain       # Options: subdomain, header

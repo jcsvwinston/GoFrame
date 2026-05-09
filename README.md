@@ -75,7 +75,7 @@ myapp/
 │   ├── services/           # Business logic
 │   └── repositories/       # Data access
 ├── migrations/             # SQL migrations
-└── goframe.yaml           # Configuration
+└── nucleus.yml           # Configuration
 ```
 
 ## Documentation

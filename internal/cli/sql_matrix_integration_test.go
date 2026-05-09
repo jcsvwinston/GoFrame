@@ -396,7 +396,7 @@ func exploratoryTableCountQuery(flavor dbFlavor, table string) string {
 
 func writeSQLMatrixConfig(t *testing.T, dir, rawURL string) string {
 	t.Helper()
-	path := filepath.Join(dir, "goframe.yaml")
+	path := filepath.Join(dir, "nucleus.yml")
 	body := fmt.Sprintf(
 		"database_default: default\n"+
 			"databases:\n"+

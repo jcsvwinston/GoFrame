@@ -32,8 +32,8 @@ export PATH="$(pwd)/.tmp/plugins:$PATH"
 ## Verify Discovery and Diagnostics
 
 ```bash
-goframe plugin list --config goframe.yaml
-goframe plugin doctor --config goframe.yaml
+goframe plugin list --config nucleus.yml
+goframe plugin doctor --config nucleus.yml
 
 goframe plugin test --provider examplemail --capability mail.send --execute
 goframe plugin test --provider examplequeue --capability queue.publish --execute
@@ -41,7 +41,7 @@ goframe plugin test --provider examplequeue --capability queue.publish --execute
 
 ## End-to-End Mail Smoke
 
-Set in `goframe.yaml`:
+Set in `nucleus.yml`:
 
 ```yaml
 mail_driver: examplemail
@@ -51,7 +51,7 @@ mail_from: noreply@example.com
 Run:
 
 ```bash
-goframe sendtestemail --config goframe.yaml --to dev@example.com --subject "mail plugin smoke"
+goframe sendtestemail --config nucleus.yml --to dev@example.com --subject "mail plugin smoke"
 ```
 
 ## Queue Request Smoke (Direct Envelope Call)

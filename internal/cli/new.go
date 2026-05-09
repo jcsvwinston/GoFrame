@@ -16,7 +16,7 @@ func runNew(args []string, _ io.Reader, stdout, stderr io.Writer) error {
 
 	outDir := fs.String("out", ".", "Parent directory where the project folder will be created")
 	modulePath := fs.String("module", "", "Go module path (default: example.com/<project_name>)")
-	port := fs.Int("port", 8080, "HTTP port in goframe.yaml")
+	port := fs.Int("port", 8080, "HTTP port in nucleus.yml")
 	force := fs.Bool("force", false, "Overwrite scaffold files if the project directory exists")
 	templateName := fs.String("template", "mvc", "Starter template (mvc: full-stack, api: lightweight core-only)")
 
@@ -88,7 +88,7 @@ func runNew(args []string, _ io.Reader, stdout, stderr io.Writer) error {
 			body    string
 		}{
 			{relPath: "go.mod", body: fmt.Sprintf(newGoModTemplate, module, frameworkVersion)},
-			{relPath: "goframe.yaml", body: fmt.Sprintf(newAPIConfigTemplate, *port)},
+			{relPath: "nucleus.yml", body: fmt.Sprintf(newAPIConfigTemplate, *port)},
 			{relPath: ".gitignore", body: newGitignoreTemplate},
 			{relPath: "README.md", body: fmt.Sprintf(newReadmeTemplate, projectName)},
 			{relPath: filepath.Join("cmd", "server", "main.go"), body: fmt.Sprintf(newAPIMainTemplate, module, module, module, module, projectName)},
@@ -107,7 +107,7 @@ func runNew(args []string, _ io.Reader, stdout, stderr io.Writer) error {
 			body    string
 		}{
 			{relPath: "go.mod", body: fmt.Sprintf(newGoModTemplate, module, frameworkVersion)},
-			{relPath: "goframe.yaml", body: fmt.Sprintf(newConfigTemplate, *port)},
+			{relPath: "nucleus.yml", body: fmt.Sprintf(newConfigTemplate, *port)},
 			{relPath: ".gitignore", body: newGitignoreTemplate},
 			{relPath: "README.md", body: fmt.Sprintf(newReadmeTemplate, projectName)},
 			{relPath: filepath.Join("cmd", "server", "main.go"), body: fmt.Sprintf(newMainTemplate, module, module, module, module, module, projectName)},
@@ -161,8 +161,8 @@ func runNew(args []string, _ io.Reader, stdout, stderr io.Writer) error {
 	}
 	fmt.Fprintf(stdout, "\n")
 	fmt.Fprintf(stdout, "Maintenance (no local Nucleus source needed):\n")
-	fmt.Fprintf(stdout, "  go run github.com/jcsvwinston/nucleus/cmd/nucleus@latest migrate --config goframe.yaml\n")
-	fmt.Fprintf(stdout, "  go run github.com/jcsvwinston/nucleus/cmd/nucleus@latest seed --config goframe.yaml --seeds seeds\n")
+	fmt.Fprintf(stdout, "  go run github.com/jcsvwinston/nucleus/cmd/nucleus@latest migrate --config nucleus.yml\n")
+	fmt.Fprintf(stdout, "  go run github.com/jcsvwinston/nucleus/cmd/nucleus@latest seed --config nucleus.yml --seeds seeds\n")
 	fmt.Fprintf(stdout, "\n")
 	fmt.Fprintf(stdout, "Access:\n")
 	if tmpl == "api" {
@@ -295,7 +295,7 @@ import (
 )
 
 func main() {
-	cfg, err := app.LoadConfig("goframe.yaml")
+	cfg, err := app.LoadConfig("nucleus.yml")
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -401,7 +401,7 @@ import (
 )
 
 func main() {
-	cfg, err := app.LoadConfig("goframe.yaml")
+	cfg, err := app.LoadConfig("nucleus.yml")
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -914,7 +914,7 @@ import (
 )
 
 func main() {
-	cfg, err := app.LoadConfig("goframe.yaml")
+	cfg, err := app.LoadConfig("nucleus.yml")
 	if err != nil {
 		log.Fatal(err)
 	}

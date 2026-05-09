@@ -75,7 +75,7 @@ func resolveTestServerFixturePath(flagValue string, positional []string) (string
 	flagValue = strings.TrimSpace(flagValue)
 	if flagValue == "" {
 		if len(positional) != 1 {
-			return "", fmt.Errorf("usage: nucleus testserver [--config goframe.yaml] [--host ...] [--port ...] [--truncate] [--dry-run] <fixture.json>")
+			return "", fmt.Errorf("usage: nucleus testserver [--config nucleus.yml] [--host ...] [--port ...] [--truncate] [--dry-run] <fixture.json>")
 		}
 		flagValue = strings.TrimSpace(positional[0])
 	} else if len(positional) > 0 {

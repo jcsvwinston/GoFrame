@@ -84,7 +84,7 @@ func TestLoadConfig_Defaults(t *testing.T) {
 
 func TestLoadConfig_DatabasesMapPrimaryAliasSelection(t *testing.T) {
 	dir := t.TempDir()
-	cfgPath := filepath.Join(dir, "goframe.yaml")
+	cfgPath := filepath.Join(dir, "nucleus.yml")
 	err := os.WriteFile(cfgPath, []byte(`
 database_default: primary
 databases:

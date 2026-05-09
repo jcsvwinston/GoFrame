@@ -228,7 +228,7 @@ func runStartAppWizard(configPath string, stdin io.Reader, stdout, stderr io.Wri
 
 func configPathOrDefault(path string) string {
 	if strings.TrimSpace(path) == "" {
-		return "goframe.yaml"
+		return "nucleus.yml"
 	}
 	return path
 }

@@ -100,7 +100,7 @@ func resolveChangePasswordUsername(usernameFlag string, positional []string) (st
 	username := strings.TrimSpace(usernameFlag)
 	if username == "" {
 		if len(positional) != 1 {
-			return "", fmt.Errorf("usage: nucleus changepassword [--config goframe.yaml] [--password xxx] [--no-input] <username>")
+			return "", fmt.Errorf("usage: nucleus changepassword [--config nucleus.yml] [--password xxx] [--no-input] <username>")
 		}
 		username = strings.TrimSpace(positional[0])
 	} else if len(positional) > 0 {

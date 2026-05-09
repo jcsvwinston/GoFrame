@@ -26,7 +26,7 @@ myapp/
       static/
   migrations/
   seeds/
-  goframe.yaml
+  nucleus.yml
   go.mod
 ```
 
@@ -56,7 +56,7 @@ internal/contracts/
 ## Minimum to Start
 
 1. `cmd/server/main.go`
-2. `goframe.yaml`
+2. `nucleus.yml`
 3. `migrations/` with at least one migration pair
 4. one registered model and one route
 

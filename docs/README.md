@@ -23,7 +23,7 @@ Welcome to GoFrame documentation. This is your starting point for learning, buil
 ### For Operators
 
 - **CLI**: All lifecycle tasks (`goframe serve`, `migrate`, `seed`, etc.)
-- **Config**: `goframe.yaml` for all settings
+- **Config**: `nucleus.yml` for all settings
 - **Observability**: Built-in OTel, logging, health checks
 
 ## Feature Guides
@@ -64,7 +64,7 @@ myapp/
 │   ├── repositories/       # Data access
 │   └── web/templates/      # HTML templates
 ├── migrations/             # SQL migrations
-└── goframe.yaml           # Configuration
+└── nucleus.yml           # Configuration
 ```
 
 ## Support

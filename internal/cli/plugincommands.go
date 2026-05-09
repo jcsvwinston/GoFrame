@@ -85,8 +85,8 @@ func printPluginUsage(w io.Writer) {
 	fmt.Fprintln(w, "  test      Run provider/capability smoke checks")
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Examples:")
-	fmt.Fprintln(w, "  nucleus plugin list --config goframe.yaml")
-	fmt.Fprintln(w, "  nucleus plugin doctor --config goframe.yaml")
+	fmt.Fprintln(w, "  nucleus plugin list --config nucleus.yml")
+	fmt.Fprintln(w, "  nucleus plugin doctor --config nucleus.yml")
 	fmt.Fprintln(w, "  nucleus plugin test --provider sendgrid --capability mail.send")
 }
 

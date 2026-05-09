@@ -61,7 +61,7 @@ func TestDiscoverExternalMailPlugins(t *testing.T) {
 
 func TestRunMailProviders(t *testing.T) {
 	dir := t.TempDir()
-	cfgPath := filepath.Join(dir, "goframe.yaml")
+	cfgPath := filepath.Join(dir, "nucleus.yml")
 	if err := os.WriteFile(cfgPath, []byte("mail_driver: sendgrid\n"), 0o644); err != nil {
 		t.Fatalf("write config failed: %v", err)
 	}

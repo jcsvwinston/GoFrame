@@ -35,7 +35,7 @@ func TestResolveMailDriver(t *testing.T) {
 
 func TestRunSendTestEmailDryRunIncludesDriver(t *testing.T) {
 	dir := t.TempDir()
-	cfgPath := filepath.Join(dir, "goframe.yaml")
+	cfgPath := filepath.Join(dir, "nucleus.yml")
 	raw := "mail_driver: sendgrid\nmail_from: noreply@example.com\nsendgrid_endpoint: https://api.sendgrid.test/v3/mail/send\n"
 	if err := os.WriteFile(cfgPath, []byte(raw), 0o644); err != nil {
 		t.Fatalf("write config: %v", err)
@@ -62,7 +62,7 @@ func TestRunSendTestEmailDryRunIncludesDriver(t *testing.T) {
 
 func TestRunSendTestEmailDryRunDriverOverride(t *testing.T) {
 	dir := t.TempDir()
-	cfgPath := filepath.Join(dir, "goframe.yaml")
+	cfgPath := filepath.Join(dir, "nucleus.yml")
 	raw := "mail_driver: smtp\nmail_from: noreply@example.com\nsendgrid_endpoint: https://api.sendgrid.test/v3/mail/send\n"
 	if err := os.WriteFile(cfgPath, []byte(raw), 0o644); err != nil {
 		t.Fatalf("write config: %v", err)
@@ -90,7 +90,7 @@ func TestRunSendTestEmailDryRunDriverOverride(t *testing.T) {
 
 func TestRunSendTestEmailRejectsNoopWithoutDryRun(t *testing.T) {
 	dir := t.TempDir()
-	cfgPath := filepath.Join(dir, "goframe.yaml")
+	cfgPath := filepath.Join(dir, "nucleus.yml")
 	raw := "mail_driver: noop\nmail_from: noreply@example.com\n"
 	if err := os.WriteFile(cfgPath, []byte(raw), 0o644); err != nil {
 		t.Fatalf("write config: %v", err)

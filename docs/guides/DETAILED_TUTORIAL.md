@@ -29,12 +29,12 @@ myapp/
   seeds/
   templates/
     home.html
-  goframe.yaml
+  nucleus.yml
 ```
 
 ## 1) Framework configuration
 
-`goframe.yaml`:
+`nucleus.yml`:
 
 ```yaml
 database_default: default
@@ -113,8 +113,8 @@ DROP TABLE IF EXISTS projects;
 ## 5) Apply migrations and load seed data
 
 ```bash
-go run ./cmd/nucleus migrate --config goframe.yaml
-go run ./cmd/nucleus migrate --config goframe.yaml status
+go run ./cmd/nucleus migrate --config nucleus.yml
+go run ./cmd/nucleus migrate --config nucleus.yml status
 ```
 
 Create `seeds/001_projects.sql`:
@@ -127,7 +127,7 @@ VALUES ('Roadmap 2026', 'Main product plan', 1);
 Run:
 
 ```bash
-go run ./cmd/nucleus seed --config goframe.yaml --seeds seeds
+go run ./cmd/nucleus seed --config nucleus.yml --seeds seeds
 ```
 
 ## 6) App bootstrap and model registration
@@ -149,7 +149,7 @@ import (
 )
 
 func main() {
-	cfg, err := app.LoadConfig("goframe.yaml")
+	cfg, err := app.LoadConfig("nucleus.yml")
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -215,7 +215,7 @@ Create admin:
 
 ```bash
 go run ./cmd/nucleus createuser \
-  --config goframe.yaml \
+  --config nucleus.yml \
   --no-input \
   --username admin \
   --email admin@example.com \
@@ -240,16 +240,16 @@ Recommended commands:
 
 ```bash
 # Show effective routes
-go run ./cmd/nucleus routes --config goframe.yaml
+go run ./cmd/nucleus routes --config nucleus.yml
 
 # Dependency health check
-go run ./cmd/nucleus health --config goframe.yaml --json
+go run ./cmd/nucleus health --config nucleus.yml --json
 
 # Create a new migration
-go run ./cmd/nucleus migrate --config goframe.yaml create add_project_owner
+go run ./cmd/nucleus migrate --config nucleus.yml create add_project_owner
 
 # Run an ad-hoc SQL query
-go run ./cmd/nucleus shell --config goframe.yaml -c "SELECT count(*) FROM projects"
+go run ./cmd/nucleus shell --config nucleus.yml -c "SELECT count(*) FROM projects"
 ```
 
 ## 9) Production guardrails
@@ -262,8 +262,8 @@ With `env: production`, GoFrame protects sensitive actions (`seed`, `migrate dow
 Examples:
 
 ```bash
-go run ./cmd/nucleus seed --config goframe.yaml --seeds seeds --force
-go run ./cmd/nucleus migrate --config goframe.yaml reset --force
+go run ./cmd/nucleus seed --config nucleus.yml --seeds seeds --force
+go run ./cmd/nucleus migrate --config nucleus.yml reset --force
 ```
 
 ## 10) Extend CLI per project

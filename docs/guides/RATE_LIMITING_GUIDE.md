@@ -39,7 +39,7 @@ GoFrame provides multi-dimensional rate limiting via middleware:
 ### Basic configuration
 
 ```yaml
-# goframe.yaml
+# nucleus.yml
 rate_limit: 100           # Requests per window (global default)
 rate_limit_window: 60     # Window size in seconds
 ```
@@ -47,7 +47,7 @@ rate_limit_window: 60     # Window size in seconds
 ### Advanced configuration
 
 ```yaml
-# goframe.yaml
+# nucleus.yml
 rate_limit: 100
 rate_limit_window: 60
 rate_limit_burst: 20      # Token-bucket burst capacity

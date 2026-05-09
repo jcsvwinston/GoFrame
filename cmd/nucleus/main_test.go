@@ -1068,7 +1068,7 @@ func TestRun_NewProjectScaffold(t *testing.T) {
 	projectDir := filepath.Join(dir, "BlogApp")
 	expectedFiles := []string{
 		filepath.Join(projectDir, "go.mod"),
-		filepath.Join(projectDir, "goframe.yaml"),
+		filepath.Join(projectDir, "nucleus.yml"),
 		filepath.Join(projectDir, "README.md"),
 		filepath.Join(projectDir, ".gitignore"),
 		filepath.Join(projectDir, "cmd", "server", "main.go"),
@@ -1237,25 +1237,25 @@ func TestRun_NewProjectScaffold(t *testing.T) {
 		t.Fatalf("expected project contracts aggregator to seed default document metadata: %s", contractsText)
 	}
 
-	cfgRaw, err := os.ReadFile(filepath.Join(projectDir, "goframe.yaml"))
+	cfgRaw, err := os.ReadFile(filepath.Join(projectDir, "nucleus.yml"))
 	if err != nil {
-		t.Fatalf("read goframe.yaml failed: %v", err)
+		t.Fatalf("read nucleus.yml failed: %v", err)
 	}
 	cfg := string(cfgRaw)
 	if !strings.Contains(cfg, "port: 9095") {
-		t.Fatalf("goframe.yaml missing configured port: %s", cfg)
+		t.Fatalf("nucleus.yml missing configured port: %s", cfg)
 	}
 	if !strings.Contains(cfg, "redis_url: redis://127.0.0.1:6379/0") {
-		t.Fatalf("goframe.yaml missing redis_url default: %s", cfg)
+		t.Fatalf("nucleus.yml missing redis_url default: %s", cfg)
 	}
 	if !strings.Contains(cfg, "rate_limit_requests: 0") || !strings.Contains(cfg, "rate_limit_window: 1m") {
-		t.Fatalf("goframe.yaml missing rate limit defaults: %s", cfg)
+		t.Fatalf("nucleus.yml missing rate limit defaults: %s", cfg)
 	}
 	if !strings.Contains(cfg, "rate_limit_burst: 0") || !strings.Contains(cfg, "rate_limit_by_route: false") || !strings.Contains(cfg, "rate_limit_by_role: false") {
-		t.Fatalf("goframe.yaml missing advanced rate limit defaults: %s", cfg)
+		t.Fatalf("nucleus.yml missing advanced rate limit defaults: %s", cfg)
 	}
 	if !strings.Contains(cfg, "otlp_endpoint: \"\"") {
-		t.Fatalf("goframe.yaml missing otlp_endpoint default: %s", cfg)
+		t.Fatalf("nucleus.yml missing otlp_endpoint default: %s", cfg)
 	}
 }
 
@@ -1719,7 +1719,7 @@ import (
 )
 
 	func TestRuntimeOpenAPIEndpointMatchesContractsDocument(t *testing.T) {
-		cfg, err := app.LoadConfig("../../goframe.yaml")
+		cfg, err := app.LoadConfig("../../nucleus.yml")
 		if err != nil {
 			t.Fatalf("load config: %v", err)
 		}
@@ -2315,7 +2315,7 @@ func TestRun_ClearSessions(t *testing.T) {
 
 func TestRun_MakeMessagesAndCompileMessages(t *testing.T) {
 	dir := t.TempDir()
-	cfgPath := filepath.Join(dir, "goframe.yaml")
+	cfgPath := filepath.Join(dir, "nucleus.yml")
 	localesPath := filepath.Join(dir, "locales")
 	inputPath := filepath.Join(dir, "src")
 	writeFile(t, cfgPath, "default_locale: en\nlocales_path: "+localesPath+"\n")
@@ -2393,7 +2393,7 @@ func f() {
 
 func TestRun_SendTestEmailDryRun(t *testing.T) {
 	dir := t.TempDir()
-	cfgPath := filepath.Join(dir, "goframe.yaml")
+	cfgPath := filepath.Join(dir, "nucleus.yml")
 	writeFile(t, cfgPath, "mail_driver: sendgrid\nmail_from: noreply@example.com\nsendgrid_endpoint: https://api.sendgrid.test/v3/mail/send\n")
 
 	var out bytes.Buffer
@@ -2422,7 +2422,7 @@ func TestRun_SendTestEmailDryRun(t *testing.T) {
 
 func TestRun_SendTestEmailDryRunDriverOverride(t *testing.T) {
 	dir := t.TempDir()
-	cfgPath := filepath.Join(dir, "goframe.yaml")
+	cfgPath := filepath.Join(dir, "nucleus.yml")
 	writeFile(t, cfgPath, "mail_driver: smtp\nmail_from: noreply@example.com\nsendgrid_endpoint: https://api.sendgrid.test/v3/mail/send\n")
 
 	var out bytes.Buffer
@@ -2448,7 +2448,7 @@ func TestRun_SendTestEmailDryRunDriverOverride(t *testing.T) {
 
 func TestRun_MailProviders(t *testing.T) {
 	dir := t.TempDir()
-	cfgPath := filepath.Join(dir, "goframe.yaml")
+	cfgPath := filepath.Join(dir, "nucleus.yml")
 	writeFile(t, cfgPath, "mail_driver: sendgrid\n")
 
 	pluginName := "nucleus-mail-mailgun"
@@ -2492,7 +2492,7 @@ func TestRun_MailProviders(t *testing.T) {
 
 func TestRun_CollectStaticAndFindStatic(t *testing.T) {
 	dir := t.TempDir()
-	cfgPath := filepath.Join(dir, "goframe.yaml")
+	cfgPath := filepath.Join(dir, "nucleus.yml")
 	writeFile(t, cfgPath, "static_root: collected_static\n")
 
 	if err := os.MkdirAll(filepath.Join(dir, "internal", "web", "static", "js"), 0o755); err != nil {
@@ -2752,7 +2752,7 @@ func TestRun_RemoveStaleContentTypesProductionGuardrail(t *testing.T) {
 
 func TestRun_SendTestEmailRejectsNoopWithoutDryRun(t *testing.T) {
 	dir := t.TempDir()
-	cfgPath := filepath.Join(dir, "goframe.yaml")
+	cfgPath := filepath.Join(dir, "nucleus.yml")
 	writeFile(t, cfgPath, "mail_driver: noop\nmail_from: noreply@example.com\n")
 
 	var out bytes.Buffer
@@ -3207,7 +3207,7 @@ func TestRun_InspectDB_UsesPrimaryAlias(t *testing.T) {
 func TestRun_DiffSettings(t *testing.T) {
 	dir := t.TempDir()
 	dbPath := filepath.Join(dir, "app.db")
-	cfgPath := filepath.Join(dir, "goframe.yaml")
+	cfgPath := filepath.Join(dir, "nucleus.yml")
 	writeFile(t, cfgPath, fmt.Sprintf(
 		"database_default: default\n"+
 			"databases:\n"+
@@ -3248,7 +3248,7 @@ func TestRun_DiffSettings(t *testing.T) {
 func TestRun_CheckDeploy(t *testing.T) {
 	dir := t.TempDir()
 	dbPath := filepath.Join(dir, "app.db")
-	cfgPath := filepath.Join(dir, "goframe.yaml")
+	cfgPath := filepath.Join(dir, "nucleus.yml")
 	writeFile(t, cfgPath, fmt.Sprintf(
 		"database_default: default\n"+
 			"databases:\n"+
@@ -3308,7 +3308,7 @@ func TestRun_CheckDeploy(t *testing.T) {
 func TestRun_CheckDeployWarnsOnNoopMailDriver(t *testing.T) {
 	dir := t.TempDir()
 	dbPath := filepath.Join(dir, "app.db")
-	cfgPath := filepath.Join(dir, "goframe.yaml")
+	cfgPath := filepath.Join(dir, "nucleus.yml")
 	writeFile(t, cfgPath, fmt.Sprintf(
 		"database_default: default\n"+
 			"databases:\n"+
@@ -3337,7 +3337,7 @@ func TestRun_CheckDeployWarnsOnNoopMailDriver(t *testing.T) {
 func TestRun_CheckDeployFlagsSessionHardeningGaps(t *testing.T) {
 	dir := t.TempDir()
 	dbPath := filepath.Join(dir, "app.db")
-	cfgPath := filepath.Join(dir, "goframe.yaml")
+	cfgPath := filepath.Join(dir, "nucleus.yml")
 	writeFile(t, cfgPath, fmt.Sprintf(
 		"database_default: default\n"+
 			"databases:\n"+
@@ -3372,7 +3372,7 @@ func TestRun_CheckDeployFlagsSessionHardeningGaps(t *testing.T) {
 func TestRun_CheckDeployFlagsRedisSessionStoreWithoutRedisURL(t *testing.T) {
 	dir := t.TempDir()
 	dbPath := filepath.Join(dir, "app.db")
-	cfgPath := filepath.Join(dir, "goframe.yaml")
+	cfgPath := filepath.Join(dir, "nucleus.yml")
 	writeFile(t, cfgPath, fmt.Sprintf(
 		"database_default: default\n"+
 			"databases:\n"+
@@ -3445,7 +3445,7 @@ func TestRun_ExternalCommandPlugin(t *testing.T) {
 
 func writeCLIConfig(t *testing.T, dir, dbPath string) string {
 	t.Helper()
-	cfgPath := filepath.Join(dir, "goframe.yaml")
+	cfgPath := filepath.Join(dir, "nucleus.yml")
 	cfg := fmt.Sprintf("database_default: default\ndatabases:\n  default:\n    url: sqlite://%s\nlog_level: error\nlog_format: text\n", dbPath)
 	writeFile(t, cfgPath, cfg)
 	return cfgPath
@@ -3453,7 +3453,7 @@ func writeCLIConfig(t *testing.T, dir, dbPath string) string {
 
 func writeCLIConfigWithEnv(t *testing.T, dir, dbPath, env string) string {
 	t.Helper()
-	cfgPath := filepath.Join(dir, "goframe.yaml")
+	cfgPath := filepath.Join(dir, "nucleus.yml")
 	cfg := fmt.Sprintf("database_default: default\ndatabases:\n  default:\n    url: sqlite://%s\nlog_level: error\nlog_format: text\nenv: %s\n", dbPath, env)
 	writeFile(t, cfgPath, cfg)
 	return cfgPath
@@ -3461,7 +3461,7 @@ func writeCLIConfigWithEnv(t *testing.T, dir, dbPath, env string) string {
 
 func writeCLIConfigWithAliases(t *testing.T, dir, defaultAlias string, aliases map[string]string) string {
 	t.Helper()
-	cfgPath := filepath.Join(dir, "goframe.yaml")
+	cfgPath := filepath.Join(dir, "nucleus.yml")
 
 	var builder strings.Builder
 	builder.WriteString(fmt.Sprintf("database_default: %s\n", defaultAlias))

@@ -163,7 +163,7 @@ func collectCLIJSONPayloadKeyLines(t *testing.T, command string, payload map[str
 
 func writeContractCLIConfig(t *testing.T, dir, dbPath string) string {
 	t.Helper()
-	cfgPath := filepath.Join(dir, "goframe.yaml")
+	cfgPath := filepath.Join(dir, "nucleus.yml")
 	cfg := fmt.Sprintf(
 		"database_default: default\ndatabases:\n  default:\n    url: sqlite://%s\nlog_level: error\nlog_format: text\n",
 		dbPath,

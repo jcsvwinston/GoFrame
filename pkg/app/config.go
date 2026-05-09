@@ -385,10 +385,10 @@ func DefaultConfig() Config {
 
 // LoadConfig loads configuration from multiple sources with increasing precedence:
 // 1. Struct defaults
-// 2. YAML file (optional — path argument or "goframe.yaml" in current directory)
+// 2. YAML file (optional — path argument or "nucleus.yml" in current directory)
 // 3. Environment variables with prefix NUCLEUS_
 //
-// If no path is provided and "goframe.yaml" does not exist, only defaults and
+// If no path is provided and "nucleus.yml" does not exist, only defaults and
 // env vars are used.
 func LoadConfig(path ...string) (*Config, error) {
 	k := koanf.New(".")
@@ -399,7 +399,7 @@ func LoadConfig(path ...string) (*Config, error) {
 	}
 
 	// 2. Load YAML file
-	cfgPath := "goframe.yaml"
+	cfgPath := "nucleus.yml"
 	if len(path) > 0 && path[0] != "" {
 		cfgPath = path[0]
 	}

@@ -59,10 +59,10 @@ go run ./cmd/worker
 ## 5. Maintenance (no local CLI install needed)
 
 ```bash
-go run github.com/jcsvwinston/nucleus/cmd/nucleus@latest migrate --config goframe.yaml
-go run github.com/jcsvwinston/nucleus/cmd/nucleus@latest seed --config goframe.yaml --seeds seeds
-go run github.com/jcsvwinston/nucleus/cmd/nucleus@latest routes --config goframe.yaml
-go run github.com/jcsvwinston/nucleus/cmd/nucleus@latest health --config goframe.yaml
+go run github.com/jcsvwinston/nucleus/cmd/nucleus@latest migrate --config nucleus.yml
+go run github.com/jcsvwinston/nucleus/cmd/nucleus@latest seed --config nucleus.yml --seeds seeds
+go run github.com/jcsvwinston/nucleus/cmd/nucleus@latest routes --config nucleus.yml
+go run github.com/jcsvwinston/nucleus/cmd/nucleus@latest health --config nucleus.yml
 ```
 
 ## 6. Enterprise SQL Drivers (optional)

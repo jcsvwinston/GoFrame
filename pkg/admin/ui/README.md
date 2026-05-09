@@ -19,7 +19,7 @@ Modern admin panel built with React + Vite + Tailwind CSS + shadcn/ui.
 
 By default, the admin panel is served at `/admin`. Applications can override this path to use `/admin` for their own panels and move the GoFrame admin panel to a different route.
 
-**In your `goframe.yaml`:**
+**In your `nucleus.yml`:**
 
 ```yaml
 # Move admin panel to /goframe-admin
@@ -313,14 +313,14 @@ curl -c /tmp/gf_cookies.txt -X POST http://localhost:8080/admin/login \
 | Cookie not being set | `Secure` flag on HTTP | Set `session_cookie_secure: false` in config |
 | 401 on all API calls | Session middleware not in chain | Verify `sessionManager.Middleware()` is applied |
 | Blank page after login | SPA not building correctly | Run `npm run build` in `pkg/admin/ui/` |
-| Admin panel not accessible at custom path | `admin_prefix` not configured | Set `admin_prefix` in `goframe.yaml` |
+| Admin panel not accessible at custom path | `admin_prefix` not configured | Set `admin_prefix` in `nucleus.yml` |
 | API calls fail with 404 after custom prefix | Frontend not rebuilt | Run `npm run build` and restart server |
 
 ### Custom Admin Prefix
 
 If you're using a custom admin prefix (e.g., `/goframe-admin`):
 
-1. **Configure in `goframe.yaml`:**
+1. **Configure in `nucleus.yml`:**
    ```yaml
    admin_prefix: /goframe-admin
    ```

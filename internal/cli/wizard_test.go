@@ -282,7 +282,7 @@ func TestRunInspectDBWizard(t *testing.T) {
 	t.Run("valid input", func(t *testing.T) {
 		var out bytes.Buffer
 		var errOut bytes.Buffer
-		err := runInspectDBWizard("goframe.yaml", strings.NewReader("postgres://localhost:5432/db\n1\ninternal/models\nPascalCase\n"), &out, &errOut)
+		err := runInspectDBWizard("nucleus.yml", strings.NewReader("postgres://localhost:5432/db\n1\ninternal/models\nPascalCase\n"), &out, &errOut)
 		if err == nil {
 			t.Fatal("expected experimental wizard error")
 		}
@@ -298,7 +298,7 @@ func TestRunInspectDBWizard(t *testing.T) {
 func TestRunNewWizard(t *testing.T) {
 	var out bytes.Buffer
 	var errOut bytes.Buffer
-	err := runNewWizard("goframe.yaml", strings.NewReader(""), &out, &errOut)
+	err := runNewWizard("nucleus.yml", strings.NewReader(""), &out, &errOut)
 	if err == nil {
 		t.Fatal("expected experimental wizard error")
 	}
@@ -310,7 +310,7 @@ func TestRunNewWizard(t *testing.T) {
 func TestRunStartAppWizard(t *testing.T) {
 	var out bytes.Buffer
 	var errOut bytes.Buffer
-	err := runStartAppWizard("goframe.yaml", strings.NewReader(""), &out, &errOut)
+	err := runStartAppWizard("nucleus.yml", strings.NewReader(""), &out, &errOut)
 	if err == nil {
 		t.Fatal("expected experimental wizard error")
 	}

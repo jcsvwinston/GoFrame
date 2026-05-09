@@ -44,7 +44,7 @@ JWT (JSON Web Token) authentication is ideal for stateless API endpoints.
 #### Configuration
 
 ```yaml
-# goframe.yaml
+# nucleus.yml
 jwt_secret: your-super-secret-key-change-in-production
 jwt_expiry: 24h
 jwt_issuer: myapp
@@ -144,7 +144,7 @@ Sessions are required for server-rendered applications, admin panel, and CSRF-pr
 #### Configuration
 
 ```yaml
-# goframe.yaml
+# nucleus.yml
 session_store: sql          # Options: memory, sql, redis
 session_cookie_name: goframe_session
 session_cookie_secure: true # Set true in production (HTTPS only)
@@ -204,13 +204,13 @@ View active sessions via admin UI at `/admin#/sessions` or API at `GET /admin/ap
 
 ```bash
 # Create SQL session table (if using sql store)
-goframe createcachetable --config goframe.yaml
+goframe createcachetable --config nucleus.yml
 
 # Clear expired sessions (production-safe)
-goframe clearsessions --config goframe.yaml
+goframe clearsessions --config nucleus.yml
 
 # Clear all sessions (use with caution)
-goframe clearsessions --all --force --config goframe.yaml
+goframe clearsessions --all --force --config nucleus.yml
 ```
 
 ### Password Hashing
@@ -263,17 +263,17 @@ Admin users are managed via CLI commands:
 
 ```bash
 # Create admin user
-goframe createuser --config goframe.yaml --username admin --email admin@example.com
+goframe createuser --config nucleus.yml --username admin --email admin@example.com
 
 # Interactive password prompt
-goframe createuser --config goframe.yaml --username admin
+goframe createuser --config nucleus.yml --username admin
 
 # Non-interactive (CI/CD)
-goframe createuser --config goframe.yaml --username admin --password "secure-password" --no-input
+goframe createuser --config nucleus.yml --username admin --password "secure-password" --no-input
 
 # Change password
-goframe changepassword --config goframe.yaml --username admin
-goframe changepassword --config goframe.yaml --username admin --password "new-password" --no-input
+goframe changepassword --config nucleus.yml --username admin
+goframe changepassword --config nucleus.yml --username admin --password "new-password" --no-input
 ```
 
 ---
@@ -287,7 +287,7 @@ GoFrame integrates with [Casbin](https://casbin.org/) for policy-based authoriza
 #### Configuration
 
 ```yaml
-# goframe.yaml
+# nucleus.yml
 authz_model_path: internal/config/authz_model.conf
 authz_policy_path: internal/config/authz_policy.csv
 ```
@@ -408,7 +408,7 @@ Once at least one admin user exists, `/admin` requires login at `/admin/login`.
 
 ```bash
 # Create first admin user
-goframe createuser --config goframe.yaml --username admin --email admin@example.com
+goframe createuser --config nucleus.yml --username admin --email admin@example.com
 
 # All subsequent accesses require login
 # Login at http://localhost:8080/admin/login

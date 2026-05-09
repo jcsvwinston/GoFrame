@@ -135,7 +135,7 @@ Main generated structure:
 - `migrations/000001_create_articles.up.sql`
 - `migrations/000001_create_articles.down.sql`
 - `seeds/001_articles.sql`
-- `goframe.yaml`
+- `nucleus.yml`
 
 ## 5.2 Run the app
 
@@ -214,7 +214,7 @@ Not in scope yet:
 Creation:
 
 ```go
-cfg, _ := app.LoadConfig("goframe.yaml")
+cfg, _ := app.LoadConfig("nucleus.yml")
 a, _ := app.New(cfg)
 ```
 
@@ -249,7 +249,7 @@ Key methods:
 
 ## 7. Configuration
 
-Configuration is managed via `goframe.yaml` with environment variable overrides (`GOFRAME_`).
+Configuration is managed via `nucleus.yml` with environment variable overrides (`GOFRAME_`).
 
 For the complete key reference, see `docs/reference/CONFIG_KEY_REGISTRY.md`.
 
@@ -436,12 +436,12 @@ Actions:
 Examples:
 
 ```bash
-goframe migrate --config goframe.yaml create add_project_owner
-goframe migrate --config goframe.yaml
-goframe migrate --config goframe.yaml status
-goframe migrate --config goframe.yaml down 1
-goframe migrate --config goframe.yaml steps -1
-goframe migrate --config goframe.yaml --force reset
+goframe migrate --config nucleus.yml create add_project_owner
+goframe migrate --config nucleus.yml
+goframe migrate --config nucleus.yml status
+goframe migrate --config nucleus.yml down 1
+goframe migrate --config nucleus.yml steps -1
+goframe migrate --config nucleus.yml --force reset
 ```
 
 ## 12. Seeds
@@ -449,7 +449,7 @@ goframe migrate --config goframe.yaml --force reset
 Command:
 
 ```bash
-goframe seed --config goframe.yaml --seeds seeds
+goframe seed --config nucleus.yml --seeds seeds
 ```
 
 Flags:
@@ -462,15 +462,15 @@ Flags:
 Examples:
 
 ```bash
-goframe seed --config goframe.yaml --seeds seeds --dry-run
-goframe seed --config goframe.yaml --seeds seeds --file 001_users.sql
-goframe seed --config goframe.yaml --seeds seeds --force
+goframe seed --config nucleus.yml --seeds seeds --dry-run
+goframe seed --config nucleus.yml --seeds seeds --file 001_users.sql
+goframe seed --config nucleus.yml --seeds seeds --force
 ```
 
 ## 13. Admin User Creation
 
 ```bash
-goframe createuser --config goframe.yaml \
+goframe createuser --config nucleus.yml \
   --username admin \
   --email admin@example.com \
   --password supersecret123 \
@@ -490,7 +490,7 @@ Notes:
 Change an existing admin password:
 
 ```bash
-goframe changepassword admin --config goframe.yaml --password newsecret123 --no-input
+goframe changepassword admin --config nucleus.yml --password newsecret123 --no-input
 ```
 
 ## 13.1 Cache and sessions
@@ -498,16 +498,16 @@ goframe changepassword admin --config goframe.yaml --password newsecret123 --no-
 Create SQL table for DB-based cache:
 
 ```bash
-goframe createcachetable --config goframe.yaml
-goframe createcachetable --config goframe.yaml --dry-run
+goframe createcachetable --config nucleus.yml
+goframe createcachetable --config nucleus.yml --dry-run
 ```
 
 Clear expired sessions (or all sessions):
 
 ```bash
-goframe clearsessions --config goframe.yaml
-goframe clearsessions --config goframe.yaml --all
-goframe clearsessions --config goframe.yaml --dry-run
+goframe clearsessions --config nucleus.yml
+goframe clearsessions --config nucleus.yml --all
+goframe clearsessions --config nucleus.yml --dry-run
 ```
 
 ## 13.2 Additional CLI Commands
@@ -519,14 +519,14 @@ For i18n (`makemessages`, `compilemessages`), static file management (`collectst
 Ad hoc execution:
 
 ```bash
-goframe shell --config goframe.yaml -c "SELECT count(*) FROM users"
-goframe shell --config goframe.yaml --sandbox -c "SELECT count(*) FROM users"
+goframe shell --config nucleus.yml -c "SELECT count(*) FROM users"
+goframe shell --config nucleus.yml --sandbox -c "SELECT count(*) FROM users"
 ```
 
 Interactive mode:
 
 ```bash
-goframe shell --config goframe.yaml
+goframe shell --config nucleus.yml
 ```
 
 It also supports `stdin` input (SQL scripts).
@@ -545,7 +545,7 @@ Run:
 go run ./cmd/worker
 ```
 
-Requires `redis_url` in `goframe.yaml`.
+Requires `redis_url` in `nucleus.yml`.
 
 For request-to-job correlation in tracing/logging, enqueue jobs with context:
 
@@ -756,16 +756,16 @@ Flags:
 ## 16.1 routes
 
 ```bash
-goframe routes --config goframe.yaml
-goframe routes --config goframe.yaml --json
-goframe routes --config goframe.yaml --path /api --verbose
+goframe routes --config nucleus.yml
+goframe routes --config nucleus.yml --json
+goframe routes --config nucleus.yml --path /api --verbose
 ```
 
 ## 16.2 health
 
 ```bash
-goframe health --config goframe.yaml
-goframe health --config goframe.yaml --json --timeout 5s
+goframe health --config nucleus.yml
+goframe health --config nucleus.yml --json --timeout 5s
 ```
 
 ## 17. Production Guardrails

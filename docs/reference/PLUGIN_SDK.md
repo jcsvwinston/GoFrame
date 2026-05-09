@@ -134,7 +134,7 @@ Error response example:
 
 ## Configuration Model (Proposed)
 
-Suggested `goframe.yaml` shape:
+Suggested `nucleus.yml` shape:
 
 ```yaml
 plugins:
@@ -199,12 +199,12 @@ sendgrid_endpoint: https://api.sendgrid.com/v3/mail/send
 
 **Operational Commands:**
 ```bash
-goframe sendtestemail --config goframe.yaml --to dev@example.com --dry-run
-goframe sendtestemail --config goframe.yaml --driver sendgrid --to dev@example.com --dry-run
-goframe mailproviders --config goframe.yaml
-goframe mailproviders --config goframe.yaml --json
-goframe plugin list --config goframe.yaml
-goframe plugin doctor --config goframe.yaml
+goframe sendtestemail --config nucleus.yml --to dev@example.com --dry-run
+goframe sendtestemail --config nucleus.yml --driver sendgrid --to dev@example.com --dry-run
+goframe mailproviders --config nucleus.yml
+goframe mailproviders --config nucleus.yml --json
+goframe plugin list --config nucleus.yml
+goframe plugin doctor --config nucleus.yml
 goframe plugin test --provider sendgrid --capability mail.send
 ```
 

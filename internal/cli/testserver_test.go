@@ -34,7 +34,7 @@ func TestResolveTestServerFixturePathErrors(t *testing.T) {
 
 func TestBuildTestServerLoadArgs(t *testing.T) {
 	args := buildTestServerLoadArgs(testServerLoadOptions{
-		configPath: "goframe.yaml",
+		configPath: "nucleus.yml",
 		fixture:    "fixtures.json",
 		tablesRaw:  "users,posts",
 		truncate:   true,
@@ -43,16 +43,16 @@ func TestBuildTestServerLoadArgs(t *testing.T) {
 		dryRun:     true,
 	})
 	got := strings.Join(args, " ")
-	want := "--config goframe.yaml --tables users,posts --truncate --force --dry-run fixtures.json"
+	want := "--config nucleus.yml --tables users,posts --truncate --force --dry-run fixtures.json"
 	if got != want {
 		t.Fatalf("unexpected load args: got %q want %q", got, want)
 	}
 }
 
 func TestBuildTestServerServeArgs(t *testing.T) {
-	args := buildTestServerServeArgs("goframe.yaml", "127.0.0.1", 9090)
+	args := buildTestServerServeArgs("nucleus.yml", "127.0.0.1", 9090)
 	got := strings.Join(args, " ")
-	want := "--config goframe.yaml --host 127.0.0.1 --port 9090"
+	want := "--config nucleus.yml --host 127.0.0.1 --port 9090"
 	if got != want {
 		t.Fatalf("unexpected serve args: got %q want %q", got, want)
 	}

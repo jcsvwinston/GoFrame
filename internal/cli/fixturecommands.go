@@ -150,7 +150,7 @@ func runLoadData(args []string, stdin io.Reader, stdout, stderr io.Writer) error
 	path := strings.TrimSpace(*filePath)
 	if path == "" {
 		if len(rest) != 1 {
-			return fmt.Errorf("usage: nucleus loaddata [--config goframe.yaml] [--truncate] [--dry-run] <fixture.json>")
+			return fmt.Errorf("usage: nucleus loaddata [--config nucleus.yml] [--truncate] [--dry-run] <fixture.json>")
 		}
 		path = rest[0]
 	} else if len(rest) > 0 {

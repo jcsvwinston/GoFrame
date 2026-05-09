@@ -61,7 +61,7 @@ When opening an issue, include:
 
 - Go version and OS
 - command(s) executed
-- config snippet (`goframe.yaml`) if relevant
+- config snippet (`nucleus.yml`) if relevant
 - expected behavior vs actual behavior
 - reproducible steps and logs/error output
 

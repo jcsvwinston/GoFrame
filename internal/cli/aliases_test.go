@@ -86,14 +86,14 @@ func TestCanonicalizeCommand_ShowMigrations(t *testing.T) {
 }
 
 func TestCanonicalizeCommand_DirectAlias(t *testing.T) {
-	cmd, args, err := canonicalizeCommand("dbshell", []string{"--config", "goframe.yaml"})
+	cmd, args, err := canonicalizeCommand("dbshell", []string{"--config", "nucleus.yml"})
 	if err != nil {
 		t.Fatalf("canonicalize dbshell failed: %v", err)
 	}
 	if cmd != "shell" {
 		t.Fatalf("expected command shell, got %q", cmd)
 	}
-	if got, want := strings.Join(args, " "), "--config goframe.yaml"; got != want {
+	if got, want := strings.Join(args, " "), "--config nucleus.yml"; got != want {
 		t.Fatalf("unexpected args: got %q want %q", got, want)
 	}
 }
