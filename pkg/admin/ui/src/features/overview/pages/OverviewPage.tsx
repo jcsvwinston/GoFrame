@@ -110,7 +110,7 @@ export default function OverviewPage() {
           <Badge variant={statusVariant(system.cluster.enabled)}>Cluster</Badge>
         </div>
         <p className="text-muted-foreground">
-          This panel now tracks the actual GoFrame runtime: data layer, background jobs, outbox delivery, and distributed topology.
+          This panel now tracks the actual Nucleus runtime: data layer, background jobs, outbox delivery, and distributed topology.
         </p>
       </div>
 

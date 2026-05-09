@@ -28,7 +28,7 @@ export default function LoginPage() {
               <Shield className="h-8 w-8 text-primary" />
             </div>
           </div>
-          <CardTitle className="text-2xl font-bold">GoFrame Admin</CardTitle>
+          <CardTitle className="text-2xl font-bold">Nucleus Admin</CardTitle>
           <CardDescription>
             Enter your credentials to access the admin panel
           </CardDescription>

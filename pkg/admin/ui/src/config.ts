@@ -1,11 +1,11 @@
 /**
- * GoFrame Admin UI Configuration
+ * Nucleus Admin UI Configuration
  * 
  * This module reads runtime configuration injected by the Go backend.
- * The admin prefix is set via `admin_prefix` in goframe.yaml (default: "/admin").
+ * The admin prefix is set via `admin_prefix` in nucleus.yml (default: "/admin").
  * 
  * Applications can override the prefix to use /admin for their own panels
- * and move the GoFrame admin panel to a different path.
+ * and move the Nucleus admin panel to a different path.
  */
 
 function normalizeAdminPrefix(prefix: string): string {
@@ -24,7 +24,7 @@ function normalizeAdminPrefix(prefix: string): string {
  */
 export function getAdminPrefix(): string {
   if (typeof document !== 'undefined') {
-    const meta = document.querySelector<HTMLMetaElement>('meta[name="goframe-admin-prefix"]')
+    const meta = document.querySelector<HTMLMetaElement>('meta[name="nucleus-admin-prefix"]')
     if (meta && meta.content) {
       return normalizeAdminPrefix(meta.content)
     }
@@ -40,9 +40,9 @@ export function getAdminPrefix(): string {
  * 
  * @example
  * ```ts
- * // If admin prefix is '/goframe-admin':
- * buildAdminPath('/api/models') // => '/goframe-admin/api/models'
- * buildAdminPath('/login')      // => '/goframe-admin/login'
+ * // If admin prefix is '/nucleus-admin':
+ * buildAdminPath('/api/models') // => '/nucleus-admin/api/models'
+ * buildAdminPath('/login')      // => '/nucleus-admin/login'
  * 
  * // If admin prefix is '/admin' (default):
  * buildAdminPath('/api/models') // => '/admin/api/models'
