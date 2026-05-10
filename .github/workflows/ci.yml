@@ -258,6 +258,89 @@ jobs:
       - name: Validate stable contract freeze baselines
         run: bash scripts/ci/check_contract_freeze.sh
 
+  admin-skeleton:
+    name: Admin Observability Skeleton
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0  # buf breaking compares against origin/main
+
+      - name: Setup Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: "1.26.3"
+          cache: true
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+
+      - name: Install buf
+        uses: bufbuild/buf-setup-action@v1
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Lint proto
+        run: make proto-lint
+
+      - name: Detect breaking proto changes vs main
+        # Only enforce on PRs; on pushes to main, the comparison target is the
+        # current commit, which would always pass.
+        if: github.event_name == 'pull_request'
+        run: |
+          cd admin/proto
+          buf breaking --against "https://github.com/${{ github.repository }}.git#branch=main,subdir=admin/proto"
+
+      - name: Generate stubs and verify reproducibility
+        run: |
+          make proto
+          if ! git diff --quiet --exit-code -- admin/proto/gen admin/ui/src/gen; then
+            echo "::error::Generated stubs are out of date. Run 'make proto' and commit the diff."
+            git --no-pager diff -- admin/proto/gen admin/ui/src/gen
+            exit 1
+          fi
+
+      - name: Build admin Go modules (proto + agent + server)
+        run: |
+          cd admin/proto && go build ./...
+          cd ../agent && go build ./...
+          cd ../server && go build ./...
+
+      - name: Vet admin Go modules
+        run: |
+          cd admin/proto && go vet ./...
+          cd ../agent && go vet ./...
+          cd ../server && go vet ./...
+
+      - name: Test admin Go modules
+        run: |
+          cd admin/proto && go test ./...
+          cd ../agent && go test ./...
+          cd ../server && go test ./...
+
+      - name: Build admin server binary
+        run: make server-build
+
+      - name: Install admin UI deps
+        working-directory: admin/ui
+        run: npm ci
+
+      - name: Lint admin UI
+        working-directory: admin/ui
+        run: npm run lint
+
+      - name: Typecheck admin UI
+        working-directory: admin/ui
+        run: npm run typecheck
+
+      - name: Build admin UI
+        working-directory: admin/ui
+        run: npm run build
+
   ci-required-gate:
     name: CI Required Gate
     runs-on: ubuntu-latest
@@ -267,6 +350,7 @@ jobs:
       - db-matrix-required
       - compatibility-harness
       - contract-freeze
+      - admin-skeleton
 
     steps:
       - name: Evaluate required CI results
@@ -276,6 +360,7 @@ jobs:
           echo "db-matrix-required result: ${{ needs.db-matrix-required.result }}"
           echo "compatibility-harness result: ${{ needs.compatibility-harness.result }}"
           echo "contract-freeze result: ${{ needs.contract-freeze.result }}"
+          echo "admin-skeleton result: ${{ needs.admin-skeleton.result }}"
 
           if [ "${{ needs.test.result }}" != "success" ]; then
             echo "Required job 'test' did not succeed"
@@ -291,6 +376,10 @@ jobs:
           fi
           if [ "${{ needs.contract-freeze.result }}" != "success" ]; then
             echo "Required job 'contract-freeze' did not succeed"
+            exit 1
+          fi
+          if [ "${{ needs.admin-skeleton.result }}" != "success" ]; then
+            echo "Required job 'admin-skeleton' did not succeed"
             exit 1
           fi
 

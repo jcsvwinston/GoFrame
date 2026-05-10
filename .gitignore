@@ -15,6 +15,10 @@ clean.py
 /goframe.exe
 /nucleus
 /nucleus.exe
+
+# Local build artefacts from `make build`.
+/bin/
+
 coverage.out
 *.coverprofile
 examples/mvc_api/server
