@@ -97,7 +97,7 @@ RBAC enforcer for a named role.
 ## CSRF, CORS and rate limiting
 
 These are middleware-level concerns documented in
-[Concepts → Routing & middleware](../concepts/routing). Defaults are
+[Concepts → Routing & middleware](../concepts/routing.md). Defaults are
 production-safe (CSRF on for form posts, CORS denies unknown origins,
 rate limit at a sensible threshold), and every value is reachable from
 `nucleus.yml`.

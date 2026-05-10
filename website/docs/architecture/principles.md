@@ -60,7 +60,7 @@ The stable surface is explicit:
 Each of these is frozen by tests under
 [`contracts/`](https://github.com/jcsvwinston/nucleus/tree/main/contracts).
 Removals require a deprecation entry; rename-and-keep-the-shim is the
-default path. Details: [Compatibility policy](./compatibility).
+default path. Details: [Compatibility policy](./compatibility.md).
 
 ## 4. Security by default
 
@@ -97,8 +97,8 @@ This is a constraint we want, not one we tolerate:
 
 ## What follows from the principles
 
-- The compatibility SLO has bite — see [Compatibility policy](./compatibility).
+- The compatibility SLO has bite — see [Compatibility policy](./compatibility.md).
 - The CLI is a first-class product, not an afterthought — see
-  [CLI reference](../cli/overview).
+  [CLI reference](../cli/overview.md).
 - The admin panel is part of the framework, not a separate project —
-  see [Features → Admin panel](../features/admin).
+  see [Features → Admin panel](../features/admin.md).

@@ -18,7 +18,7 @@ const config: Config = {
 
   organizationName: 'jcsvwinston',
   projectName: 'nucleus',
-  trailingSlash: false,
+  trailingSlash: true,
 
   onBrokenLinks: 'throw',
 
