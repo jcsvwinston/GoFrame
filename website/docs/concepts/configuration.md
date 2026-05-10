@@ -88,7 +88,7 @@ The freeze tests under `contracts/` ensure that:
 - the YAML key shape (path, type) stays intact across versions inside
   the compatibility SLO window.
 
-See [Architecture → Compatibility policy](../architecture/compatibility)
+See [Architecture → Compatibility policy](../architecture/compatibility.md)
 for the full rules.
 
 ## Diff against the registered schema

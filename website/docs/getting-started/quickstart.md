@@ -95,9 +95,9 @@ panel at `/admin`.
 
 ## Next steps
 
-- **[Project structure](./project-structure)** — how a scaffolded project
-  is laid out.
-- **[Concepts → Application](../concepts/application)** — what
+- **[Project structure](./project-structure.md)** — how a scaffolded
+  project is laid out.
+- **[Concepts → Application](../concepts/application.md)** — what
   `pkg/nucleus.New()` actually wires up.
-- **[Concepts → Configuration](../concepts/configuration)** — the
+- **[Concepts → Configuration](../concepts/configuration.md)** — the
   `nucleus.yml` schema.
