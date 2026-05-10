@@ -48,18 +48,36 @@ var ErrServerGoodbye = errors.New("admin agent: server sent Goodbye")
 // reconnects with backoff.
 var ErrTransport = errors.New("admin agent: transport closed")
 
+// DataStudioDispatcher executes a Data Studio request and returns the
+// matching response. Concrete implementation lives in
+// admin/agent/datastudio.Handler; the interface lets stream.go stay
+// independent of pkg/model imports (which would otherwise create a
+// dependency loop with pkg/app).
+type DataStudioDispatcher interface {
+	Dispatch(ctx context.Context, req *adminv1.DataStudioRequest) *adminv1.DataStudioResponse
+	RegisteredModels() []string
+}
+
 // Config bundles the dependencies a Stream needs.
 type Config struct {
-	NodeID        string
-	Version       string
-	Labels        map[string]string
-	StartedAt     time.Time
-	Bus           *observability.Bus
-	Buffer        *buffer.PerKind
-	Metrics       *metrics.Metrics
-	Logger        *slog.Logger
-	Heartbeat     time.Duration
-	DrainTimeout  time.Duration
+	NodeID       string
+	Version      string
+	Labels       map[string]string
+	StartedAt    time.Time
+	Bus          *observability.Bus
+	Buffer       *buffer.PerKind
+	Metrics      *metrics.Metrics
+	Logger       *slog.Logger
+	Heartbeat    time.Duration
+	DrainTimeout time.Duration
+
+	// DataStudio, when non-nil, enables the agent-side Data Studio
+	// dispatcher. The stream forwards DataStudioRequest commands to it
+	// and ships the resulting DataStudioResponse back over the bidi
+	// stream. Models reported by RegisteredModels() are included in
+	// NodeRegistration so the admin server can route requests to the
+	// right agent.
+	DataStudio DataStudioDispatcher
 }
 
 func (c Config) withDefaults() Config {
@@ -187,13 +205,18 @@ func (s *Stream) endpointLabel() string {
 }
 
 func (s *Stream) buildRegistration() *adminv1.Frame {
+	var models []string
+	if s.cfg.DataStudio != nil {
+		models = s.cfg.DataStudio.RegisteredModels()
+	}
 	return &adminv1.Frame{
 		Body: &adminv1.Frame_Registration{
 			Registration: &adminv1.NodeRegistration{
-				NodeId:    s.cfg.NodeID,
-				Version:   s.cfg.Version,
-				Labels:    cloneLabels(s.cfg.Labels),
-				StartedAt: timestamppb.New(s.cfg.StartedAt),
+				NodeId:           s.cfg.NodeID,
+				Version:          s.cfg.Version,
+				Labels:           cloneLabels(s.cfg.Labels),
+				StartedAt:        timestamppb.New(s.cfg.StartedAt),
+				RegisteredModels: models,
 			},
 		},
 	}
@@ -343,7 +366,41 @@ func (s *Stream) handleCommand(cmd *adminv1.Command) {
 		// frame as well; this branch covers the alternative shape.
 		s.cfg.Logger.Info("admin server graceful goodbye via Command",
 			"reason", body.Goodbye.GetReason())
+	case *adminv1.Command_DataStudio:
+		s.handleDataStudio(body.DataStudio)
 	}
+}
+
+// handleDataStudio runs a Data Studio request on the agent and ships
+// the response back over the bidi stream. Each request runs in its
+// own goroutine so a slow handler does not block the recvLoop.
+func (s *Stream) handleDataStudio(req *adminv1.DataStudioRequest) {
+	if req == nil {
+		return
+	}
+	if s.cfg.DataStudio == nil {
+		s.queueFrame(&adminv1.Frame{
+			Body: &adminv1.Frame_DataStudioResponse{
+				DataStudioResponse: &adminv1.DataStudioResponse{
+					RequestId: req.GetRequestId(),
+					Error:     "admin agent: data studio is not enabled on this node",
+				},
+			},
+		})
+		return
+	}
+	go func() {
+		resp := s.cfg.DataStudio.Dispatch(s.streamCtx, req)
+		if resp == nil {
+			resp = &adminv1.DataStudioResponse{
+				RequestId: req.GetRequestId(),
+				Error:     "admin agent: data studio dispatcher returned nil",
+			}
+		}
+		s.queueFrame(&adminv1.Frame{
+			Body: &adminv1.Frame_DataStudioResponse{DataStudioResponse: resp},
+		})
+	}()
 }
 
 func (s *Stream) handleSubscribe(in *adminv1.Subscribe) {

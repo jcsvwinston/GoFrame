@@ -137,6 +137,17 @@ export class NodeRegistration extends Message<NodeRegistration> {
    */
   startedAt?: Timestamp;
 
+  /**
+   * Names of models registered with this agent's framework process. The
+   * admin server uses this list to route Data Studio requests to an
+   * agent that knows the model. Empty list means "this agent has no
+   * model registry wired", which is the case for an agent that ships
+   * only observability events and not Data Studio.
+   *
+   * @generated from field: repeated string registered_models = 5;
+   */
+  registeredModels: string[] = [];
+
   constructor(data?: PartialMessage<NodeRegistration>) {
     super();
     proto3.util.initPartial(data, this);
@@ -149,6 +160,7 @@ export class NodeRegistration extends Message<NodeRegistration> {
     { no: 2, name: "version", kind: "scalar", T: 9 /* ScalarType.STRING */ },
     { no: 3, name: "labels", kind: "map", K: 9 /* ScalarType.STRING */, V: {kind: "scalar", T: 9 /* ScalarType.STRING */} },
     { no: 4, name: "started_at", kind: "message", T: Timestamp },
+    { no: 5, name: "registered_models", kind: "scalar", T: 9 /* ScalarType.STRING */, repeated: true },
   ]);
 
   static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): NodeRegistration {
@@ -1007,6 +1019,12 @@ export class Command extends Message<Command> {
      */
     value: Goodbye;
     case: "goodbye";
+  } | {
+    /**
+     * @generated from field: nucleus.admin.v1.DataStudioRequest data_studio = 5;
+     */
+    value: DataStudioRequest;
+    case: "dataStudio";
   } | { case: undefined; value?: undefined } = { case: undefined };
 
   constructor(data?: PartialMessage<Command>) {
@@ -1021,6 +1039,7 @@ export class Command extends Message<Command> {
     { no: 2, name: "unsubscribe", kind: "message", T: Unsubscribe, oneof: "body" },
     { no: 3, name: "snapshot_request", kind: "message", T: SnapshotRequest, oneof: "body" },
     { no: 4, name: "goodbye", kind: "message", T: Goodbye, oneof: "body" },
+    { no: 5, name: "data_studio", kind: "message", T: DataStudioRequest, oneof: "body" },
   ]);
 
   static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): Command {
@@ -1087,6 +1106,12 @@ export class Frame extends Message<Frame> {
      */
     value: Goodbye;
     case: "goodbye";
+  } | {
+    /**
+     * @generated from field: nucleus.admin.v1.DataStudioResponse data_studio_response = 7;
+     */
+    value: DataStudioResponse;
+    case: "dataStudioResponse";
   } | { case: undefined; value?: undefined } = { case: undefined };
 
   constructor(data?: PartialMessage<Frame>) {
@@ -1103,6 +1128,7 @@ export class Frame extends Message<Frame> {
     { no: 4, name: "command", kind: "message", T: Command, oneof: "body" },
     { no: 5, name: "snapshot_response", kind: "message", T: SnapshotResponse, oneof: "body" },
     { no: 6, name: "goodbye", kind: "message", T: Goodbye, oneof: "body" },
+    { no: 7, name: "data_studio_response", kind: "message", T: DataStudioResponse, oneof: "body" },
   ]);
 
   static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): Frame {
@@ -1406,6 +1432,1233 @@ export class Snapshot extends Message<Snapshot> {
 
   static equals(a: Snapshot | PlainMessage<Snapshot> | undefined, b: Snapshot | PlainMessage<Snapshot> | undefined): boolean {
     return proto3.util.equals(Snapshot, a, b);
+  }
+}
+
+/**
+ * ModelField mirrors the relevant subset of pkg/model.FieldMeta: just
+ * the parts the UI needs to render a list view, a filter panel, or an
+ * edit form.
+ *
+ * @generated from message nucleus.admin.v1.ModelField
+ */
+export class ModelField extends Message<ModelField> {
+  /**
+   * Go field name (e.g. "Email")
+   *
+   * @generated from field: string name = 1;
+   */
+  name = "";
+
+  /**
+   * SQL column name (e.g. "email")
+   *
+   * @generated from field: string column = 2;
+   */
+  column = "";
+
+  /**
+   * Human-readable label
+   *
+   * @generated from field: string label = 3;
+   */
+  label = "";
+
+  /**
+   * "string" | "int" | "bool" | "time" | ...
+   *
+   * @generated from field: string go_type = 4;
+   */
+  goType = "";
+
+  /**
+   * "text" | "email" | "number" | "date" | ...
+   *
+   * @generated from field: string html_type = 5;
+   */
+  htmlType = "";
+
+  /**
+   * @generated from field: bool is_primary_key = 6;
+   */
+  isPrimaryKey = false;
+
+  /**
+   * @generated from field: bool is_required = 7;
+   */
+  isRequired = false;
+
+  /**
+   * @generated from field: bool is_readonly = 8;
+   */
+  isReadonly = false;
+
+  /**
+   * @generated from field: bool is_in_list = 9;
+   */
+  isInList = false;
+
+  /**
+   * @generated from field: bool is_searchable = 10;
+   */
+  isSearchable = false;
+
+  /**
+   * @generated from field: bool is_filterable = 11;
+   */
+  isFilterable = false;
+
+  /**
+   * @generated from field: bool is_excluded = 12;
+   */
+  isExcluded = false;
+
+  /**
+   * @generated from field: bool is_foreign_key = 13;
+   */
+  isForeignKey = false;
+
+  /**
+   * @generated from field: string foreign_model = 14;
+   */
+  foreignModel = "";
+
+  /**
+   * @generated from field: int32 max_length = 15;
+   */
+  maxLength = 0;
+
+  /**
+   * @generated from field: repeated nucleus.admin.v1.FieldChoice choices = 16;
+   */
+  choices: FieldChoice[] = [];
+
+  constructor(data?: PartialMessage<ModelField>) {
+    super();
+    proto3.util.initPartial(data, this);
+  }
+
+  static readonly runtime: typeof proto3 = proto3;
+  static readonly typeName = "nucleus.admin.v1.ModelField";
+  static readonly fields: FieldList = proto3.util.newFieldList(() => [
+    { no: 1, name: "name", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "column", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 3, name: "label", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 4, name: "go_type", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 5, name: "html_type", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 6, name: "is_primary_key", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
+    { no: 7, name: "is_required", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
+    { no: 8, name: "is_readonly", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
+    { no: 9, name: "is_in_list", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
+    { no: 10, name: "is_searchable", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
+    { no: 11, name: "is_filterable", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
+    { no: 12, name: "is_excluded", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
+    { no: 13, name: "is_foreign_key", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
+    { no: 14, name: "foreign_model", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 15, name: "max_length", kind: "scalar", T: 5 /* ScalarType.INT32 */ },
+    { no: 16, name: "choices", kind: "message", T: FieldChoice, repeated: true },
+  ]);
+
+  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): ModelField {
+    return new ModelField().fromBinary(bytes, options);
+  }
+
+  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): ModelField {
+    return new ModelField().fromJson(jsonValue, options);
+  }
+
+  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): ModelField {
+    return new ModelField().fromJsonString(jsonString, options);
+  }
+
+  static equals(a: ModelField | PlainMessage<ModelField> | undefined, b: ModelField | PlainMessage<ModelField> | undefined): boolean {
+    return proto3.util.equals(ModelField, a, b);
+  }
+}
+
+/**
+ * @generated from message nucleus.admin.v1.FieldChoice
+ */
+export class FieldChoice extends Message<FieldChoice> {
+  /**
+   * @generated from field: string value = 1;
+   */
+  value = "";
+
+  /**
+   * @generated from field: string label = 2;
+   */
+  label = "";
+
+  constructor(data?: PartialMessage<FieldChoice>) {
+    super();
+    proto3.util.initPartial(data, this);
+  }
+
+  static readonly runtime: typeof proto3 = proto3;
+  static readonly typeName = "nucleus.admin.v1.FieldChoice";
+  static readonly fields: FieldList = proto3.util.newFieldList(() => [
+    { no: 1, name: "value", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "label", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+  ]);
+
+  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): FieldChoice {
+    return new FieldChoice().fromBinary(bytes, options);
+  }
+
+  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): FieldChoice {
+    return new FieldChoice().fromJson(jsonValue, options);
+  }
+
+  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): FieldChoice {
+    return new FieldChoice().fromJsonString(jsonString, options);
+  }
+
+  static equals(a: FieldChoice | PlainMessage<FieldChoice> | undefined, b: FieldChoice | PlainMessage<FieldChoice> | undefined): boolean {
+    return proto3.util.equals(FieldChoice, a, b);
+  }
+}
+
+/**
+ * @generated from message nucleus.admin.v1.ModelInfo
+ */
+export class ModelInfo extends Message<ModelInfo> {
+  /**
+   * Go struct name (e.g. "Article")
+   *
+   * @generated from field: string name = 1;
+   */
+  name = "";
+
+  /**
+   * Plural ("Articles")
+   *
+   * @generated from field: string plural = 2;
+   */
+  plural = "";
+
+  /**
+   * SQL table ("articles")
+   *
+   * @generated from field: string table = 3;
+   */
+  table = "";
+
+  /**
+   * @generated from field: string database_alias = 4;
+   */
+  databaseAlias = "";
+
+  /**
+   * @generated from field: string primary_key = 5;
+   */
+  primaryKey = "";
+
+  /**
+   * -1 when not requested or unknown
+   *
+   * @generated from field: int64 record_count = 6;
+   */
+  recordCount = protoInt64.zero;
+
+  /**
+   * @generated from field: bool record_count_estimated = 7;
+   */
+  recordCountEstimated = false;
+
+  constructor(data?: PartialMessage<ModelInfo>) {
+    super();
+    proto3.util.initPartial(data, this);
+  }
+
+  static readonly runtime: typeof proto3 = proto3;
+  static readonly typeName = "nucleus.admin.v1.ModelInfo";
+  static readonly fields: FieldList = proto3.util.newFieldList(() => [
+    { no: 1, name: "name", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "plural", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 3, name: "table", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 4, name: "database_alias", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 5, name: "primary_key", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 6, name: "record_count", kind: "scalar", T: 3 /* ScalarType.INT64 */ },
+    { no: 7, name: "record_count_estimated", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
+  ]);
+
+  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): ModelInfo {
+    return new ModelInfo().fromBinary(bytes, options);
+  }
+
+  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): ModelInfo {
+    return new ModelInfo().fromJson(jsonValue, options);
+  }
+
+  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): ModelInfo {
+    return new ModelInfo().fromJsonString(jsonString, options);
+  }
+
+  static equals(a: ModelInfo | PlainMessage<ModelInfo> | undefined, b: ModelInfo | PlainMessage<ModelInfo> | undefined): boolean {
+    return proto3.util.equals(ModelInfo, a, b);
+  }
+}
+
+/**
+ * @generated from message nucleus.admin.v1.ModelSchema
+ */
+export class ModelSchema extends Message<ModelSchema> {
+  /**
+   * @generated from field: nucleus.admin.v1.ModelInfo info = 1;
+   */
+  info?: ModelInfo;
+
+  /**
+   * @generated from field: repeated nucleus.admin.v1.ModelField fields = 2;
+   */
+  fields: ModelField[] = [];
+
+  constructor(data?: PartialMessage<ModelSchema>) {
+    super();
+    proto3.util.initPartial(data, this);
+  }
+
+  static readonly runtime: typeof proto3 = proto3;
+  static readonly typeName = "nucleus.admin.v1.ModelSchema";
+  static readonly fields: FieldList = proto3.util.newFieldList(() => [
+    { no: 1, name: "info", kind: "message", T: ModelInfo },
+    { no: 2, name: "fields", kind: "message", T: ModelField, repeated: true },
+  ]);
+
+  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): ModelSchema {
+    return new ModelSchema().fromBinary(bytes, options);
+  }
+
+  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): ModelSchema {
+    return new ModelSchema().fromJson(jsonValue, options);
+  }
+
+  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): ModelSchema {
+    return new ModelSchema().fromJsonString(jsonString, options);
+  }
+
+  static equals(a: ModelSchema | PlainMessage<ModelSchema> | undefined, b: ModelSchema | PlainMessage<ModelSchema> | undefined): boolean {
+    return proto3.util.equals(ModelSchema, a, b);
+  }
+}
+
+/**
+ * Record carries field values as a map of field-name -> JSON-encoded
+ * scalar. This avoids encoding every Go runtime type into proto Any
+ * while keeping numeric / boolean / null fidelity. The UI parses with
+ * the schema's go_type to render appropriately.
+ *
+ * @generated from message nucleus.admin.v1.Record
+ */
+export class Record extends Message<Record> {
+  /**
+   * @generated from field: map<string, string> values_json = 1;
+   */
+  valuesJson: { [key: string]: string } = {};
+
+  constructor(data?: PartialMessage<Record>) {
+    super();
+    proto3.util.initPartial(data, this);
+  }
+
+  static readonly runtime: typeof proto3 = proto3;
+  static readonly typeName = "nucleus.admin.v1.Record";
+  static readonly fields: FieldList = proto3.util.newFieldList(() => [
+    { no: 1, name: "values_json", kind: "map", K: 9 /* ScalarType.STRING */, V: {kind: "scalar", T: 9 /* ScalarType.STRING */} },
+  ]);
+
+  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): Record {
+    return new Record().fromBinary(bytes, options);
+  }
+
+  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): Record {
+    return new Record().fromJson(jsonValue, options);
+  }
+
+  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): Record {
+    return new Record().fromJsonString(jsonString, options);
+  }
+
+  static equals(a: Record | PlainMessage<Record> | undefined, b: Record | PlainMessage<Record> | undefined): boolean {
+    return proto3.util.equals(Record, a, b);
+  }
+}
+
+/**
+ * @generated from message nucleus.admin.v1.ListModelsRequest
+ */
+export class ListModelsRequest extends Message<ListModelsRequest> {
+  /**
+   * @generated from field: bool include_counts = 1;
+   */
+  includeCounts = false;
+
+  /**
+   * @generated from field: string database_alias = 2;
+   */
+  databaseAlias = "";
+
+  /**
+   * empty: server picks any agent that knows the models
+   *
+   * @generated from field: string node_id = 3;
+   */
+  nodeId = "";
+
+  constructor(data?: PartialMessage<ListModelsRequest>) {
+    super();
+    proto3.util.initPartial(data, this);
+  }
+
+  static readonly runtime: typeof proto3 = proto3;
+  static readonly typeName = "nucleus.admin.v1.ListModelsRequest";
+  static readonly fields: FieldList = proto3.util.newFieldList(() => [
+    { no: 1, name: "include_counts", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
+    { no: 2, name: "database_alias", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 3, name: "node_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+  ]);
+
+  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): ListModelsRequest {
+    return new ListModelsRequest().fromBinary(bytes, options);
+  }
+
+  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): ListModelsRequest {
+    return new ListModelsRequest().fromJson(jsonValue, options);
+  }
+
+  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): ListModelsRequest {
+    return new ListModelsRequest().fromJsonString(jsonString, options);
+  }
+
+  static equals(a: ListModelsRequest | PlainMessage<ListModelsRequest> | undefined, b: ListModelsRequest | PlainMessage<ListModelsRequest> | undefined): boolean {
+    return proto3.util.equals(ListModelsRequest, a, b);
+  }
+}
+
+/**
+ * @generated from message nucleus.admin.v1.ListModelsResponse
+ */
+export class ListModelsResponse extends Message<ListModelsResponse> {
+  /**
+   * @generated from field: repeated nucleus.admin.v1.ModelInfo models = 1;
+   */
+  models: ModelInfo[] = [];
+
+  /**
+   * which agent answered
+   *
+   * @generated from field: string node_id = 2;
+   */
+  nodeId = "";
+
+  constructor(data?: PartialMessage<ListModelsResponse>) {
+    super();
+    proto3.util.initPartial(data, this);
+  }
+
+  static readonly runtime: typeof proto3 = proto3;
+  static readonly typeName = "nucleus.admin.v1.ListModelsResponse";
+  static readonly fields: FieldList = proto3.util.newFieldList(() => [
+    { no: 1, name: "models", kind: "message", T: ModelInfo, repeated: true },
+    { no: 2, name: "node_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+  ]);
+
+  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): ListModelsResponse {
+    return new ListModelsResponse().fromBinary(bytes, options);
+  }
+
+  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): ListModelsResponse {
+    return new ListModelsResponse().fromJson(jsonValue, options);
+  }
+
+  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): ListModelsResponse {
+    return new ListModelsResponse().fromJsonString(jsonString, options);
+  }
+
+  static equals(a: ListModelsResponse | PlainMessage<ListModelsResponse> | undefined, b: ListModelsResponse | PlainMessage<ListModelsResponse> | undefined): boolean {
+    return proto3.util.equals(ListModelsResponse, a, b);
+  }
+}
+
+/**
+ * @generated from message nucleus.admin.v1.GetSchemaRequest
+ */
+export class GetSchemaRequest extends Message<GetSchemaRequest> {
+  /**
+   * @generated from field: string node_id = 1;
+   */
+  nodeId = "";
+
+  /**
+   * @generated from field: string model_name = 2;
+   */
+  modelName = "";
+
+  /**
+   * @generated from field: string database_alias = 3;
+   */
+  databaseAlias = "";
+
+  constructor(data?: PartialMessage<GetSchemaRequest>) {
+    super();
+    proto3.util.initPartial(data, this);
+  }
+
+  static readonly runtime: typeof proto3 = proto3;
+  static readonly typeName = "nucleus.admin.v1.GetSchemaRequest";
+  static readonly fields: FieldList = proto3.util.newFieldList(() => [
+    { no: 1, name: "node_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "model_name", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 3, name: "database_alias", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+  ]);
+
+  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): GetSchemaRequest {
+    return new GetSchemaRequest().fromBinary(bytes, options);
+  }
+
+  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): GetSchemaRequest {
+    return new GetSchemaRequest().fromJson(jsonValue, options);
+  }
+
+  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): GetSchemaRequest {
+    return new GetSchemaRequest().fromJsonString(jsonString, options);
+  }
+
+  static equals(a: GetSchemaRequest | PlainMessage<GetSchemaRequest> | undefined, b: GetSchemaRequest | PlainMessage<GetSchemaRequest> | undefined): boolean {
+    return proto3.util.equals(GetSchemaRequest, a, b);
+  }
+}
+
+/**
+ * @generated from message nucleus.admin.v1.ListRecordsRequest
+ */
+export class ListRecordsRequest extends Message<ListRecordsRequest> {
+  /**
+   * @generated from field: string node_id = 1;
+   */
+  nodeId = "";
+
+  /**
+   * @generated from field: string model_name = 2;
+   */
+  modelName = "";
+
+  /**
+   * @generated from field: string database_alias = 3;
+   */
+  databaseAlias = "";
+
+  /**
+   * @generated from field: uint32 page = 10;
+   */
+  page = 0;
+
+  /**
+   * @generated from field: uint32 page_size = 11;
+   */
+  pageSize = 0;
+
+  /**
+   * @generated from field: string search = 12;
+   */
+  search = "";
+
+  /**
+   * @generated from field: string order_by = 13;
+   */
+  orderBy = "";
+
+  /**
+   * @generated from field: map<string, string> filters = 14;
+   */
+  filters: { [key: string]: string } = {};
+
+  /**
+   * @generated from field: repeated string fields = 15;
+   */
+  fields: string[] = [];
+
+  constructor(data?: PartialMessage<ListRecordsRequest>) {
+    super();
+    proto3.util.initPartial(data, this);
+  }
+
+  static readonly runtime: typeof proto3 = proto3;
+  static readonly typeName = "nucleus.admin.v1.ListRecordsRequest";
+  static readonly fields: FieldList = proto3.util.newFieldList(() => [
+    { no: 1, name: "node_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "model_name", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 3, name: "database_alias", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 10, name: "page", kind: "scalar", T: 13 /* ScalarType.UINT32 */ },
+    { no: 11, name: "page_size", kind: "scalar", T: 13 /* ScalarType.UINT32 */ },
+    { no: 12, name: "search", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 13, name: "order_by", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 14, name: "filters", kind: "map", K: 9 /* ScalarType.STRING */, V: {kind: "scalar", T: 9 /* ScalarType.STRING */} },
+    { no: 15, name: "fields", kind: "scalar", T: 9 /* ScalarType.STRING */, repeated: true },
+  ]);
+
+  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): ListRecordsRequest {
+    return new ListRecordsRequest().fromBinary(bytes, options);
+  }
+
+  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): ListRecordsRequest {
+    return new ListRecordsRequest().fromJson(jsonValue, options);
+  }
+
+  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): ListRecordsRequest {
+    return new ListRecordsRequest().fromJsonString(jsonString, options);
+  }
+
+  static equals(a: ListRecordsRequest | PlainMessage<ListRecordsRequest> | undefined, b: ListRecordsRequest | PlainMessage<ListRecordsRequest> | undefined): boolean {
+    return proto3.util.equals(ListRecordsRequest, a, b);
+  }
+}
+
+/**
+ * @generated from message nucleus.admin.v1.PaginatedRecords
+ */
+export class PaginatedRecords extends Message<PaginatedRecords> {
+  /**
+   * @generated from field: repeated nucleus.admin.v1.Record items = 1;
+   */
+  items: Record[] = [];
+
+  /**
+   * @generated from field: uint32 page = 2;
+   */
+  page = 0;
+
+  /**
+   * @generated from field: uint32 page_size = 3;
+   */
+  pageSize = 0;
+
+  /**
+   * -1 = unknown
+   *
+   * @generated from field: int64 total = 4;
+   */
+  total = protoInt64.zero;
+
+  /**
+   * @generated from field: bool total_estimated = 5;
+   */
+  totalEstimated = false;
+
+  /**
+   * @generated from field: bool has_more = 6;
+   */
+  hasMore = false;
+
+  /**
+   * @generated from field: string node_id = 7;
+   */
+  nodeId = "";
+
+  constructor(data?: PartialMessage<PaginatedRecords>) {
+    super();
+    proto3.util.initPartial(data, this);
+  }
+
+  static readonly runtime: typeof proto3 = proto3;
+  static readonly typeName = "nucleus.admin.v1.PaginatedRecords";
+  static readonly fields: FieldList = proto3.util.newFieldList(() => [
+    { no: 1, name: "items", kind: "message", T: Record, repeated: true },
+    { no: 2, name: "page", kind: "scalar", T: 13 /* ScalarType.UINT32 */ },
+    { no: 3, name: "page_size", kind: "scalar", T: 13 /* ScalarType.UINT32 */ },
+    { no: 4, name: "total", kind: "scalar", T: 3 /* ScalarType.INT64 */ },
+    { no: 5, name: "total_estimated", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
+    { no: 6, name: "has_more", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
+    { no: 7, name: "node_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+  ]);
+
+  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): PaginatedRecords {
+    return new PaginatedRecords().fromBinary(bytes, options);
+  }
+
+  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): PaginatedRecords {
+    return new PaginatedRecords().fromJson(jsonValue, options);
+  }
+
+  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): PaginatedRecords {
+    return new PaginatedRecords().fromJsonString(jsonString, options);
+  }
+
+  static equals(a: PaginatedRecords | PlainMessage<PaginatedRecords> | undefined, b: PaginatedRecords | PlainMessage<PaginatedRecords> | undefined): boolean {
+    return proto3.util.equals(PaginatedRecords, a, b);
+  }
+}
+
+/**
+ * @generated from message nucleus.admin.v1.GetRecordRequest
+ */
+export class GetRecordRequest extends Message<GetRecordRequest> {
+  /**
+   * @generated from field: string node_id = 1;
+   */
+  nodeId = "";
+
+  /**
+   * @generated from field: string model_name = 2;
+   */
+  modelName = "";
+
+  /**
+   * @generated from field: string database_alias = 3;
+   */
+  databaseAlias = "";
+
+  /**
+   * @generated from field: string id = 4;
+   */
+  id = "";
+
+  constructor(data?: PartialMessage<GetRecordRequest>) {
+    super();
+    proto3.util.initPartial(data, this);
+  }
+
+  static readonly runtime: typeof proto3 = proto3;
+  static readonly typeName = "nucleus.admin.v1.GetRecordRequest";
+  static readonly fields: FieldList = proto3.util.newFieldList(() => [
+    { no: 1, name: "node_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "model_name", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 3, name: "database_alias", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 4, name: "id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+  ]);
+
+  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): GetRecordRequest {
+    return new GetRecordRequest().fromBinary(bytes, options);
+  }
+
+  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): GetRecordRequest {
+    return new GetRecordRequest().fromJson(jsonValue, options);
+  }
+
+  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): GetRecordRequest {
+    return new GetRecordRequest().fromJsonString(jsonString, options);
+  }
+
+  static equals(a: GetRecordRequest | PlainMessage<GetRecordRequest> | undefined, b: GetRecordRequest | PlainMessage<GetRecordRequest> | undefined): boolean {
+    return proto3.util.equals(GetRecordRequest, a, b);
+  }
+}
+
+/**
+ * @generated from message nucleus.admin.v1.CreateRecordRequest
+ */
+export class CreateRecordRequest extends Message<CreateRecordRequest> {
+  /**
+   * @generated from field: string node_id = 1;
+   */
+  nodeId = "";
+
+  /**
+   * @generated from field: string model_name = 2;
+   */
+  modelName = "";
+
+  /**
+   * @generated from field: string database_alias = 3;
+   */
+  databaseAlias = "";
+
+  /**
+   * @generated from field: nucleus.admin.v1.Record record = 4;
+   */
+  record?: Record;
+
+  constructor(data?: PartialMessage<CreateRecordRequest>) {
+    super();
+    proto3.util.initPartial(data, this);
+  }
+
+  static readonly runtime: typeof proto3 = proto3;
+  static readonly typeName = "nucleus.admin.v1.CreateRecordRequest";
+  static readonly fields: FieldList = proto3.util.newFieldList(() => [
+    { no: 1, name: "node_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "model_name", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 3, name: "database_alias", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 4, name: "record", kind: "message", T: Record },
+  ]);
+
+  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): CreateRecordRequest {
+    return new CreateRecordRequest().fromBinary(bytes, options);
+  }
+
+  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): CreateRecordRequest {
+    return new CreateRecordRequest().fromJson(jsonValue, options);
+  }
+
+  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): CreateRecordRequest {
+    return new CreateRecordRequest().fromJsonString(jsonString, options);
+  }
+
+  static equals(a: CreateRecordRequest | PlainMessage<CreateRecordRequest> | undefined, b: CreateRecordRequest | PlainMessage<CreateRecordRequest> | undefined): boolean {
+    return proto3.util.equals(CreateRecordRequest, a, b);
+  }
+}
+
+/**
+ * @generated from message nucleus.admin.v1.UpdateRecordRequest
+ */
+export class UpdateRecordRequest extends Message<UpdateRecordRequest> {
+  /**
+   * @generated from field: string node_id = 1;
+   */
+  nodeId = "";
+
+  /**
+   * @generated from field: string model_name = 2;
+   */
+  modelName = "";
+
+  /**
+   * @generated from field: string database_alias = 3;
+   */
+  databaseAlias = "";
+
+  /**
+   * @generated from field: string id = 4;
+   */
+  id = "";
+
+  /**
+   * @generated from field: nucleus.admin.v1.Record record = 5;
+   */
+  record?: Record;
+
+  constructor(data?: PartialMessage<UpdateRecordRequest>) {
+    super();
+    proto3.util.initPartial(data, this);
+  }
+
+  static readonly runtime: typeof proto3 = proto3;
+  static readonly typeName = "nucleus.admin.v1.UpdateRecordRequest";
+  static readonly fields: FieldList = proto3.util.newFieldList(() => [
+    { no: 1, name: "node_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "model_name", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 3, name: "database_alias", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 4, name: "id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 5, name: "record", kind: "message", T: Record },
+  ]);
+
+  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): UpdateRecordRequest {
+    return new UpdateRecordRequest().fromBinary(bytes, options);
+  }
+
+  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): UpdateRecordRequest {
+    return new UpdateRecordRequest().fromJson(jsonValue, options);
+  }
+
+  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): UpdateRecordRequest {
+    return new UpdateRecordRequest().fromJsonString(jsonString, options);
+  }
+
+  static equals(a: UpdateRecordRequest | PlainMessage<UpdateRecordRequest> | undefined, b: UpdateRecordRequest | PlainMessage<UpdateRecordRequest> | undefined): boolean {
+    return proto3.util.equals(UpdateRecordRequest, a, b);
+  }
+}
+
+/**
+ * @generated from message nucleus.admin.v1.DeleteRecordRequest
+ */
+export class DeleteRecordRequest extends Message<DeleteRecordRequest> {
+  /**
+   * @generated from field: string node_id = 1;
+   */
+  nodeId = "";
+
+  /**
+   * @generated from field: string model_name = 2;
+   */
+  modelName = "";
+
+  /**
+   * @generated from field: string database_alias = 3;
+   */
+  databaseAlias = "";
+
+  /**
+   * @generated from field: string id = 4;
+   */
+  id = "";
+
+  constructor(data?: PartialMessage<DeleteRecordRequest>) {
+    super();
+    proto3.util.initPartial(data, this);
+  }
+
+  static readonly runtime: typeof proto3 = proto3;
+  static readonly typeName = "nucleus.admin.v1.DeleteRecordRequest";
+  static readonly fields: FieldList = proto3.util.newFieldList(() => [
+    { no: 1, name: "node_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "model_name", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 3, name: "database_alias", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 4, name: "id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+  ]);
+
+  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): DeleteRecordRequest {
+    return new DeleteRecordRequest().fromBinary(bytes, options);
+  }
+
+  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): DeleteRecordRequest {
+    return new DeleteRecordRequest().fromJson(jsonValue, options);
+  }
+
+  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): DeleteRecordRequest {
+    return new DeleteRecordRequest().fromJsonString(jsonString, options);
+  }
+
+  static equals(a: DeleteRecordRequest | PlainMessage<DeleteRecordRequest> | undefined, b: DeleteRecordRequest | PlainMessage<DeleteRecordRequest> | undefined): boolean {
+    return proto3.util.equals(DeleteRecordRequest, a, b);
+  }
+}
+
+/**
+ * @generated from message nucleus.admin.v1.DeleteRecordResponse
+ */
+export class DeleteRecordResponse extends Message<DeleteRecordResponse> {
+  /**
+   * @generated from field: bool deleted = 1;
+   */
+  deleted = false;
+
+  constructor(data?: PartialMessage<DeleteRecordResponse>) {
+    super();
+    proto3.util.initPartial(data, this);
+  }
+
+  static readonly runtime: typeof proto3 = proto3;
+  static readonly typeName = "nucleus.admin.v1.DeleteRecordResponse";
+  static readonly fields: FieldList = proto3.util.newFieldList(() => [
+    { no: 1, name: "deleted", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
+  ]);
+
+  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): DeleteRecordResponse {
+    return new DeleteRecordResponse().fromBinary(bytes, options);
+  }
+
+  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): DeleteRecordResponse {
+    return new DeleteRecordResponse().fromJson(jsonValue, options);
+  }
+
+  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): DeleteRecordResponse {
+    return new DeleteRecordResponse().fromJsonString(jsonString, options);
+  }
+
+  static equals(a: DeleteRecordResponse | PlainMessage<DeleteRecordResponse> | undefined, b: DeleteRecordResponse | PlainMessage<DeleteRecordResponse> | undefined): boolean {
+    return proto3.util.equals(DeleteRecordResponse, a, b);
+  }
+}
+
+/**
+ * @generated from message nucleus.admin.v1.BulkActionRequest
+ */
+export class BulkActionRequest extends Message<BulkActionRequest> {
+  /**
+   * @generated from field: string node_id = 1;
+   */
+  nodeId = "";
+
+  /**
+   * @generated from field: string model_name = 2;
+   */
+  modelName = "";
+
+  /**
+   * @generated from field: string database_alias = 3;
+   */
+  databaseAlias = "";
+
+  /**
+   * "delete"
+   *
+   * @generated from field: string action = 4;
+   */
+  action = "";
+
+  /**
+   * @generated from field: repeated string ids = 5;
+   */
+  ids: string[] = [];
+
+  constructor(data?: PartialMessage<BulkActionRequest>) {
+    super();
+    proto3.util.initPartial(data, this);
+  }
+
+  static readonly runtime: typeof proto3 = proto3;
+  static readonly typeName = "nucleus.admin.v1.BulkActionRequest";
+  static readonly fields: FieldList = proto3.util.newFieldList(() => [
+    { no: 1, name: "node_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "model_name", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 3, name: "database_alias", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 4, name: "action", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 5, name: "ids", kind: "scalar", T: 9 /* ScalarType.STRING */, repeated: true },
+  ]);
+
+  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): BulkActionRequest {
+    return new BulkActionRequest().fromBinary(bytes, options);
+  }
+
+  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): BulkActionRequest {
+    return new BulkActionRequest().fromJson(jsonValue, options);
+  }
+
+  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): BulkActionRequest {
+    return new BulkActionRequest().fromJsonString(jsonString, options);
+  }
+
+  static equals(a: BulkActionRequest | PlainMessage<BulkActionRequest> | undefined, b: BulkActionRequest | PlainMessage<BulkActionRequest> | undefined): boolean {
+    return proto3.util.equals(BulkActionRequest, a, b);
+  }
+}
+
+/**
+ * @generated from message nucleus.admin.v1.BulkActionResponse
+ */
+export class BulkActionResponse extends Message<BulkActionResponse> {
+  /**
+   * @generated from field: uint32 affected = 1;
+   */
+  affected = 0;
+
+  /**
+   * @generated from field: uint32 failed = 2;
+   */
+  failed = 0;
+
+  /**
+   * @generated from field: repeated string errors = 3;
+   */
+  errors: string[] = [];
+
+  constructor(data?: PartialMessage<BulkActionResponse>) {
+    super();
+    proto3.util.initPartial(data, this);
+  }
+
+  static readonly runtime: typeof proto3 = proto3;
+  static readonly typeName = "nucleus.admin.v1.BulkActionResponse";
+  static readonly fields: FieldList = proto3.util.newFieldList(() => [
+    { no: 1, name: "affected", kind: "scalar", T: 13 /* ScalarType.UINT32 */ },
+    { no: 2, name: "failed", kind: "scalar", T: 13 /* ScalarType.UINT32 */ },
+    { no: 3, name: "errors", kind: "scalar", T: 9 /* ScalarType.STRING */, repeated: true },
+  ]);
+
+  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): BulkActionResponse {
+    return new BulkActionResponse().fromBinary(bytes, options);
+  }
+
+  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): BulkActionResponse {
+    return new BulkActionResponse().fromJson(jsonValue, options);
+  }
+
+  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): BulkActionResponse {
+    return new BulkActionResponse().fromJsonString(jsonString, options);
+  }
+
+  static equals(a: BulkActionResponse | PlainMessage<BulkActionResponse> | undefined, b: BulkActionResponse | PlainMessage<BulkActionResponse> | undefined): boolean {
+    return proto3.util.equals(BulkActionResponse, a, b);
+  }
+}
+
+/**
+ * DataStudioRequest is sent from server to agent over the bidi
+ * AgentService.Stream multiplexed with events. Each request carries an
+ * opaque request_id the agent echoes in its DataStudioResponse so the
+ * server can correlate.
+ *
+ * @generated from message nucleus.admin.v1.DataStudioRequest
+ */
+export class DataStudioRequest extends Message<DataStudioRequest> {
+  /**
+   * @generated from field: string request_id = 1;
+   */
+  requestId = "";
+
+  /**
+   * @generated from oneof nucleus.admin.v1.DataStudioRequest.body
+   */
+  body: {
+    /**
+     * @generated from field: nucleus.admin.v1.ListModelsRequest list_models = 10;
+     */
+    value: ListModelsRequest;
+    case: "listModels";
+  } | {
+    /**
+     * @generated from field: nucleus.admin.v1.GetSchemaRequest get_schema = 11;
+     */
+    value: GetSchemaRequest;
+    case: "getSchema";
+  } | {
+    /**
+     * @generated from field: nucleus.admin.v1.ListRecordsRequest list_records = 12;
+     */
+    value: ListRecordsRequest;
+    case: "listRecords";
+  } | {
+    /**
+     * @generated from field: nucleus.admin.v1.GetRecordRequest get_record = 13;
+     */
+    value: GetRecordRequest;
+    case: "getRecord";
+  } | {
+    /**
+     * @generated from field: nucleus.admin.v1.CreateRecordRequest create_record = 14;
+     */
+    value: CreateRecordRequest;
+    case: "createRecord";
+  } | {
+    /**
+     * @generated from field: nucleus.admin.v1.UpdateRecordRequest update_record = 15;
+     */
+    value: UpdateRecordRequest;
+    case: "updateRecord";
+  } | {
+    /**
+     * @generated from field: nucleus.admin.v1.DeleteRecordRequest delete_record = 16;
+     */
+    value: DeleteRecordRequest;
+    case: "deleteRecord";
+  } | {
+    /**
+     * @generated from field: nucleus.admin.v1.BulkActionRequest bulk_action = 17;
+     */
+    value: BulkActionRequest;
+    case: "bulkAction";
+  } | { case: undefined; value?: undefined } = { case: undefined };
+
+  constructor(data?: PartialMessage<DataStudioRequest>) {
+    super();
+    proto3.util.initPartial(data, this);
+  }
+
+  static readonly runtime: typeof proto3 = proto3;
+  static readonly typeName = "nucleus.admin.v1.DataStudioRequest";
+  static readonly fields: FieldList = proto3.util.newFieldList(() => [
+    { no: 1, name: "request_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 10, name: "list_models", kind: "message", T: ListModelsRequest, oneof: "body" },
+    { no: 11, name: "get_schema", kind: "message", T: GetSchemaRequest, oneof: "body" },
+    { no: 12, name: "list_records", kind: "message", T: ListRecordsRequest, oneof: "body" },
+    { no: 13, name: "get_record", kind: "message", T: GetRecordRequest, oneof: "body" },
+    { no: 14, name: "create_record", kind: "message", T: CreateRecordRequest, oneof: "body" },
+    { no: 15, name: "update_record", kind: "message", T: UpdateRecordRequest, oneof: "body" },
+    { no: 16, name: "delete_record", kind: "message", T: DeleteRecordRequest, oneof: "body" },
+    { no: 17, name: "bulk_action", kind: "message", T: BulkActionRequest, oneof: "body" },
+  ]);
+
+  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): DataStudioRequest {
+    return new DataStudioRequest().fromBinary(bytes, options);
+  }
+
+  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): DataStudioRequest {
+    return new DataStudioRequest().fromJson(jsonValue, options);
+  }
+
+  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): DataStudioRequest {
+    return new DataStudioRequest().fromJsonString(jsonString, options);
+  }
+
+  static equals(a: DataStudioRequest | PlainMessage<DataStudioRequest> | undefined, b: DataStudioRequest | PlainMessage<DataStudioRequest> | undefined): boolean {
+    return proto3.util.equals(DataStudioRequest, a, b);
+  }
+}
+
+/**
+ * DataStudioResponse travels agent -> server on the same Stream. error
+ * is non-empty when the operation failed; in that case the body oneof
+ * is unset.
+ *
+ * @generated from message nucleus.admin.v1.DataStudioResponse
+ */
+export class DataStudioResponse extends Message<DataStudioResponse> {
+  /**
+   * @generated from field: string request_id = 1;
+   */
+  requestId = "";
+
+  /**
+   * @generated from field: string error = 2;
+   */
+  error = "";
+
+  /**
+   * @generated from oneof nucleus.admin.v1.DataStudioResponse.body
+   */
+  body: {
+    /**
+     * @generated from field: nucleus.admin.v1.ListModelsResponse list_models = 10;
+     */
+    value: ListModelsResponse;
+    case: "listModels";
+  } | {
+    /**
+     * @generated from field: nucleus.admin.v1.ModelSchema schema = 11;
+     */
+    value: ModelSchema;
+    case: "schema";
+  } | {
+    /**
+     * @generated from field: nucleus.admin.v1.PaginatedRecords records_page = 12;
+     */
+    value: PaginatedRecords;
+    case: "recordsPage";
+  } | {
+    /**
+     * @generated from field: nucleus.admin.v1.Record record = 13;
+     */
+    value: Record;
+    case: "record";
+  } | {
+    /**
+     * @generated from field: nucleus.admin.v1.DeleteRecordResponse delete_record = 14;
+     */
+    value: DeleteRecordResponse;
+    case: "deleteRecord";
+  } | {
+    /**
+     * @generated from field: nucleus.admin.v1.BulkActionResponse bulk_action = 15;
+     */
+    value: BulkActionResponse;
+    case: "bulkAction";
+  } | { case: undefined; value?: undefined } = { case: undefined };
+
+  constructor(data?: PartialMessage<DataStudioResponse>) {
+    super();
+    proto3.util.initPartial(data, this);
+  }
+
+  static readonly runtime: typeof proto3 = proto3;
+  static readonly typeName = "nucleus.admin.v1.DataStudioResponse";
+  static readonly fields: FieldList = proto3.util.newFieldList(() => [
+    { no: 1, name: "request_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "error", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 10, name: "list_models", kind: "message", T: ListModelsResponse, oneof: "body" },
+    { no: 11, name: "schema", kind: "message", T: ModelSchema, oneof: "body" },
+    { no: 12, name: "records_page", kind: "message", T: PaginatedRecords, oneof: "body" },
+    { no: 13, name: "record", kind: "message", T: Record, oneof: "body" },
+    { no: 14, name: "delete_record", kind: "message", T: DeleteRecordResponse, oneof: "body" },
+    { no: 15, name: "bulk_action", kind: "message", T: BulkActionResponse, oneof: "body" },
+  ]);
+
+  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): DataStudioResponse {
+    return new DataStudioResponse().fromBinary(bytes, options);
+  }
+
+  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): DataStudioResponse {
+    return new DataStudioResponse().fromJson(jsonValue, options);
+  }
+
+  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): DataStudioResponse {
+    return new DataStudioResponse().fromJsonString(jsonString, options);
+  }
+
+  static equals(a: DataStudioResponse | PlainMessage<DataStudioResponse> | undefined, b: DataStudioResponse | PlainMessage<DataStudioResponse> | undefined): boolean {
+    return proto3.util.equals(DataStudioResponse, a, b);
   }
 }
 

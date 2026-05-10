@@ -6,8 +6,9 @@ import { NodesPage } from '@/pages/NodesPage'
 import { HTTPStreamPage } from '@/pages/HTTPStreamPage'
 import { SQLStreamPage } from '@/pages/SQLStreamPage'
 import { SessionsPage } from '@/pages/SessionsPage'
+import { DataStudioPage } from '@/pages/DataStudioPage'
 
-type PageID = 'dashboard' | 'nodes' | 'http' | 'sql' | 'sessions'
+type PageID = 'dashboard' | 'nodes' | 'http' | 'sql' | 'sessions' | 'data-studio'
 
 const PAGES: ReadonlyArray<{ id: PageID; label: string }> = [
   { id: 'dashboard', label: 'Dashboard' },
@@ -15,6 +16,7 @@ const PAGES: ReadonlyArray<{ id: PageID; label: string }> = [
   { id: 'http', label: 'HTTP requests' },
   { id: 'sql', label: 'SQL statements' },
   { id: 'sessions', label: 'Sessions' },
+  { id: 'data-studio', label: 'Data Studio' },
 ]
 
 function pageFromHash(): PageID {
@@ -52,6 +54,7 @@ function App(): React.JSX.Element {
       {page === 'http' && <HTTPStreamPage />}
       {page === 'sql' && <SQLStreamPage />}
       {page === 'sessions' && <SessionsPage />}
+      {page === 'data-studio' && <DataStudioPage />}
     </Layout>
   )
 }

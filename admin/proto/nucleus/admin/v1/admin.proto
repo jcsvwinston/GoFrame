@@ -36,6 +36,13 @@ message NodeRegistration {
 
   // When this framework process started.
   google.protobuf.Timestamp started_at = 4;
+
+  // Names of models registered with this agent's framework process. The
+  // admin server uses this list to route Data Studio requests to an
+  // agent that knows the model. Empty list means "this agent has no
+  // model registry wired", which is the case for an agent that ships
+  // only observability events and not Data Studio.
+  repeated string registered_models = 5;
 }
 
 // Heartbeat keeps the node visible in the admin server topology even when the
@@ -214,6 +221,7 @@ message Command {
     Unsubscribe unsubscribe = 2;
     SnapshotRequest snapshot_request = 3;
     Goodbye goodbye = 4;
+    DataStudioRequest data_studio = 5;
   }
 }
 
@@ -232,6 +240,7 @@ message Frame {
     Command command = 4;
     SnapshotResponse snapshot_response = 5;
     Goodbye goodbye = 6;
+    DataStudioResponse data_studio_response = 7;
   }
 }
 
@@ -295,4 +304,201 @@ service ControlService {
   rpc ListNodes(ListNodesRequest) returns (ListNodesResponse);
   rpc StreamEvents(StreamEventsRequest) returns (stream Event);
   rpc GetSnapshot(GetSnapshotRequest) returns (Snapshot);
+}
+
+// =============================================================================
+// Data Studio (Phase 7): registered-model browse + CRUD via agent proxy
+// =============================================================================
+//
+// The admin server does NOT have direct DB access. All Data Studio
+// operations are routed to a connected agent that hosts the framework's
+// model registry and DB handles. The agent executes the operation locally
+// (preserving signals, validation, multi-tenant resolution, RBAC) and
+// returns the result. This mirrors the Snapshot pattern: a request_id
+// correlates DataStudioRequest (server -> agent on Stream) with
+// DataStudioResponse (agent -> server on Stream).
+
+// ModelField mirrors the relevant subset of pkg/model.FieldMeta: just
+// the parts the UI needs to render a list view, a filter panel, or an
+// edit form.
+message ModelField {
+  string name = 1;            // Go field name (e.g. "Email")
+  string column = 2;          // SQL column name (e.g. "email")
+  string label = 3;           // Human-readable label
+  string go_type = 4;         // "string" | "int" | "bool" | "time" | ...
+  string html_type = 5;       // "text" | "email" | "number" | "date" | ...
+  bool is_primary_key = 6;
+  bool is_required = 7;
+  bool is_readonly = 8;
+  bool is_in_list = 9;
+  bool is_searchable = 10;
+  bool is_filterable = 11;
+  bool is_excluded = 12;
+  bool is_foreign_key = 13;
+  string foreign_model = 14;
+  int32 max_length = 15;
+  repeated FieldChoice choices = 16;
+}
+
+message FieldChoice {
+  string value = 1;
+  string label = 2;
+}
+
+message ModelInfo {
+  string name = 1;            // Go struct name (e.g. "Article")
+  string plural = 2;          // Plural ("Articles")
+  string table = 3;           // SQL table ("articles")
+  string database_alias = 4;
+  string primary_key = 5;
+  int64 record_count = 6;     // -1 when not requested or unknown
+  bool record_count_estimated = 7;
+}
+
+message ModelSchema {
+  ModelInfo info = 1;
+  repeated ModelField fields = 2;
+}
+
+// Record carries field values as a map of field-name -> JSON-encoded
+// scalar. This avoids encoding every Go runtime type into proto Any
+// while keeping numeric / boolean / null fidelity. The UI parses with
+// the schema's go_type to render appropriately.
+message Record {
+  map<string, string> values_json = 1;
+}
+
+message ListModelsRequest {
+  bool include_counts = 1;
+  string database_alias = 2;
+  string node_id = 3;         // empty: server picks any agent that knows the models
+}
+
+message ListModelsResponse {
+  repeated ModelInfo models = 1;
+  string node_id = 2;         // which agent answered
+}
+
+message GetSchemaRequest {
+  string node_id = 1;
+  string model_name = 2;
+  string database_alias = 3;
+}
+
+message ListRecordsRequest {
+  string node_id = 1;
+  string model_name = 2;
+  string database_alias = 3;
+
+  uint32 page = 10;
+  uint32 page_size = 11;
+  string search = 12;
+  string order_by = 13;
+  map<string, string> filters = 14;
+  repeated string fields = 15;
+}
+
+message PaginatedRecords {
+  repeated Record items = 1;
+  uint32 page = 2;
+  uint32 page_size = 3;
+  int64 total = 4;            // -1 = unknown
+  bool total_estimated = 5;
+  bool has_more = 6;
+  string node_id = 7;
+}
+
+message GetRecordRequest {
+  string node_id = 1;
+  string model_name = 2;
+  string database_alias = 3;
+  string id = 4;
+}
+
+message CreateRecordRequest {
+  string node_id = 1;
+  string model_name = 2;
+  string database_alias = 3;
+  Record record = 4;
+}
+
+message UpdateRecordRequest {
+  string node_id = 1;
+  string model_name = 2;
+  string database_alias = 3;
+  string id = 4;
+  Record record = 5;
+}
+
+message DeleteRecordRequest {
+  string node_id = 1;
+  string model_name = 2;
+  string database_alias = 3;
+  string id = 4;
+}
+
+message DeleteRecordResponse {
+  bool deleted = 1;
+}
+
+message BulkActionRequest {
+  string node_id = 1;
+  string model_name = 2;
+  string database_alias = 3;
+  string action = 4;          // "delete"
+  repeated string ids = 5;
+}
+
+message BulkActionResponse {
+  uint32 affected = 1;
+  uint32 failed = 2;
+  repeated string errors = 3;
+}
+
+// DataStudioRequest is sent from server to agent over the bidi
+// AgentService.Stream multiplexed with events. Each request carries an
+// opaque request_id the agent echoes in its DataStudioResponse so the
+// server can correlate.
+message DataStudioRequest {
+  string request_id = 1;
+  oneof body {
+    ListModelsRequest list_models = 10;
+    GetSchemaRequest get_schema = 11;
+    ListRecordsRequest list_records = 12;
+    GetRecordRequest get_record = 13;
+    CreateRecordRequest create_record = 14;
+    UpdateRecordRequest update_record = 15;
+    DeleteRecordRequest delete_record = 16;
+    BulkActionRequest bulk_action = 17;
+  }
+}
+
+// DataStudioResponse travels agent -> server on the same Stream. error
+// is non-empty when the operation failed; in that case the body oneof
+// is unset.
+message DataStudioResponse {
+  string request_id = 1;
+  string error = 2;
+  oneof body {
+    ListModelsResponse list_models = 10;
+    ModelSchema schema = 11;
+    PaginatedRecords records_page = 12;
+    Record record = 13;
+    DeleteRecordResponse delete_record = 14;
+    BulkActionResponse bulk_action = 15;
+  }
+}
+
+// DataStudioService is the UI-facing surface. The admin server
+// translates each call into a DataStudioRequest on a chosen agent's
+// stream and waits for the matching DataStudioResponse.
+service DataStudioService {
+  rpc ListModels(ListModelsRequest) returns (ListModelsResponse);
+  rpc GetSchema(GetSchemaRequest) returns (ModelSchema);
+  rpc ListRecords(ListRecordsRequest) returns (PaginatedRecords);
+  rpc GetRecord(GetRecordRequest) returns (Record);
+  rpc CreateRecord(CreateRecordRequest) returns (Record);
+  rpc UpdateRecord(UpdateRecordRequest) returns (Record);
+  rpc DeleteRecord(DeleteRecordRequest) returns (DeleteRecordResponse);
+  rpc BulkAction(BulkActionRequest) returns (BulkActionResponse);
 }

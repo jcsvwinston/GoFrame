@@ -283,6 +283,11 @@ type AdminAgentConfig struct {
 	// and shown in the admin UI's node topology view.
 	Labels map[string]string `koanf:"labels"`
 
+	// DefaultDatabaseAlias is the alias the agent's Data Studio handler
+	// uses when a request arrives with an empty database_alias. Falls
+	// back to "default" if unset.
+	DefaultDatabaseAlias string `koanf:"default_database_alias"`
+
 	// RequireConnection, when true, makes the framework fail to boot if
 	// the agent does not establish a stream to any admin endpoint within
 	// RequireConnectionTimeout. Default: false (fail-open per decision 9

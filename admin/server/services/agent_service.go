@@ -28,14 +28,15 @@ import (
 // State groups the shared dependencies the two service handlers need.
 // One State per server lifetime.
 type State struct {
-	Nodes           *nodes.Registry
-	EventBus        *routing.EventBus
-	Replay          *routing.Replay
-	Snapshots       *routing.SnapshotRouter
-	Logger          *slog.Logger
-	SendChanBuffer  int
-	OnAgentSubMode  func(*nodes.Entry, *routing.EventBus) // hook called whenever bus demand changes
-	HeartbeatGrace  time.Duration                          // tolerance window for stale heartbeat reports
+	Nodes          *nodes.Registry
+	EventBus       *routing.EventBus
+	Replay         *routing.Replay
+	Snapshots      *routing.SnapshotRouter
+	DataStudio     *routing.DataStudioRouter
+	Logger         *slog.Logger
+	SendChanBuffer int
+	OnAgentSubMode func(*nodes.Entry, *routing.EventBus) // hook called whenever bus demand changes
+	HeartbeatGrace time.Duration                          // tolerance window for stale heartbeat reports
 }
 
 // AgentService implements adminv1connect.AgentServiceHandler.
@@ -72,10 +73,11 @@ func (s *AgentService) Stream(ctx context.Context, stream *connect.BidiStream[ad
 	defer cancel()
 
 	info := nodes.NodeInfo{
-		NodeID:    strings.TrimSpace(reg.GetNodeId()),
-		Version:   reg.GetVersion(),
-		Labels:    cloneLabels(reg.GetLabels()),
-		StartedAt: reg.GetStartedAt().AsTime(),
+		NodeID:           strings.TrimSpace(reg.GetNodeId()),
+		Version:          reg.GetVersion(),
+		Labels:           cloneLabels(reg.GetLabels()),
+		StartedAt:        reg.GetStartedAt().AsTime(),
+		RegisteredModels: append([]string(nil), reg.GetRegisteredModels()...),
 	}
 
 	entry, deregister := s.state.Nodes.Add(streamCtx, info, s.state.SendChanBuffer)
@@ -121,6 +123,10 @@ func (s *AgentService) Stream(ctx context.Context, stream *connect.BidiStream[ad
 			// last-seen already touched above; nothing else to do.
 		case *adminv1.Frame_SnapshotResponse:
 			s.state.Snapshots.Resolve(body.SnapshotResponse)
+		case *adminv1.Frame_DataStudioResponse:
+			if s.state.DataStudio != nil {
+				s.state.DataStudio.Resolve(body.DataStudioResponse)
+			}
 		case *adminv1.Frame_Goodbye:
 			s.state.Logger.Info("admin agent client goodbye",
 				"node_id", info.NodeID,

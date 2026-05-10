@@ -212,9 +212,15 @@ type NodeRegistration struct {
 	// Free-form labels: role, zone, datacenter, hostname, pod, etc.
 	Labels map[string]string `protobuf:"bytes,3,rep,name=labels,proto3" json:"labels,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	// When this framework process started.
-	StartedAt     *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=started_at,json=startedAt,proto3" json:"started_at,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	StartedAt *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=started_at,json=startedAt,proto3" json:"started_at,omitempty"`
+	// Names of models registered with this agent's framework process. The
+	// admin server uses this list to route Data Studio requests to an
+	// agent that knows the model. Empty list means "this agent has no
+	// model registry wired", which is the case for an agent that ships
+	// only observability events and not Data Studio.
+	RegisteredModels []string `protobuf:"bytes,5,rep,name=registered_models,json=registeredModels,proto3" json:"registered_models,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *NodeRegistration) Reset() {
@@ -271,6 +277,13 @@ func (x *NodeRegistration) GetLabels() map[string]string {
 func (x *NodeRegistration) GetStartedAt() *timestamppb.Timestamp {
 	if x != nil {
 		return x.StartedAt
+	}
+	return nil
+}
+
+func (x *NodeRegistration) GetRegisteredModels() []string {
+	if x != nil {
+		return x.RegisteredModels
 	}
 	return nil
 }
@@ -1250,6 +1263,7 @@ type Command struct {
 	//	*Command_Unsubscribe
 	//	*Command_SnapshotRequest
 	//	*Command_Goodbye
+	//	*Command_DataStudio
 	Body          isCommand_Body `protobuf_oneof:"body"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -1328,6 +1342,15 @@ func (x *Command) GetGoodbye() *Goodbye {
 	return nil
 }
 
+func (x *Command) GetDataStudio() *DataStudioRequest {
+	if x != nil {
+		if x, ok := x.Body.(*Command_DataStudio); ok {
+			return x.DataStudio
+		}
+	}
+	return nil
+}
+
 type isCommand_Body interface {
 	isCommand_Body()
 }
@@ -1348,6 +1371,10 @@ type Command_Goodbye struct {
 	Goodbye *Goodbye `protobuf:"bytes,4,opt,name=goodbye,proto3,oneof"`
 }
 
+type Command_DataStudio struct {
+	DataStudio *DataStudioRequest `protobuf:"bytes,5,opt,name=data_studio,json=dataStudio,proto3,oneof"`
+}
+
 func (*Command_Subscribe) isCommand_Body() {}
 
 func (*Command_Unsubscribe) isCommand_Body() {}
@@ -1355,6 +1382,8 @@ func (*Command_Unsubscribe) isCommand_Body() {}
 func (*Command_SnapshotRequest) isCommand_Body() {}
 
 func (*Command_Goodbye) isCommand_Body() {}
+
+func (*Command_DataStudio) isCommand_Body() {}
 
 // Frame is the envelope on the agent <-> admin bidi stream. Both directions
 // reuse the same Frame; agents send registration/event/heartbeat/snapshot
@@ -1369,6 +1398,7 @@ type Frame struct {
 	//	*Frame_Command
 	//	*Frame_SnapshotResponse
 	//	*Frame_Goodbye
+	//	*Frame_DataStudioResponse
 	Body          isFrame_Body `protobuf_oneof:"body"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -1465,6 +1495,15 @@ func (x *Frame) GetGoodbye() *Goodbye {
 	return nil
 }
 
+func (x *Frame) GetDataStudioResponse() *DataStudioResponse {
+	if x != nil {
+		if x, ok := x.Body.(*Frame_DataStudioResponse); ok {
+			return x.DataStudioResponse
+		}
+	}
+	return nil
+}
+
 type isFrame_Body interface {
 	isFrame_Body()
 }
@@ -1493,6 +1532,10 @@ type Frame_Goodbye struct {
 	Goodbye *Goodbye `protobuf:"bytes,6,opt,name=goodbye,proto3,oneof"`
 }
 
+type Frame_DataStudioResponse struct {
+	DataStudioResponse *DataStudioResponse `protobuf:"bytes,7,opt,name=data_studio_response,json=dataStudioResponse,proto3,oneof"`
+}
+
 func (*Frame_Registration) isFrame_Body() {}
 
 func (*Frame_Event) isFrame_Body() {}
@@ -1504,6 +1547,8 @@ func (*Frame_Command) isFrame_Body() {}
 func (*Frame_SnapshotResponse) isFrame_Body() {}
 
 func (*Frame_Goodbye) isFrame_Body() {}
+
+func (*Frame_DataStudioResponse) isFrame_Body() {}
 
 type NodeInfo struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -1852,17 +1897,1616 @@ func (x *Snapshot) GetPayloadJson() []byte {
 	return nil
 }
 
+// ModelField mirrors the relevant subset of pkg/model.FieldMeta: just
+// the parts the UI needs to render a list view, a filter panel, or an
+// edit form.
+type ModelField struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`                         // Go field name (e.g. "Email")
+	Column        string                 `protobuf:"bytes,2,opt,name=column,proto3" json:"column,omitempty"`                     // SQL column name (e.g. "email")
+	Label         string                 `protobuf:"bytes,3,opt,name=label,proto3" json:"label,omitempty"`                       // Human-readable label
+	GoType        string                 `protobuf:"bytes,4,opt,name=go_type,json=goType,proto3" json:"go_type,omitempty"`       // "string" | "int" | "bool" | "time" | ...
+	HtmlType      string                 `protobuf:"bytes,5,opt,name=html_type,json=htmlType,proto3" json:"html_type,omitempty"` // "text" | "email" | "number" | "date" | ...
+	IsPrimaryKey  bool                   `protobuf:"varint,6,opt,name=is_primary_key,json=isPrimaryKey,proto3" json:"is_primary_key,omitempty"`
+	IsRequired    bool                   `protobuf:"varint,7,opt,name=is_required,json=isRequired,proto3" json:"is_required,omitempty"`
+	IsReadonly    bool                   `protobuf:"varint,8,opt,name=is_readonly,json=isReadonly,proto3" json:"is_readonly,omitempty"`
+	IsInList      bool                   `protobuf:"varint,9,opt,name=is_in_list,json=isInList,proto3" json:"is_in_list,omitempty"`
+	IsSearchable  bool                   `protobuf:"varint,10,opt,name=is_searchable,json=isSearchable,proto3" json:"is_searchable,omitempty"`
+	IsFilterable  bool                   `protobuf:"varint,11,opt,name=is_filterable,json=isFilterable,proto3" json:"is_filterable,omitempty"`
+	IsExcluded    bool                   `protobuf:"varint,12,opt,name=is_excluded,json=isExcluded,proto3" json:"is_excluded,omitempty"`
+	IsForeignKey  bool                   `protobuf:"varint,13,opt,name=is_foreign_key,json=isForeignKey,proto3" json:"is_foreign_key,omitempty"`
+	ForeignModel  string                 `protobuf:"bytes,14,opt,name=foreign_model,json=foreignModel,proto3" json:"foreign_model,omitempty"`
+	MaxLength     int32                  `protobuf:"varint,15,opt,name=max_length,json=maxLength,proto3" json:"max_length,omitempty"`
+	Choices       []*FieldChoice         `protobuf:"bytes,16,rep,name=choices,proto3" json:"choices,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ModelField) Reset() {
+	*x = ModelField{}
+	mi := &file_nucleus_admin_v1_admin_proto_msgTypes[21]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ModelField) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ModelField) ProtoMessage() {}
+
+func (x *ModelField) ProtoReflect() protoreflect.Message {
+	mi := &file_nucleus_admin_v1_admin_proto_msgTypes[21]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ModelField.ProtoReflect.Descriptor instead.
+func (*ModelField) Descriptor() ([]byte, []int) {
+	return file_nucleus_admin_v1_admin_proto_rawDescGZIP(), []int{21}
+}
+
+func (x *ModelField) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *ModelField) GetColumn() string {
+	if x != nil {
+		return x.Column
+	}
+	return ""
+}
+
+func (x *ModelField) GetLabel() string {
+	if x != nil {
+		return x.Label
+	}
+	return ""
+}
+
+func (x *ModelField) GetGoType() string {
+	if x != nil {
+		return x.GoType
+	}
+	return ""
+}
+
+func (x *ModelField) GetHtmlType() string {
+	if x != nil {
+		return x.HtmlType
+	}
+	return ""
+}
+
+func (x *ModelField) GetIsPrimaryKey() bool {
+	if x != nil {
+		return x.IsPrimaryKey
+	}
+	return false
+}
+
+func (x *ModelField) GetIsRequired() bool {
+	if x != nil {
+		return x.IsRequired
+	}
+	return false
+}
+
+func (x *ModelField) GetIsReadonly() bool {
+	if x != nil {
+		return x.IsReadonly
+	}
+	return false
+}
+
+func (x *ModelField) GetIsInList() bool {
+	if x != nil {
+		return x.IsInList
+	}
+	return false
+}
+
+func (x *ModelField) GetIsSearchable() bool {
+	if x != nil {
+		return x.IsSearchable
+	}
+	return false
+}
+
+func (x *ModelField) GetIsFilterable() bool {
+	if x != nil {
+		return x.IsFilterable
+	}
+	return false
+}
+
+func (x *ModelField) GetIsExcluded() bool {
+	if x != nil {
+		return x.IsExcluded
+	}
+	return false
+}
+
+func (x *ModelField) GetIsForeignKey() bool {
+	if x != nil {
+		return x.IsForeignKey
+	}
+	return false
+}
+
+func (x *ModelField) GetForeignModel() string {
+	if x != nil {
+		return x.ForeignModel
+	}
+	return ""
+}
+
+func (x *ModelField) GetMaxLength() int32 {
+	if x != nil {
+		return x.MaxLength
+	}
+	return 0
+}
+
+func (x *ModelField) GetChoices() []*FieldChoice {
+	if x != nil {
+		return x.Choices
+	}
+	return nil
+}
+
+type FieldChoice struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Value         string                 `protobuf:"bytes,1,opt,name=value,proto3" json:"value,omitempty"`
+	Label         string                 `protobuf:"bytes,2,opt,name=label,proto3" json:"label,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *FieldChoice) Reset() {
+	*x = FieldChoice{}
+	mi := &file_nucleus_admin_v1_admin_proto_msgTypes[22]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *FieldChoice) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*FieldChoice) ProtoMessage() {}
+
+func (x *FieldChoice) ProtoReflect() protoreflect.Message {
+	mi := &file_nucleus_admin_v1_admin_proto_msgTypes[22]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use FieldChoice.ProtoReflect.Descriptor instead.
+func (*FieldChoice) Descriptor() ([]byte, []int) {
+	return file_nucleus_admin_v1_admin_proto_rawDescGZIP(), []int{22}
+}
+
+func (x *FieldChoice) GetValue() string {
+	if x != nil {
+		return x.Value
+	}
+	return ""
+}
+
+func (x *FieldChoice) GetLabel() string {
+	if x != nil {
+		return x.Label
+	}
+	return ""
+}
+
+type ModelInfo struct {
+	state                protoimpl.MessageState `protogen:"open.v1"`
+	Name                 string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`     // Go struct name (e.g. "Article")
+	Plural               string                 `protobuf:"bytes,2,opt,name=plural,proto3" json:"plural,omitempty"` // Plural ("Articles")
+	Table                string                 `protobuf:"bytes,3,opt,name=table,proto3" json:"table,omitempty"`   // SQL table ("articles")
+	DatabaseAlias        string                 `protobuf:"bytes,4,opt,name=database_alias,json=databaseAlias,proto3" json:"database_alias,omitempty"`
+	PrimaryKey           string                 `protobuf:"bytes,5,opt,name=primary_key,json=primaryKey,proto3" json:"primary_key,omitempty"`
+	RecordCount          int64                  `protobuf:"varint,6,opt,name=record_count,json=recordCount,proto3" json:"record_count,omitempty"` // -1 when not requested or unknown
+	RecordCountEstimated bool                   `protobuf:"varint,7,opt,name=record_count_estimated,json=recordCountEstimated,proto3" json:"record_count_estimated,omitempty"`
+	unknownFields        protoimpl.UnknownFields
+	sizeCache            protoimpl.SizeCache
+}
+
+func (x *ModelInfo) Reset() {
+	*x = ModelInfo{}
+	mi := &file_nucleus_admin_v1_admin_proto_msgTypes[23]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ModelInfo) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ModelInfo) ProtoMessage() {}
+
+func (x *ModelInfo) ProtoReflect() protoreflect.Message {
+	mi := &file_nucleus_admin_v1_admin_proto_msgTypes[23]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ModelInfo.ProtoReflect.Descriptor instead.
+func (*ModelInfo) Descriptor() ([]byte, []int) {
+	return file_nucleus_admin_v1_admin_proto_rawDescGZIP(), []int{23}
+}
+
+func (x *ModelInfo) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *ModelInfo) GetPlural() string {
+	if x != nil {
+		return x.Plural
+	}
+	return ""
+}
+
+func (x *ModelInfo) GetTable() string {
+	if x != nil {
+		return x.Table
+	}
+	return ""
+}
+
+func (x *ModelInfo) GetDatabaseAlias() string {
+	if x != nil {
+		return x.DatabaseAlias
+	}
+	return ""
+}
+
+func (x *ModelInfo) GetPrimaryKey() string {
+	if x != nil {
+		return x.PrimaryKey
+	}
+	return ""
+}
+
+func (x *ModelInfo) GetRecordCount() int64 {
+	if x != nil {
+		return x.RecordCount
+	}
+	return 0
+}
+
+func (x *ModelInfo) GetRecordCountEstimated() bool {
+	if x != nil {
+		return x.RecordCountEstimated
+	}
+	return false
+}
+
+type ModelSchema struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Info          *ModelInfo             `protobuf:"bytes,1,opt,name=info,proto3" json:"info,omitempty"`
+	Fields        []*ModelField          `protobuf:"bytes,2,rep,name=fields,proto3" json:"fields,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ModelSchema) Reset() {
+	*x = ModelSchema{}
+	mi := &file_nucleus_admin_v1_admin_proto_msgTypes[24]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ModelSchema) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ModelSchema) ProtoMessage() {}
+
+func (x *ModelSchema) ProtoReflect() protoreflect.Message {
+	mi := &file_nucleus_admin_v1_admin_proto_msgTypes[24]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ModelSchema.ProtoReflect.Descriptor instead.
+func (*ModelSchema) Descriptor() ([]byte, []int) {
+	return file_nucleus_admin_v1_admin_proto_rawDescGZIP(), []int{24}
+}
+
+func (x *ModelSchema) GetInfo() *ModelInfo {
+	if x != nil {
+		return x.Info
+	}
+	return nil
+}
+
+func (x *ModelSchema) GetFields() []*ModelField {
+	if x != nil {
+		return x.Fields
+	}
+	return nil
+}
+
+// Record carries field values as a map of field-name -> JSON-encoded
+// scalar. This avoids encoding every Go runtime type into proto Any
+// while keeping numeric / boolean / null fidelity. The UI parses with
+// the schema's go_type to render appropriately.
+type Record struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	ValuesJson    map[string]string      `protobuf:"bytes,1,rep,name=values_json,json=valuesJson,proto3" json:"values_json,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Record) Reset() {
+	*x = Record{}
+	mi := &file_nucleus_admin_v1_admin_proto_msgTypes[25]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Record) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Record) ProtoMessage() {}
+
+func (x *Record) ProtoReflect() protoreflect.Message {
+	mi := &file_nucleus_admin_v1_admin_proto_msgTypes[25]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Record.ProtoReflect.Descriptor instead.
+func (*Record) Descriptor() ([]byte, []int) {
+	return file_nucleus_admin_v1_admin_proto_rawDescGZIP(), []int{25}
+}
+
+func (x *Record) GetValuesJson() map[string]string {
+	if x != nil {
+		return x.ValuesJson
+	}
+	return nil
+}
+
+type ListModelsRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	IncludeCounts bool                   `protobuf:"varint,1,opt,name=include_counts,json=includeCounts,proto3" json:"include_counts,omitempty"`
+	DatabaseAlias string                 `protobuf:"bytes,2,opt,name=database_alias,json=databaseAlias,proto3" json:"database_alias,omitempty"`
+	NodeId        string                 `protobuf:"bytes,3,opt,name=node_id,json=nodeId,proto3" json:"node_id,omitempty"` // empty: server picks any agent that knows the models
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListModelsRequest) Reset() {
+	*x = ListModelsRequest{}
+	mi := &file_nucleus_admin_v1_admin_proto_msgTypes[26]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListModelsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListModelsRequest) ProtoMessage() {}
+
+func (x *ListModelsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_nucleus_admin_v1_admin_proto_msgTypes[26]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListModelsRequest.ProtoReflect.Descriptor instead.
+func (*ListModelsRequest) Descriptor() ([]byte, []int) {
+	return file_nucleus_admin_v1_admin_proto_rawDescGZIP(), []int{26}
+}
+
+func (x *ListModelsRequest) GetIncludeCounts() bool {
+	if x != nil {
+		return x.IncludeCounts
+	}
+	return false
+}
+
+func (x *ListModelsRequest) GetDatabaseAlias() string {
+	if x != nil {
+		return x.DatabaseAlias
+	}
+	return ""
+}
+
+func (x *ListModelsRequest) GetNodeId() string {
+	if x != nil {
+		return x.NodeId
+	}
+	return ""
+}
+
+type ListModelsResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Models        []*ModelInfo           `protobuf:"bytes,1,rep,name=models,proto3" json:"models,omitempty"`
+	NodeId        string                 `protobuf:"bytes,2,opt,name=node_id,json=nodeId,proto3" json:"node_id,omitempty"` // which agent answered
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListModelsResponse) Reset() {
+	*x = ListModelsResponse{}
+	mi := &file_nucleus_admin_v1_admin_proto_msgTypes[27]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListModelsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListModelsResponse) ProtoMessage() {}
+
+func (x *ListModelsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_nucleus_admin_v1_admin_proto_msgTypes[27]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListModelsResponse.ProtoReflect.Descriptor instead.
+func (*ListModelsResponse) Descriptor() ([]byte, []int) {
+	return file_nucleus_admin_v1_admin_proto_rawDescGZIP(), []int{27}
+}
+
+func (x *ListModelsResponse) GetModels() []*ModelInfo {
+	if x != nil {
+		return x.Models
+	}
+	return nil
+}
+
+func (x *ListModelsResponse) GetNodeId() string {
+	if x != nil {
+		return x.NodeId
+	}
+	return ""
+}
+
+type GetSchemaRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	NodeId        string                 `protobuf:"bytes,1,opt,name=node_id,json=nodeId,proto3" json:"node_id,omitempty"`
+	ModelName     string                 `protobuf:"bytes,2,opt,name=model_name,json=modelName,proto3" json:"model_name,omitempty"`
+	DatabaseAlias string                 `protobuf:"bytes,3,opt,name=database_alias,json=databaseAlias,proto3" json:"database_alias,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetSchemaRequest) Reset() {
+	*x = GetSchemaRequest{}
+	mi := &file_nucleus_admin_v1_admin_proto_msgTypes[28]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetSchemaRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetSchemaRequest) ProtoMessage() {}
+
+func (x *GetSchemaRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_nucleus_admin_v1_admin_proto_msgTypes[28]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetSchemaRequest.ProtoReflect.Descriptor instead.
+func (*GetSchemaRequest) Descriptor() ([]byte, []int) {
+	return file_nucleus_admin_v1_admin_proto_rawDescGZIP(), []int{28}
+}
+
+func (x *GetSchemaRequest) GetNodeId() string {
+	if x != nil {
+		return x.NodeId
+	}
+	return ""
+}
+
+func (x *GetSchemaRequest) GetModelName() string {
+	if x != nil {
+		return x.ModelName
+	}
+	return ""
+}
+
+func (x *GetSchemaRequest) GetDatabaseAlias() string {
+	if x != nil {
+		return x.DatabaseAlias
+	}
+	return ""
+}
+
+type ListRecordsRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	NodeId        string                 `protobuf:"bytes,1,opt,name=node_id,json=nodeId,proto3" json:"node_id,omitempty"`
+	ModelName     string                 `protobuf:"bytes,2,opt,name=model_name,json=modelName,proto3" json:"model_name,omitempty"`
+	DatabaseAlias string                 `protobuf:"bytes,3,opt,name=database_alias,json=databaseAlias,proto3" json:"database_alias,omitempty"`
+	Page          uint32                 `protobuf:"varint,10,opt,name=page,proto3" json:"page,omitempty"`
+	PageSize      uint32                 `protobuf:"varint,11,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"`
+	Search        string                 `protobuf:"bytes,12,opt,name=search,proto3" json:"search,omitempty"`
+	OrderBy       string                 `protobuf:"bytes,13,opt,name=order_by,json=orderBy,proto3" json:"order_by,omitempty"`
+	Filters       map[string]string      `protobuf:"bytes,14,rep,name=filters,proto3" json:"filters,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	Fields        []string               `protobuf:"bytes,15,rep,name=fields,proto3" json:"fields,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListRecordsRequest) Reset() {
+	*x = ListRecordsRequest{}
+	mi := &file_nucleus_admin_v1_admin_proto_msgTypes[29]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListRecordsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListRecordsRequest) ProtoMessage() {}
+
+func (x *ListRecordsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_nucleus_admin_v1_admin_proto_msgTypes[29]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListRecordsRequest.ProtoReflect.Descriptor instead.
+func (*ListRecordsRequest) Descriptor() ([]byte, []int) {
+	return file_nucleus_admin_v1_admin_proto_rawDescGZIP(), []int{29}
+}
+
+func (x *ListRecordsRequest) GetNodeId() string {
+	if x != nil {
+		return x.NodeId
+	}
+	return ""
+}
+
+func (x *ListRecordsRequest) GetModelName() string {
+	if x != nil {
+		return x.ModelName
+	}
+	return ""
+}
+
+func (x *ListRecordsRequest) GetDatabaseAlias() string {
+	if x != nil {
+		return x.DatabaseAlias
+	}
+	return ""
+}
+
+func (x *ListRecordsRequest) GetPage() uint32 {
+	if x != nil {
+		return x.Page
+	}
+	return 0
+}
+
+func (x *ListRecordsRequest) GetPageSize() uint32 {
+	if x != nil {
+		return x.PageSize
+	}
+	return 0
+}
+
+func (x *ListRecordsRequest) GetSearch() string {
+	if x != nil {
+		return x.Search
+	}
+	return ""
+}
+
+func (x *ListRecordsRequest) GetOrderBy() string {
+	if x != nil {
+		return x.OrderBy
+	}
+	return ""
+}
+
+func (x *ListRecordsRequest) GetFilters() map[string]string {
+	if x != nil {
+		return x.Filters
+	}
+	return nil
+}
+
+func (x *ListRecordsRequest) GetFields() []string {
+	if x != nil {
+		return x.Fields
+	}
+	return nil
+}
+
+type PaginatedRecords struct {
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	Items          []*Record              `protobuf:"bytes,1,rep,name=items,proto3" json:"items,omitempty"`
+	Page           uint32                 `protobuf:"varint,2,opt,name=page,proto3" json:"page,omitempty"`
+	PageSize       uint32                 `protobuf:"varint,3,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"`
+	Total          int64                  `protobuf:"varint,4,opt,name=total,proto3" json:"total,omitempty"` // -1 = unknown
+	TotalEstimated bool                   `protobuf:"varint,5,opt,name=total_estimated,json=totalEstimated,proto3" json:"total_estimated,omitempty"`
+	HasMore        bool                   `protobuf:"varint,6,opt,name=has_more,json=hasMore,proto3" json:"has_more,omitempty"`
+	NodeId         string                 `protobuf:"bytes,7,opt,name=node_id,json=nodeId,proto3" json:"node_id,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *PaginatedRecords) Reset() {
+	*x = PaginatedRecords{}
+	mi := &file_nucleus_admin_v1_admin_proto_msgTypes[30]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PaginatedRecords) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PaginatedRecords) ProtoMessage() {}
+
+func (x *PaginatedRecords) ProtoReflect() protoreflect.Message {
+	mi := &file_nucleus_admin_v1_admin_proto_msgTypes[30]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PaginatedRecords.ProtoReflect.Descriptor instead.
+func (*PaginatedRecords) Descriptor() ([]byte, []int) {
+	return file_nucleus_admin_v1_admin_proto_rawDescGZIP(), []int{30}
+}
+
+func (x *PaginatedRecords) GetItems() []*Record {
+	if x != nil {
+		return x.Items
+	}
+	return nil
+}
+
+func (x *PaginatedRecords) GetPage() uint32 {
+	if x != nil {
+		return x.Page
+	}
+	return 0
+}
+
+func (x *PaginatedRecords) GetPageSize() uint32 {
+	if x != nil {
+		return x.PageSize
+	}
+	return 0
+}
+
+func (x *PaginatedRecords) GetTotal() int64 {
+	if x != nil {
+		return x.Total
+	}
+	return 0
+}
+
+func (x *PaginatedRecords) GetTotalEstimated() bool {
+	if x != nil {
+		return x.TotalEstimated
+	}
+	return false
+}
+
+func (x *PaginatedRecords) GetHasMore() bool {
+	if x != nil {
+		return x.HasMore
+	}
+	return false
+}
+
+func (x *PaginatedRecords) GetNodeId() string {
+	if x != nil {
+		return x.NodeId
+	}
+	return ""
+}
+
+type GetRecordRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	NodeId        string                 `protobuf:"bytes,1,opt,name=node_id,json=nodeId,proto3" json:"node_id,omitempty"`
+	ModelName     string                 `protobuf:"bytes,2,opt,name=model_name,json=modelName,proto3" json:"model_name,omitempty"`
+	DatabaseAlias string                 `protobuf:"bytes,3,opt,name=database_alias,json=databaseAlias,proto3" json:"database_alias,omitempty"`
+	Id            string                 `protobuf:"bytes,4,opt,name=id,proto3" json:"id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetRecordRequest) Reset() {
+	*x = GetRecordRequest{}
+	mi := &file_nucleus_admin_v1_admin_proto_msgTypes[31]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetRecordRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetRecordRequest) ProtoMessage() {}
+
+func (x *GetRecordRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_nucleus_admin_v1_admin_proto_msgTypes[31]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetRecordRequest.ProtoReflect.Descriptor instead.
+func (*GetRecordRequest) Descriptor() ([]byte, []int) {
+	return file_nucleus_admin_v1_admin_proto_rawDescGZIP(), []int{31}
+}
+
+func (x *GetRecordRequest) GetNodeId() string {
+	if x != nil {
+		return x.NodeId
+	}
+	return ""
+}
+
+func (x *GetRecordRequest) GetModelName() string {
+	if x != nil {
+		return x.ModelName
+	}
+	return ""
+}
+
+func (x *GetRecordRequest) GetDatabaseAlias() string {
+	if x != nil {
+		return x.DatabaseAlias
+	}
+	return ""
+}
+
+func (x *GetRecordRequest) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+type CreateRecordRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	NodeId        string                 `protobuf:"bytes,1,opt,name=node_id,json=nodeId,proto3" json:"node_id,omitempty"`
+	ModelName     string                 `protobuf:"bytes,2,opt,name=model_name,json=modelName,proto3" json:"model_name,omitempty"`
+	DatabaseAlias string                 `protobuf:"bytes,3,opt,name=database_alias,json=databaseAlias,proto3" json:"database_alias,omitempty"`
+	Record        *Record                `protobuf:"bytes,4,opt,name=record,proto3" json:"record,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CreateRecordRequest) Reset() {
+	*x = CreateRecordRequest{}
+	mi := &file_nucleus_admin_v1_admin_proto_msgTypes[32]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CreateRecordRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CreateRecordRequest) ProtoMessage() {}
+
+func (x *CreateRecordRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_nucleus_admin_v1_admin_proto_msgTypes[32]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CreateRecordRequest.ProtoReflect.Descriptor instead.
+func (*CreateRecordRequest) Descriptor() ([]byte, []int) {
+	return file_nucleus_admin_v1_admin_proto_rawDescGZIP(), []int{32}
+}
+
+func (x *CreateRecordRequest) GetNodeId() string {
+	if x != nil {
+		return x.NodeId
+	}
+	return ""
+}
+
+func (x *CreateRecordRequest) GetModelName() string {
+	if x != nil {
+		return x.ModelName
+	}
+	return ""
+}
+
+func (x *CreateRecordRequest) GetDatabaseAlias() string {
+	if x != nil {
+		return x.DatabaseAlias
+	}
+	return ""
+}
+
+func (x *CreateRecordRequest) GetRecord() *Record {
+	if x != nil {
+		return x.Record
+	}
+	return nil
+}
+
+type UpdateRecordRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	NodeId        string                 `protobuf:"bytes,1,opt,name=node_id,json=nodeId,proto3" json:"node_id,omitempty"`
+	ModelName     string                 `protobuf:"bytes,2,opt,name=model_name,json=modelName,proto3" json:"model_name,omitempty"`
+	DatabaseAlias string                 `protobuf:"bytes,3,opt,name=database_alias,json=databaseAlias,proto3" json:"database_alias,omitempty"`
+	Id            string                 `protobuf:"bytes,4,opt,name=id,proto3" json:"id,omitempty"`
+	Record        *Record                `protobuf:"bytes,5,opt,name=record,proto3" json:"record,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UpdateRecordRequest) Reset() {
+	*x = UpdateRecordRequest{}
+	mi := &file_nucleus_admin_v1_admin_proto_msgTypes[33]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UpdateRecordRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UpdateRecordRequest) ProtoMessage() {}
+
+func (x *UpdateRecordRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_nucleus_admin_v1_admin_proto_msgTypes[33]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UpdateRecordRequest.ProtoReflect.Descriptor instead.
+func (*UpdateRecordRequest) Descriptor() ([]byte, []int) {
+	return file_nucleus_admin_v1_admin_proto_rawDescGZIP(), []int{33}
+}
+
+func (x *UpdateRecordRequest) GetNodeId() string {
+	if x != nil {
+		return x.NodeId
+	}
+	return ""
+}
+
+func (x *UpdateRecordRequest) GetModelName() string {
+	if x != nil {
+		return x.ModelName
+	}
+	return ""
+}
+
+func (x *UpdateRecordRequest) GetDatabaseAlias() string {
+	if x != nil {
+		return x.DatabaseAlias
+	}
+	return ""
+}
+
+func (x *UpdateRecordRequest) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *UpdateRecordRequest) GetRecord() *Record {
+	if x != nil {
+		return x.Record
+	}
+	return nil
+}
+
+type DeleteRecordRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	NodeId        string                 `protobuf:"bytes,1,opt,name=node_id,json=nodeId,proto3" json:"node_id,omitempty"`
+	ModelName     string                 `protobuf:"bytes,2,opt,name=model_name,json=modelName,proto3" json:"model_name,omitempty"`
+	DatabaseAlias string                 `protobuf:"bytes,3,opt,name=database_alias,json=databaseAlias,proto3" json:"database_alias,omitempty"`
+	Id            string                 `protobuf:"bytes,4,opt,name=id,proto3" json:"id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DeleteRecordRequest) Reset() {
+	*x = DeleteRecordRequest{}
+	mi := &file_nucleus_admin_v1_admin_proto_msgTypes[34]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DeleteRecordRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DeleteRecordRequest) ProtoMessage() {}
+
+func (x *DeleteRecordRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_nucleus_admin_v1_admin_proto_msgTypes[34]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DeleteRecordRequest.ProtoReflect.Descriptor instead.
+func (*DeleteRecordRequest) Descriptor() ([]byte, []int) {
+	return file_nucleus_admin_v1_admin_proto_rawDescGZIP(), []int{34}
+}
+
+func (x *DeleteRecordRequest) GetNodeId() string {
+	if x != nil {
+		return x.NodeId
+	}
+	return ""
+}
+
+func (x *DeleteRecordRequest) GetModelName() string {
+	if x != nil {
+		return x.ModelName
+	}
+	return ""
+}
+
+func (x *DeleteRecordRequest) GetDatabaseAlias() string {
+	if x != nil {
+		return x.DatabaseAlias
+	}
+	return ""
+}
+
+func (x *DeleteRecordRequest) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+type DeleteRecordResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Deleted       bool                   `protobuf:"varint,1,opt,name=deleted,proto3" json:"deleted,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DeleteRecordResponse) Reset() {
+	*x = DeleteRecordResponse{}
+	mi := &file_nucleus_admin_v1_admin_proto_msgTypes[35]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DeleteRecordResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DeleteRecordResponse) ProtoMessage() {}
+
+func (x *DeleteRecordResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_nucleus_admin_v1_admin_proto_msgTypes[35]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DeleteRecordResponse.ProtoReflect.Descriptor instead.
+func (*DeleteRecordResponse) Descriptor() ([]byte, []int) {
+	return file_nucleus_admin_v1_admin_proto_rawDescGZIP(), []int{35}
+}
+
+func (x *DeleteRecordResponse) GetDeleted() bool {
+	if x != nil {
+		return x.Deleted
+	}
+	return false
+}
+
+type BulkActionRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	NodeId        string                 `protobuf:"bytes,1,opt,name=node_id,json=nodeId,proto3" json:"node_id,omitempty"`
+	ModelName     string                 `protobuf:"bytes,2,opt,name=model_name,json=modelName,proto3" json:"model_name,omitempty"`
+	DatabaseAlias string                 `protobuf:"bytes,3,opt,name=database_alias,json=databaseAlias,proto3" json:"database_alias,omitempty"`
+	Action        string                 `protobuf:"bytes,4,opt,name=action,proto3" json:"action,omitempty"` // "delete"
+	Ids           []string               `protobuf:"bytes,5,rep,name=ids,proto3" json:"ids,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *BulkActionRequest) Reset() {
+	*x = BulkActionRequest{}
+	mi := &file_nucleus_admin_v1_admin_proto_msgTypes[36]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *BulkActionRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*BulkActionRequest) ProtoMessage() {}
+
+func (x *BulkActionRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_nucleus_admin_v1_admin_proto_msgTypes[36]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use BulkActionRequest.ProtoReflect.Descriptor instead.
+func (*BulkActionRequest) Descriptor() ([]byte, []int) {
+	return file_nucleus_admin_v1_admin_proto_rawDescGZIP(), []int{36}
+}
+
+func (x *BulkActionRequest) GetNodeId() string {
+	if x != nil {
+		return x.NodeId
+	}
+	return ""
+}
+
+func (x *BulkActionRequest) GetModelName() string {
+	if x != nil {
+		return x.ModelName
+	}
+	return ""
+}
+
+func (x *BulkActionRequest) GetDatabaseAlias() string {
+	if x != nil {
+		return x.DatabaseAlias
+	}
+	return ""
+}
+
+func (x *BulkActionRequest) GetAction() string {
+	if x != nil {
+		return x.Action
+	}
+	return ""
+}
+
+func (x *BulkActionRequest) GetIds() []string {
+	if x != nil {
+		return x.Ids
+	}
+	return nil
+}
+
+type BulkActionResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Affected      uint32                 `protobuf:"varint,1,opt,name=affected,proto3" json:"affected,omitempty"`
+	Failed        uint32                 `protobuf:"varint,2,opt,name=failed,proto3" json:"failed,omitempty"`
+	Errors        []string               `protobuf:"bytes,3,rep,name=errors,proto3" json:"errors,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *BulkActionResponse) Reset() {
+	*x = BulkActionResponse{}
+	mi := &file_nucleus_admin_v1_admin_proto_msgTypes[37]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *BulkActionResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*BulkActionResponse) ProtoMessage() {}
+
+func (x *BulkActionResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_nucleus_admin_v1_admin_proto_msgTypes[37]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use BulkActionResponse.ProtoReflect.Descriptor instead.
+func (*BulkActionResponse) Descriptor() ([]byte, []int) {
+	return file_nucleus_admin_v1_admin_proto_rawDescGZIP(), []int{37}
+}
+
+func (x *BulkActionResponse) GetAffected() uint32 {
+	if x != nil {
+		return x.Affected
+	}
+	return 0
+}
+
+func (x *BulkActionResponse) GetFailed() uint32 {
+	if x != nil {
+		return x.Failed
+	}
+	return 0
+}
+
+func (x *BulkActionResponse) GetErrors() []string {
+	if x != nil {
+		return x.Errors
+	}
+	return nil
+}
+
+// DataStudioRequest is sent from server to agent over the bidi
+// AgentService.Stream multiplexed with events. Each request carries an
+// opaque request_id the agent echoes in its DataStudioResponse so the
+// server can correlate.
+type DataStudioRequest struct {
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	RequestId string                 `protobuf:"bytes,1,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
+	// Types that are valid to be assigned to Body:
+	//
+	//	*DataStudioRequest_ListModels
+	//	*DataStudioRequest_GetSchema
+	//	*DataStudioRequest_ListRecords
+	//	*DataStudioRequest_GetRecord
+	//	*DataStudioRequest_CreateRecord
+	//	*DataStudioRequest_UpdateRecord
+	//	*DataStudioRequest_DeleteRecord
+	//	*DataStudioRequest_BulkAction
+	Body          isDataStudioRequest_Body `protobuf_oneof:"body"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DataStudioRequest) Reset() {
+	*x = DataStudioRequest{}
+	mi := &file_nucleus_admin_v1_admin_proto_msgTypes[38]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DataStudioRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DataStudioRequest) ProtoMessage() {}
+
+func (x *DataStudioRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_nucleus_admin_v1_admin_proto_msgTypes[38]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DataStudioRequest.ProtoReflect.Descriptor instead.
+func (*DataStudioRequest) Descriptor() ([]byte, []int) {
+	return file_nucleus_admin_v1_admin_proto_rawDescGZIP(), []int{38}
+}
+
+func (x *DataStudioRequest) GetRequestId() string {
+	if x != nil {
+		return x.RequestId
+	}
+	return ""
+}
+
+func (x *DataStudioRequest) GetBody() isDataStudioRequest_Body {
+	if x != nil {
+		return x.Body
+	}
+	return nil
+}
+
+func (x *DataStudioRequest) GetListModels() *ListModelsRequest {
+	if x != nil {
+		if x, ok := x.Body.(*DataStudioRequest_ListModels); ok {
+			return x.ListModels
+		}
+	}
+	return nil
+}
+
+func (x *DataStudioRequest) GetGetSchema() *GetSchemaRequest {
+	if x != nil {
+		if x, ok := x.Body.(*DataStudioRequest_GetSchema); ok {
+			return x.GetSchema
+		}
+	}
+	return nil
+}
+
+func (x *DataStudioRequest) GetListRecords() *ListRecordsRequest {
+	if x != nil {
+		if x, ok := x.Body.(*DataStudioRequest_ListRecords); ok {
+			return x.ListRecords
+		}
+	}
+	return nil
+}
+
+func (x *DataStudioRequest) GetGetRecord() *GetRecordRequest {
+	if x != nil {
+		if x, ok := x.Body.(*DataStudioRequest_GetRecord); ok {
+			return x.GetRecord
+		}
+	}
+	return nil
+}
+
+func (x *DataStudioRequest) GetCreateRecord() *CreateRecordRequest {
+	if x != nil {
+		if x, ok := x.Body.(*DataStudioRequest_CreateRecord); ok {
+			return x.CreateRecord
+		}
+	}
+	return nil
+}
+
+func (x *DataStudioRequest) GetUpdateRecord() *UpdateRecordRequest {
+	if x != nil {
+		if x, ok := x.Body.(*DataStudioRequest_UpdateRecord); ok {
+			return x.UpdateRecord
+		}
+	}
+	return nil
+}
+
+func (x *DataStudioRequest) GetDeleteRecord() *DeleteRecordRequest {
+	if x != nil {
+		if x, ok := x.Body.(*DataStudioRequest_DeleteRecord); ok {
+			return x.DeleteRecord
+		}
+	}
+	return nil
+}
+
+func (x *DataStudioRequest) GetBulkAction() *BulkActionRequest {
+	if x != nil {
+		if x, ok := x.Body.(*DataStudioRequest_BulkAction); ok {
+			return x.BulkAction
+		}
+	}
+	return nil
+}
+
+type isDataStudioRequest_Body interface {
+	isDataStudioRequest_Body()
+}
+
+type DataStudioRequest_ListModels struct {
+	ListModels *ListModelsRequest `protobuf:"bytes,10,opt,name=list_models,json=listModels,proto3,oneof"`
+}
+
+type DataStudioRequest_GetSchema struct {
+	GetSchema *GetSchemaRequest `protobuf:"bytes,11,opt,name=get_schema,json=getSchema,proto3,oneof"`
+}
+
+type DataStudioRequest_ListRecords struct {
+	ListRecords *ListRecordsRequest `protobuf:"bytes,12,opt,name=list_records,json=listRecords,proto3,oneof"`
+}
+
+type DataStudioRequest_GetRecord struct {
+	GetRecord *GetRecordRequest `protobuf:"bytes,13,opt,name=get_record,json=getRecord,proto3,oneof"`
+}
+
+type DataStudioRequest_CreateRecord struct {
+	CreateRecord *CreateRecordRequest `protobuf:"bytes,14,opt,name=create_record,json=createRecord,proto3,oneof"`
+}
+
+type DataStudioRequest_UpdateRecord struct {
+	UpdateRecord *UpdateRecordRequest `protobuf:"bytes,15,opt,name=update_record,json=updateRecord,proto3,oneof"`
+}
+
+type DataStudioRequest_DeleteRecord struct {
+	DeleteRecord *DeleteRecordRequest `protobuf:"bytes,16,opt,name=delete_record,json=deleteRecord,proto3,oneof"`
+}
+
+type DataStudioRequest_BulkAction struct {
+	BulkAction *BulkActionRequest `protobuf:"bytes,17,opt,name=bulk_action,json=bulkAction,proto3,oneof"`
+}
+
+func (*DataStudioRequest_ListModels) isDataStudioRequest_Body() {}
+
+func (*DataStudioRequest_GetSchema) isDataStudioRequest_Body() {}
+
+func (*DataStudioRequest_ListRecords) isDataStudioRequest_Body() {}
+
+func (*DataStudioRequest_GetRecord) isDataStudioRequest_Body() {}
+
+func (*DataStudioRequest_CreateRecord) isDataStudioRequest_Body() {}
+
+func (*DataStudioRequest_UpdateRecord) isDataStudioRequest_Body() {}
+
+func (*DataStudioRequest_DeleteRecord) isDataStudioRequest_Body() {}
+
+func (*DataStudioRequest_BulkAction) isDataStudioRequest_Body() {}
+
+// DataStudioResponse travels agent -> server on the same Stream. error
+// is non-empty when the operation failed; in that case the body oneof
+// is unset.
+type DataStudioResponse struct {
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	RequestId string                 `protobuf:"bytes,1,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
+	Error     string                 `protobuf:"bytes,2,opt,name=error,proto3" json:"error,omitempty"`
+	// Types that are valid to be assigned to Body:
+	//
+	//	*DataStudioResponse_ListModels
+	//	*DataStudioResponse_Schema
+	//	*DataStudioResponse_RecordsPage
+	//	*DataStudioResponse_Record
+	//	*DataStudioResponse_DeleteRecord
+	//	*DataStudioResponse_BulkAction
+	Body          isDataStudioResponse_Body `protobuf_oneof:"body"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DataStudioResponse) Reset() {
+	*x = DataStudioResponse{}
+	mi := &file_nucleus_admin_v1_admin_proto_msgTypes[39]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DataStudioResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DataStudioResponse) ProtoMessage() {}
+
+func (x *DataStudioResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_nucleus_admin_v1_admin_proto_msgTypes[39]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DataStudioResponse.ProtoReflect.Descriptor instead.
+func (*DataStudioResponse) Descriptor() ([]byte, []int) {
+	return file_nucleus_admin_v1_admin_proto_rawDescGZIP(), []int{39}
+}
+
+func (x *DataStudioResponse) GetRequestId() string {
+	if x != nil {
+		return x.RequestId
+	}
+	return ""
+}
+
+func (x *DataStudioResponse) GetError() string {
+	if x != nil {
+		return x.Error
+	}
+	return ""
+}
+
+func (x *DataStudioResponse) GetBody() isDataStudioResponse_Body {
+	if x != nil {
+		return x.Body
+	}
+	return nil
+}
+
+func (x *DataStudioResponse) GetListModels() *ListModelsResponse {
+	if x != nil {
+		if x, ok := x.Body.(*DataStudioResponse_ListModels); ok {
+			return x.ListModels
+		}
+	}
+	return nil
+}
+
+func (x *DataStudioResponse) GetSchema() *ModelSchema {
+	if x != nil {
+		if x, ok := x.Body.(*DataStudioResponse_Schema); ok {
+			return x.Schema
+		}
+	}
+	return nil
+}
+
+func (x *DataStudioResponse) GetRecordsPage() *PaginatedRecords {
+	if x != nil {
+		if x, ok := x.Body.(*DataStudioResponse_RecordsPage); ok {
+			return x.RecordsPage
+		}
+	}
+	return nil
+}
+
+func (x *DataStudioResponse) GetRecord() *Record {
+	if x != nil {
+		if x, ok := x.Body.(*DataStudioResponse_Record); ok {
+			return x.Record
+		}
+	}
+	return nil
+}
+
+func (x *DataStudioResponse) GetDeleteRecord() *DeleteRecordResponse {
+	if x != nil {
+		if x, ok := x.Body.(*DataStudioResponse_DeleteRecord); ok {
+			return x.DeleteRecord
+		}
+	}
+	return nil
+}
+
+func (x *DataStudioResponse) GetBulkAction() *BulkActionResponse {
+	if x != nil {
+		if x, ok := x.Body.(*DataStudioResponse_BulkAction); ok {
+			return x.BulkAction
+		}
+	}
+	return nil
+}
+
+type isDataStudioResponse_Body interface {
+	isDataStudioResponse_Body()
+}
+
+type DataStudioResponse_ListModels struct {
+	ListModels *ListModelsResponse `protobuf:"bytes,10,opt,name=list_models,json=listModels,proto3,oneof"`
+}
+
+type DataStudioResponse_Schema struct {
+	Schema *ModelSchema `protobuf:"bytes,11,opt,name=schema,proto3,oneof"`
+}
+
+type DataStudioResponse_RecordsPage struct {
+	RecordsPage *PaginatedRecords `protobuf:"bytes,12,opt,name=records_page,json=recordsPage,proto3,oneof"`
+}
+
+type DataStudioResponse_Record struct {
+	Record *Record `protobuf:"bytes,13,opt,name=record,proto3,oneof"`
+}
+
+type DataStudioResponse_DeleteRecord struct {
+	DeleteRecord *DeleteRecordResponse `protobuf:"bytes,14,opt,name=delete_record,json=deleteRecord,proto3,oneof"`
+}
+
+type DataStudioResponse_BulkAction struct {
+	BulkAction *BulkActionResponse `protobuf:"bytes,15,opt,name=bulk_action,json=bulkAction,proto3,oneof"`
+}
+
+func (*DataStudioResponse_ListModels) isDataStudioResponse_Body() {}
+
+func (*DataStudioResponse_Schema) isDataStudioResponse_Body() {}
+
+func (*DataStudioResponse_RecordsPage) isDataStudioResponse_Body() {}
+
+func (*DataStudioResponse_Record) isDataStudioResponse_Body() {}
+
+func (*DataStudioResponse_DeleteRecord) isDataStudioResponse_Body() {}
+
+func (*DataStudioResponse_BulkAction) isDataStudioResponse_Body() {}
+
 var File_nucleus_admin_v1_admin_proto protoreflect.FileDescriptor
 
 const file_nucleus_admin_v1_admin_proto_rawDesc = "" +
 	"\n" +
-	"\x1cnucleus/admin/v1/admin.proto\x12\x10nucleus.admin.v1\x1a\x1egoogle/protobuf/duration.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\x83\x02\n" +
+	"\x1cnucleus/admin/v1/admin.proto\x12\x10nucleus.admin.v1\x1a\x1egoogle/protobuf/duration.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xb0\x02\n" +
 	"\x10NodeRegistration\x12\x17\n" +
 	"\anode_id\x18\x01 \x01(\tR\x06nodeId\x12\x18\n" +
 	"\aversion\x18\x02 \x01(\tR\aversion\x12F\n" +
 	"\x06labels\x18\x03 \x03(\v2..nucleus.admin.v1.NodeRegistration.LabelsEntryR\x06labels\x129\n" +
 	"\n" +
-	"started_at\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\tstartedAt\x1a9\n" +
+	"started_at\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\tstartedAt\x12+\n" +
+	"\x11registered_models\x18\x05 \x03(\tR\x10registeredModels\x1a9\n" +
 	"\vLabelsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xdc\x01\n" +
@@ -1958,20 +3602,23 @@ const file_nucleus_admin_v1_admin_proto_rawDesc = "" +
 	"\fpayload_json\x18\x03 \x01(\fR\vpayloadJson\x12\x14\n" +
 	"\x05error\x18\x04 \x01(\tR\x05error\"!\n" +
 	"\aGoodbye\x12\x16\n" +
-	"\x06reason\x18\x01 \x01(\tR\x06reason\"\x98\x02\n" +
+	"\x06reason\x18\x01 \x01(\tR\x06reason\"\xe0\x02\n" +
 	"\aCommand\x12;\n" +
 	"\tsubscribe\x18\x01 \x01(\v2\x1b.nucleus.admin.v1.SubscribeH\x00R\tsubscribe\x12A\n" +
 	"\vunsubscribe\x18\x02 \x01(\v2\x1d.nucleus.admin.v1.UnsubscribeH\x00R\vunsubscribe\x12N\n" +
 	"\x10snapshot_request\x18\x03 \x01(\v2!.nucleus.admin.v1.SnapshotRequestH\x00R\x0fsnapshotRequest\x125\n" +
-	"\agoodbye\x18\x04 \x01(\v2\x19.nucleus.admin.v1.GoodbyeH\x00R\agoodbyeB\x06\n" +
-	"\x04body\"\x88\x03\n" +
+	"\agoodbye\x18\x04 \x01(\v2\x19.nucleus.admin.v1.GoodbyeH\x00R\agoodbye\x12F\n" +
+	"\vdata_studio\x18\x05 \x01(\v2#.nucleus.admin.v1.DataStudioRequestH\x00R\n" +
+	"dataStudioB\x06\n" +
+	"\x04body\"\xe2\x03\n" +
 	"\x05Frame\x12H\n" +
 	"\fregistration\x18\x01 \x01(\v2\".nucleus.admin.v1.NodeRegistrationH\x00R\fregistration\x12/\n" +
 	"\x05event\x18\x02 \x01(\v2\x17.nucleus.admin.v1.EventH\x00R\x05event\x12;\n" +
 	"\theartbeat\x18\x03 \x01(\v2\x1b.nucleus.admin.v1.HeartbeatH\x00R\theartbeat\x125\n" +
 	"\acommand\x18\x04 \x01(\v2\x19.nucleus.admin.v1.CommandH\x00R\acommand\x12Q\n" +
 	"\x11snapshot_response\x18\x05 \x01(\v2\".nucleus.admin.v1.SnapshotResponseH\x00R\x10snapshotResponse\x125\n" +
-	"\agoodbye\x18\x06 \x01(\v2\x19.nucleus.admin.v1.GoodbyeH\x00R\agoodbyeB\x06\n" +
+	"\agoodbye\x18\x06 \x01(\v2\x19.nucleus.admin.v1.GoodbyeH\x00R\agoodbye\x12X\n" +
+	"\x14data_studio_response\x18\a \x01(\v2$.nucleus.admin.v1.DataStudioResponseH\x00R\x12dataStudioResponseB\x06\n" +
 	"\x04body\"\xcf\x02\n" +
 	"\bNodeInfo\x12\x17\n" +
 	"\anode_id\x18\x01 \x01(\tR\x06nodeId\x12\x18\n" +
@@ -2002,7 +3649,156 @@ const file_nucleus_admin_v1_admin_proto_rawDesc = "" +
 	"\anode_id\x18\x01 \x01(\tR\x06nodeId\x122\n" +
 	"\x04type\x18\x02 \x01(\x0e2\x1e.nucleus.admin.v1.SnapshotTypeR\x04type\x12=\n" +
 	"\fgenerated_at\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\vgeneratedAt\x12!\n" +
-	"\fpayload_json\x18\x04 \x01(\fR\vpayloadJson*\x98\x01\n" +
+	"\fpayload_json\x18\x04 \x01(\fR\vpayloadJson\"\x98\x04\n" +
+	"\n" +
+	"ModelField\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12\x16\n" +
+	"\x06column\x18\x02 \x01(\tR\x06column\x12\x14\n" +
+	"\x05label\x18\x03 \x01(\tR\x05label\x12\x17\n" +
+	"\ago_type\x18\x04 \x01(\tR\x06goType\x12\x1b\n" +
+	"\thtml_type\x18\x05 \x01(\tR\bhtmlType\x12$\n" +
+	"\x0eis_primary_key\x18\x06 \x01(\bR\fisPrimaryKey\x12\x1f\n" +
+	"\vis_required\x18\a \x01(\bR\n" +
+	"isRequired\x12\x1f\n" +
+	"\vis_readonly\x18\b \x01(\bR\n" +
+	"isReadonly\x12\x1c\n" +
+	"\n" +
+	"is_in_list\x18\t \x01(\bR\bisInList\x12#\n" +
+	"\ris_searchable\x18\n" +
+	" \x01(\bR\fisSearchable\x12#\n" +
+	"\ris_filterable\x18\v \x01(\bR\fisFilterable\x12\x1f\n" +
+	"\vis_excluded\x18\f \x01(\bR\n" +
+	"isExcluded\x12$\n" +
+	"\x0eis_foreign_key\x18\r \x01(\bR\fisForeignKey\x12#\n" +
+	"\rforeign_model\x18\x0e \x01(\tR\fforeignModel\x12\x1d\n" +
+	"\n" +
+	"max_length\x18\x0f \x01(\x05R\tmaxLength\x127\n" +
+	"\achoices\x18\x10 \x03(\v2\x1d.nucleus.admin.v1.FieldChoiceR\achoices\"9\n" +
+	"\vFieldChoice\x12\x14\n" +
+	"\x05value\x18\x01 \x01(\tR\x05value\x12\x14\n" +
+	"\x05label\x18\x02 \x01(\tR\x05label\"\xee\x01\n" +
+	"\tModelInfo\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12\x16\n" +
+	"\x06plural\x18\x02 \x01(\tR\x06plural\x12\x14\n" +
+	"\x05table\x18\x03 \x01(\tR\x05table\x12%\n" +
+	"\x0edatabase_alias\x18\x04 \x01(\tR\rdatabaseAlias\x12\x1f\n" +
+	"\vprimary_key\x18\x05 \x01(\tR\n" +
+	"primaryKey\x12!\n" +
+	"\frecord_count\x18\x06 \x01(\x03R\vrecordCount\x124\n" +
+	"\x16record_count_estimated\x18\a \x01(\bR\x14recordCountEstimated\"t\n" +
+	"\vModelSchema\x12/\n" +
+	"\x04info\x18\x01 \x01(\v2\x1b.nucleus.admin.v1.ModelInfoR\x04info\x124\n" +
+	"\x06fields\x18\x02 \x03(\v2\x1c.nucleus.admin.v1.ModelFieldR\x06fields\"\x92\x01\n" +
+	"\x06Record\x12I\n" +
+	"\vvalues_json\x18\x01 \x03(\v2(.nucleus.admin.v1.Record.ValuesJsonEntryR\n" +
+	"valuesJson\x1a=\n" +
+	"\x0fValuesJsonEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"z\n" +
+	"\x11ListModelsRequest\x12%\n" +
+	"\x0einclude_counts\x18\x01 \x01(\bR\rincludeCounts\x12%\n" +
+	"\x0edatabase_alias\x18\x02 \x01(\tR\rdatabaseAlias\x12\x17\n" +
+	"\anode_id\x18\x03 \x01(\tR\x06nodeId\"b\n" +
+	"\x12ListModelsResponse\x123\n" +
+	"\x06models\x18\x01 \x03(\v2\x1b.nucleus.admin.v1.ModelInfoR\x06models\x12\x17\n" +
+	"\anode_id\x18\x02 \x01(\tR\x06nodeId\"q\n" +
+	"\x10GetSchemaRequest\x12\x17\n" +
+	"\anode_id\x18\x01 \x01(\tR\x06nodeId\x12\x1d\n" +
+	"\n" +
+	"model_name\x18\x02 \x01(\tR\tmodelName\x12%\n" +
+	"\x0edatabase_alias\x18\x03 \x01(\tR\rdatabaseAlias\"\xf8\x02\n" +
+	"\x12ListRecordsRequest\x12\x17\n" +
+	"\anode_id\x18\x01 \x01(\tR\x06nodeId\x12\x1d\n" +
+	"\n" +
+	"model_name\x18\x02 \x01(\tR\tmodelName\x12%\n" +
+	"\x0edatabase_alias\x18\x03 \x01(\tR\rdatabaseAlias\x12\x12\n" +
+	"\x04page\x18\n" +
+	" \x01(\rR\x04page\x12\x1b\n" +
+	"\tpage_size\x18\v \x01(\rR\bpageSize\x12\x16\n" +
+	"\x06search\x18\f \x01(\tR\x06search\x12\x19\n" +
+	"\border_by\x18\r \x01(\tR\aorderBy\x12K\n" +
+	"\afilters\x18\x0e \x03(\v21.nucleus.admin.v1.ListRecordsRequest.FiltersEntryR\afilters\x12\x16\n" +
+	"\x06fields\x18\x0f \x03(\tR\x06fields\x1a:\n" +
+	"\fFiltersEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xe6\x01\n" +
+	"\x10PaginatedRecords\x12.\n" +
+	"\x05items\x18\x01 \x03(\v2\x18.nucleus.admin.v1.RecordR\x05items\x12\x12\n" +
+	"\x04page\x18\x02 \x01(\rR\x04page\x12\x1b\n" +
+	"\tpage_size\x18\x03 \x01(\rR\bpageSize\x12\x14\n" +
+	"\x05total\x18\x04 \x01(\x03R\x05total\x12'\n" +
+	"\x0ftotal_estimated\x18\x05 \x01(\bR\x0etotalEstimated\x12\x19\n" +
+	"\bhas_more\x18\x06 \x01(\bR\ahasMore\x12\x17\n" +
+	"\anode_id\x18\a \x01(\tR\x06nodeId\"\x81\x01\n" +
+	"\x10GetRecordRequest\x12\x17\n" +
+	"\anode_id\x18\x01 \x01(\tR\x06nodeId\x12\x1d\n" +
+	"\n" +
+	"model_name\x18\x02 \x01(\tR\tmodelName\x12%\n" +
+	"\x0edatabase_alias\x18\x03 \x01(\tR\rdatabaseAlias\x12\x0e\n" +
+	"\x02id\x18\x04 \x01(\tR\x02id\"\xa6\x01\n" +
+	"\x13CreateRecordRequest\x12\x17\n" +
+	"\anode_id\x18\x01 \x01(\tR\x06nodeId\x12\x1d\n" +
+	"\n" +
+	"model_name\x18\x02 \x01(\tR\tmodelName\x12%\n" +
+	"\x0edatabase_alias\x18\x03 \x01(\tR\rdatabaseAlias\x120\n" +
+	"\x06record\x18\x04 \x01(\v2\x18.nucleus.admin.v1.RecordR\x06record\"\xb6\x01\n" +
+	"\x13UpdateRecordRequest\x12\x17\n" +
+	"\anode_id\x18\x01 \x01(\tR\x06nodeId\x12\x1d\n" +
+	"\n" +
+	"model_name\x18\x02 \x01(\tR\tmodelName\x12%\n" +
+	"\x0edatabase_alias\x18\x03 \x01(\tR\rdatabaseAlias\x12\x0e\n" +
+	"\x02id\x18\x04 \x01(\tR\x02id\x120\n" +
+	"\x06record\x18\x05 \x01(\v2\x18.nucleus.admin.v1.RecordR\x06record\"\x84\x01\n" +
+	"\x13DeleteRecordRequest\x12\x17\n" +
+	"\anode_id\x18\x01 \x01(\tR\x06nodeId\x12\x1d\n" +
+	"\n" +
+	"model_name\x18\x02 \x01(\tR\tmodelName\x12%\n" +
+	"\x0edatabase_alias\x18\x03 \x01(\tR\rdatabaseAlias\x12\x0e\n" +
+	"\x02id\x18\x04 \x01(\tR\x02id\"0\n" +
+	"\x14DeleteRecordResponse\x12\x18\n" +
+	"\adeleted\x18\x01 \x01(\bR\adeleted\"\x9c\x01\n" +
+	"\x11BulkActionRequest\x12\x17\n" +
+	"\anode_id\x18\x01 \x01(\tR\x06nodeId\x12\x1d\n" +
+	"\n" +
+	"model_name\x18\x02 \x01(\tR\tmodelName\x12%\n" +
+	"\x0edatabase_alias\x18\x03 \x01(\tR\rdatabaseAlias\x12\x16\n" +
+	"\x06action\x18\x04 \x01(\tR\x06action\x12\x10\n" +
+	"\x03ids\x18\x05 \x03(\tR\x03ids\"`\n" +
+	"\x12BulkActionResponse\x12\x1a\n" +
+	"\baffected\x18\x01 \x01(\rR\baffected\x12\x16\n" +
+	"\x06failed\x18\x02 \x01(\rR\x06failed\x12\x16\n" +
+	"\x06errors\x18\x03 \x03(\tR\x06errors\"\x89\x05\n" +
+	"\x11DataStudioRequest\x12\x1d\n" +
+	"\n" +
+	"request_id\x18\x01 \x01(\tR\trequestId\x12F\n" +
+	"\vlist_models\x18\n" +
+	" \x01(\v2#.nucleus.admin.v1.ListModelsRequestH\x00R\n" +
+	"listModels\x12C\n" +
+	"\n" +
+	"get_schema\x18\v \x01(\v2\".nucleus.admin.v1.GetSchemaRequestH\x00R\tgetSchema\x12I\n" +
+	"\flist_records\x18\f \x01(\v2$.nucleus.admin.v1.ListRecordsRequestH\x00R\vlistRecords\x12C\n" +
+	"\n" +
+	"get_record\x18\r \x01(\v2\".nucleus.admin.v1.GetRecordRequestH\x00R\tgetRecord\x12L\n" +
+	"\rcreate_record\x18\x0e \x01(\v2%.nucleus.admin.v1.CreateRecordRequestH\x00R\fcreateRecord\x12L\n" +
+	"\rupdate_record\x18\x0f \x01(\v2%.nucleus.admin.v1.UpdateRecordRequestH\x00R\fupdateRecord\x12L\n" +
+	"\rdelete_record\x18\x10 \x01(\v2%.nucleus.admin.v1.DeleteRecordRequestH\x00R\fdeleteRecord\x12F\n" +
+	"\vbulk_action\x18\x11 \x01(\v2#.nucleus.admin.v1.BulkActionRequestH\x00R\n" +
+	"bulkActionB\x06\n" +
+	"\x04body\"\xe8\x03\n" +
+	"\x12DataStudioResponse\x12\x1d\n" +
+	"\n" +
+	"request_id\x18\x01 \x01(\tR\trequestId\x12\x14\n" +
+	"\x05error\x18\x02 \x01(\tR\x05error\x12G\n" +
+	"\vlist_models\x18\n" +
+	" \x01(\v2$.nucleus.admin.v1.ListModelsResponseH\x00R\n" +
+	"listModels\x127\n" +
+	"\x06schema\x18\v \x01(\v2\x1d.nucleus.admin.v1.ModelSchemaH\x00R\x06schema\x12G\n" +
+	"\frecords_page\x18\f \x01(\v2\".nucleus.admin.v1.PaginatedRecordsH\x00R\vrecordsPage\x122\n" +
+	"\x06record\x18\r \x01(\v2\x18.nucleus.admin.v1.RecordH\x00R\x06record\x12M\n" +
+	"\rdelete_record\x18\x0e \x01(\v2&.nucleus.admin.v1.DeleteRecordResponseH\x00R\fdeleteRecord\x12G\n" +
+	"\vbulk_action\x18\x0f \x01(\v2$.nucleus.admin.v1.BulkActionResponseH\x00R\n" +
+	"bulkActionB\x06\n" +
+	"\x04body*\x98\x01\n" +
 	"\tEventType\x12\x1a\n" +
 	"\x16EVENT_TYPE_UNSPECIFIED\x10\x00\x12\x1b\n" +
 	"\x17EVENT_TYPE_HTTP_REQUEST\x10\x01\x12\x1c\n" +
@@ -2021,7 +3817,18 @@ const file_nucleus_admin_v1_admin_proto_rawDesc = "" +
 	"\x0eControlService\x12T\n" +
 	"\tListNodes\x12\".nucleus.admin.v1.ListNodesRequest\x1a#.nucleus.admin.v1.ListNodesResponse\x12P\n" +
 	"\fStreamEvents\x12%.nucleus.admin.v1.StreamEventsRequest\x1a\x17.nucleus.admin.v1.Event0\x01\x12O\n" +
-	"\vGetSnapshot\x12$.nucleus.admin.v1.GetSnapshotRequest\x1a\x1a.nucleus.admin.v1.SnapshotBLZJgithub.com/jcsvwinston/nucleus/admin/proto/gen/go/nucleus/admin/v1;adminv1b\x06proto3"
+	"\vGetSnapshot\x12$.nucleus.admin.v1.GetSnapshotRequest\x1a\x1a.nucleus.admin.v1.Snapshot2\xba\x05\n" +
+	"\x11DataStudioService\x12W\n" +
+	"\n" +
+	"ListModels\x12#.nucleus.admin.v1.ListModelsRequest\x1a$.nucleus.admin.v1.ListModelsResponse\x12N\n" +
+	"\tGetSchema\x12\".nucleus.admin.v1.GetSchemaRequest\x1a\x1d.nucleus.admin.v1.ModelSchema\x12W\n" +
+	"\vListRecords\x12$.nucleus.admin.v1.ListRecordsRequest\x1a\".nucleus.admin.v1.PaginatedRecords\x12I\n" +
+	"\tGetRecord\x12\".nucleus.admin.v1.GetRecordRequest\x1a\x18.nucleus.admin.v1.Record\x12O\n" +
+	"\fCreateRecord\x12%.nucleus.admin.v1.CreateRecordRequest\x1a\x18.nucleus.admin.v1.Record\x12O\n" +
+	"\fUpdateRecord\x12%.nucleus.admin.v1.UpdateRecordRequest\x1a\x18.nucleus.admin.v1.Record\x12]\n" +
+	"\fDeleteRecord\x12%.nucleus.admin.v1.DeleteRecordRequest\x1a&.nucleus.admin.v1.DeleteRecordResponse\x12W\n" +
+	"\n" +
+	"BulkAction\x12#.nucleus.admin.v1.BulkActionRequest\x1a$.nucleus.admin.v1.BulkActionResponseBLZJgithub.com/jcsvwinston/nucleus/admin/proto/gen/go/nucleus/admin/v1;adminv1b\x06proto3"
 
 var (
 	file_nucleus_admin_v1_admin_proto_rawDescOnce sync.Once
@@ -2036,7 +3843,7 @@ func file_nucleus_admin_v1_admin_proto_rawDescGZIP() []byte {
 }
 
 var file_nucleus_admin_v1_admin_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
-var file_nucleus_admin_v1_admin_proto_msgTypes = make([]protoimpl.MessageInfo, 26)
+var file_nucleus_admin_v1_admin_proto_msgTypes = make([]protoimpl.MessageInfo, 47)
 var file_nucleus_admin_v1_admin_proto_goTypes = []any{
 	(EventType)(0),                // 0: nucleus.admin.v1.EventType
 	(SnapshotType)(0),             // 1: nucleus.admin.v1.SnapshotType
@@ -2062,64 +3869,126 @@ var file_nucleus_admin_v1_admin_proto_goTypes = []any{
 	(*StreamEventsRequest)(nil),   // 21: nucleus.admin.v1.StreamEventsRequest
 	(*GetSnapshotRequest)(nil),    // 22: nucleus.admin.v1.GetSnapshotRequest
 	(*Snapshot)(nil),              // 23: nucleus.admin.v1.Snapshot
-	nil,                           // 24: nucleus.admin.v1.NodeRegistration.LabelsEntry
-	nil,                           // 25: nucleus.admin.v1.CustomEvent.LabelsEntry
-	nil,                           // 26: nucleus.admin.v1.Subscribe.SamplingRateEntry
-	nil,                           // 27: nucleus.admin.v1.NodeInfo.LabelsEntry
-	nil,                           // 28: nucleus.admin.v1.StreamEventsRequest.SamplingRateEntry
-	(*timestamppb.Timestamp)(nil), // 29: google.protobuf.Timestamp
-	(*durationpb.Duration)(nil),   // 30: google.protobuf.Duration
+	(*ModelField)(nil),            // 24: nucleus.admin.v1.ModelField
+	(*FieldChoice)(nil),           // 25: nucleus.admin.v1.FieldChoice
+	(*ModelInfo)(nil),             // 26: nucleus.admin.v1.ModelInfo
+	(*ModelSchema)(nil),           // 27: nucleus.admin.v1.ModelSchema
+	(*Record)(nil),                // 28: nucleus.admin.v1.Record
+	(*ListModelsRequest)(nil),     // 29: nucleus.admin.v1.ListModelsRequest
+	(*ListModelsResponse)(nil),    // 30: nucleus.admin.v1.ListModelsResponse
+	(*GetSchemaRequest)(nil),      // 31: nucleus.admin.v1.GetSchemaRequest
+	(*ListRecordsRequest)(nil),    // 32: nucleus.admin.v1.ListRecordsRequest
+	(*PaginatedRecords)(nil),      // 33: nucleus.admin.v1.PaginatedRecords
+	(*GetRecordRequest)(nil),      // 34: nucleus.admin.v1.GetRecordRequest
+	(*CreateRecordRequest)(nil),   // 35: nucleus.admin.v1.CreateRecordRequest
+	(*UpdateRecordRequest)(nil),   // 36: nucleus.admin.v1.UpdateRecordRequest
+	(*DeleteRecordRequest)(nil),   // 37: nucleus.admin.v1.DeleteRecordRequest
+	(*DeleteRecordResponse)(nil),  // 38: nucleus.admin.v1.DeleteRecordResponse
+	(*BulkActionRequest)(nil),     // 39: nucleus.admin.v1.BulkActionRequest
+	(*BulkActionResponse)(nil),    // 40: nucleus.admin.v1.BulkActionResponse
+	(*DataStudioRequest)(nil),     // 41: nucleus.admin.v1.DataStudioRequest
+	(*DataStudioResponse)(nil),    // 42: nucleus.admin.v1.DataStudioResponse
+	nil,                           // 43: nucleus.admin.v1.NodeRegistration.LabelsEntry
+	nil,                           // 44: nucleus.admin.v1.CustomEvent.LabelsEntry
+	nil,                           // 45: nucleus.admin.v1.Subscribe.SamplingRateEntry
+	nil,                           // 46: nucleus.admin.v1.NodeInfo.LabelsEntry
+	nil,                           // 47: nucleus.admin.v1.StreamEventsRequest.SamplingRateEntry
+	nil,                           // 48: nucleus.admin.v1.Record.ValuesJsonEntry
+	nil,                           // 49: nucleus.admin.v1.ListRecordsRequest.FiltersEntry
+	(*timestamppb.Timestamp)(nil), // 50: google.protobuf.Timestamp
+	(*durationpb.Duration)(nil),   // 51: google.protobuf.Duration
 }
 var file_nucleus_admin_v1_admin_proto_depIdxs = []int32{
-	24, // 0: nucleus.admin.v1.NodeRegistration.labels:type_name -> nucleus.admin.v1.NodeRegistration.LabelsEntry
-	29, // 1: nucleus.admin.v1.NodeRegistration.started_at:type_name -> google.protobuf.Timestamp
-	29, // 2: nucleus.admin.v1.Heartbeat.timestamp:type_name -> google.protobuf.Timestamp
+	43, // 0: nucleus.admin.v1.NodeRegistration.labels:type_name -> nucleus.admin.v1.NodeRegistration.LabelsEntry
+	50, // 1: nucleus.admin.v1.NodeRegistration.started_at:type_name -> google.protobuf.Timestamp
+	50, // 2: nucleus.admin.v1.Heartbeat.timestamp:type_name -> google.protobuf.Timestamp
 	0,  // 3: nucleus.admin.v1.Filter.types:type_name -> nucleus.admin.v1.EventType
-	30, // 4: nucleus.admin.v1.HttpRequestEvent.duration:type_name -> google.protobuf.Duration
-	30, // 5: nucleus.admin.v1.SqlStatementEvent.duration:type_name -> google.protobuf.Duration
+	51, // 4: nucleus.admin.v1.HttpRequestEvent.duration:type_name -> google.protobuf.Duration
+	51, // 5: nucleus.admin.v1.SqlStatementEvent.duration:type_name -> google.protobuf.Duration
 	2,  // 6: nucleus.admin.v1.SessionChangeEvent.kind:type_name -> nucleus.admin.v1.SessionChangeEvent.Kind
-	25, // 7: nucleus.admin.v1.CustomEvent.labels:type_name -> nucleus.admin.v1.CustomEvent.LabelsEntry
-	29, // 8: nucleus.admin.v1.Event.timestamp:type_name -> google.protobuf.Timestamp
+	44, // 7: nucleus.admin.v1.CustomEvent.labels:type_name -> nucleus.admin.v1.CustomEvent.LabelsEntry
+	50, // 8: nucleus.admin.v1.Event.timestamp:type_name -> google.protobuf.Timestamp
 	6,  // 9: nucleus.admin.v1.Event.http_request:type_name -> nucleus.admin.v1.HttpRequestEvent
 	7,  // 10: nucleus.admin.v1.Event.sql_statement:type_name -> nucleus.admin.v1.SqlStatementEvent
 	8,  // 11: nucleus.admin.v1.Event.session_change:type_name -> nucleus.admin.v1.SessionChangeEvent
 	9,  // 12: nucleus.admin.v1.Event.custom:type_name -> nucleus.admin.v1.CustomEvent
 	5,  // 13: nucleus.admin.v1.Subscribe.filter:type_name -> nucleus.admin.v1.Filter
-	26, // 14: nucleus.admin.v1.Subscribe.sampling_rate:type_name -> nucleus.admin.v1.Subscribe.SamplingRateEntry
+	45, // 14: nucleus.admin.v1.Subscribe.sampling_rate:type_name -> nucleus.admin.v1.Subscribe.SamplingRateEntry
 	1,  // 15: nucleus.admin.v1.SnapshotRequest.type:type_name -> nucleus.admin.v1.SnapshotType
 	1,  // 16: nucleus.admin.v1.SnapshotResponse.type:type_name -> nucleus.admin.v1.SnapshotType
 	11, // 17: nucleus.admin.v1.Command.subscribe:type_name -> nucleus.admin.v1.Subscribe
 	12, // 18: nucleus.admin.v1.Command.unsubscribe:type_name -> nucleus.admin.v1.Unsubscribe
 	13, // 19: nucleus.admin.v1.Command.snapshot_request:type_name -> nucleus.admin.v1.SnapshotRequest
 	15, // 20: nucleus.admin.v1.Command.goodbye:type_name -> nucleus.admin.v1.Goodbye
-	3,  // 21: nucleus.admin.v1.Frame.registration:type_name -> nucleus.admin.v1.NodeRegistration
-	10, // 22: nucleus.admin.v1.Frame.event:type_name -> nucleus.admin.v1.Event
-	4,  // 23: nucleus.admin.v1.Frame.heartbeat:type_name -> nucleus.admin.v1.Heartbeat
-	16, // 24: nucleus.admin.v1.Frame.command:type_name -> nucleus.admin.v1.Command
-	14, // 25: nucleus.admin.v1.Frame.snapshot_response:type_name -> nucleus.admin.v1.SnapshotResponse
-	15, // 26: nucleus.admin.v1.Frame.goodbye:type_name -> nucleus.admin.v1.Goodbye
-	27, // 27: nucleus.admin.v1.NodeInfo.labels:type_name -> nucleus.admin.v1.NodeInfo.LabelsEntry
-	29, // 28: nucleus.admin.v1.NodeInfo.started_at:type_name -> google.protobuf.Timestamp
-	29, // 29: nucleus.admin.v1.NodeInfo.last_seen_at:type_name -> google.protobuf.Timestamp
-	18, // 30: nucleus.admin.v1.ListNodesResponse.nodes:type_name -> nucleus.admin.v1.NodeInfo
-	5,  // 31: nucleus.admin.v1.StreamEventsRequest.filter:type_name -> nucleus.admin.v1.Filter
-	28, // 32: nucleus.admin.v1.StreamEventsRequest.sampling_rate:type_name -> nucleus.admin.v1.StreamEventsRequest.SamplingRateEntry
-	1,  // 33: nucleus.admin.v1.GetSnapshotRequest.type:type_name -> nucleus.admin.v1.SnapshotType
-	1,  // 34: nucleus.admin.v1.Snapshot.type:type_name -> nucleus.admin.v1.SnapshotType
-	29, // 35: nucleus.admin.v1.Snapshot.generated_at:type_name -> google.protobuf.Timestamp
-	17, // 36: nucleus.admin.v1.AgentService.Stream:input_type -> nucleus.admin.v1.Frame
-	19, // 37: nucleus.admin.v1.ControlService.ListNodes:input_type -> nucleus.admin.v1.ListNodesRequest
-	21, // 38: nucleus.admin.v1.ControlService.StreamEvents:input_type -> nucleus.admin.v1.StreamEventsRequest
-	22, // 39: nucleus.admin.v1.ControlService.GetSnapshot:input_type -> nucleus.admin.v1.GetSnapshotRequest
-	17, // 40: nucleus.admin.v1.AgentService.Stream:output_type -> nucleus.admin.v1.Frame
-	20, // 41: nucleus.admin.v1.ControlService.ListNodes:output_type -> nucleus.admin.v1.ListNodesResponse
-	10, // 42: nucleus.admin.v1.ControlService.StreamEvents:output_type -> nucleus.admin.v1.Event
-	23, // 43: nucleus.admin.v1.ControlService.GetSnapshot:output_type -> nucleus.admin.v1.Snapshot
-	40, // [40:44] is the sub-list for method output_type
-	36, // [36:40] is the sub-list for method input_type
-	36, // [36:36] is the sub-list for extension type_name
-	36, // [36:36] is the sub-list for extension extendee
-	0,  // [0:36] is the sub-list for field type_name
+	41, // 21: nucleus.admin.v1.Command.data_studio:type_name -> nucleus.admin.v1.DataStudioRequest
+	3,  // 22: nucleus.admin.v1.Frame.registration:type_name -> nucleus.admin.v1.NodeRegistration
+	10, // 23: nucleus.admin.v1.Frame.event:type_name -> nucleus.admin.v1.Event
+	4,  // 24: nucleus.admin.v1.Frame.heartbeat:type_name -> nucleus.admin.v1.Heartbeat
+	16, // 25: nucleus.admin.v1.Frame.command:type_name -> nucleus.admin.v1.Command
+	14, // 26: nucleus.admin.v1.Frame.snapshot_response:type_name -> nucleus.admin.v1.SnapshotResponse
+	15, // 27: nucleus.admin.v1.Frame.goodbye:type_name -> nucleus.admin.v1.Goodbye
+	42, // 28: nucleus.admin.v1.Frame.data_studio_response:type_name -> nucleus.admin.v1.DataStudioResponse
+	46, // 29: nucleus.admin.v1.NodeInfo.labels:type_name -> nucleus.admin.v1.NodeInfo.LabelsEntry
+	50, // 30: nucleus.admin.v1.NodeInfo.started_at:type_name -> google.protobuf.Timestamp
+	50, // 31: nucleus.admin.v1.NodeInfo.last_seen_at:type_name -> google.protobuf.Timestamp
+	18, // 32: nucleus.admin.v1.ListNodesResponse.nodes:type_name -> nucleus.admin.v1.NodeInfo
+	5,  // 33: nucleus.admin.v1.StreamEventsRequest.filter:type_name -> nucleus.admin.v1.Filter
+	47, // 34: nucleus.admin.v1.StreamEventsRequest.sampling_rate:type_name -> nucleus.admin.v1.StreamEventsRequest.SamplingRateEntry
+	1,  // 35: nucleus.admin.v1.GetSnapshotRequest.type:type_name -> nucleus.admin.v1.SnapshotType
+	1,  // 36: nucleus.admin.v1.Snapshot.type:type_name -> nucleus.admin.v1.SnapshotType
+	50, // 37: nucleus.admin.v1.Snapshot.generated_at:type_name -> google.protobuf.Timestamp
+	25, // 38: nucleus.admin.v1.ModelField.choices:type_name -> nucleus.admin.v1.FieldChoice
+	26, // 39: nucleus.admin.v1.ModelSchema.info:type_name -> nucleus.admin.v1.ModelInfo
+	24, // 40: nucleus.admin.v1.ModelSchema.fields:type_name -> nucleus.admin.v1.ModelField
+	48, // 41: nucleus.admin.v1.Record.values_json:type_name -> nucleus.admin.v1.Record.ValuesJsonEntry
+	26, // 42: nucleus.admin.v1.ListModelsResponse.models:type_name -> nucleus.admin.v1.ModelInfo
+	49, // 43: nucleus.admin.v1.ListRecordsRequest.filters:type_name -> nucleus.admin.v1.ListRecordsRequest.FiltersEntry
+	28, // 44: nucleus.admin.v1.PaginatedRecords.items:type_name -> nucleus.admin.v1.Record
+	28, // 45: nucleus.admin.v1.CreateRecordRequest.record:type_name -> nucleus.admin.v1.Record
+	28, // 46: nucleus.admin.v1.UpdateRecordRequest.record:type_name -> nucleus.admin.v1.Record
+	29, // 47: nucleus.admin.v1.DataStudioRequest.list_models:type_name -> nucleus.admin.v1.ListModelsRequest
+	31, // 48: nucleus.admin.v1.DataStudioRequest.get_schema:type_name -> nucleus.admin.v1.GetSchemaRequest
+	32, // 49: nucleus.admin.v1.DataStudioRequest.list_records:type_name -> nucleus.admin.v1.ListRecordsRequest
+	34, // 50: nucleus.admin.v1.DataStudioRequest.get_record:type_name -> nucleus.admin.v1.GetRecordRequest
+	35, // 51: nucleus.admin.v1.DataStudioRequest.create_record:type_name -> nucleus.admin.v1.CreateRecordRequest
+	36, // 52: nucleus.admin.v1.DataStudioRequest.update_record:type_name -> nucleus.admin.v1.UpdateRecordRequest
+	37, // 53: nucleus.admin.v1.DataStudioRequest.delete_record:type_name -> nucleus.admin.v1.DeleteRecordRequest
+	39, // 54: nucleus.admin.v1.DataStudioRequest.bulk_action:type_name -> nucleus.admin.v1.BulkActionRequest
+	30, // 55: nucleus.admin.v1.DataStudioResponse.list_models:type_name -> nucleus.admin.v1.ListModelsResponse
+	27, // 56: nucleus.admin.v1.DataStudioResponse.schema:type_name -> nucleus.admin.v1.ModelSchema
+	33, // 57: nucleus.admin.v1.DataStudioResponse.records_page:type_name -> nucleus.admin.v1.PaginatedRecords
+	28, // 58: nucleus.admin.v1.DataStudioResponse.record:type_name -> nucleus.admin.v1.Record
+	38, // 59: nucleus.admin.v1.DataStudioResponse.delete_record:type_name -> nucleus.admin.v1.DeleteRecordResponse
+	40, // 60: nucleus.admin.v1.DataStudioResponse.bulk_action:type_name -> nucleus.admin.v1.BulkActionResponse
+	17, // 61: nucleus.admin.v1.AgentService.Stream:input_type -> nucleus.admin.v1.Frame
+	19, // 62: nucleus.admin.v1.ControlService.ListNodes:input_type -> nucleus.admin.v1.ListNodesRequest
+	21, // 63: nucleus.admin.v1.ControlService.StreamEvents:input_type -> nucleus.admin.v1.StreamEventsRequest
+	22, // 64: nucleus.admin.v1.ControlService.GetSnapshot:input_type -> nucleus.admin.v1.GetSnapshotRequest
+	29, // 65: nucleus.admin.v1.DataStudioService.ListModels:input_type -> nucleus.admin.v1.ListModelsRequest
+	31, // 66: nucleus.admin.v1.DataStudioService.GetSchema:input_type -> nucleus.admin.v1.GetSchemaRequest
+	32, // 67: nucleus.admin.v1.DataStudioService.ListRecords:input_type -> nucleus.admin.v1.ListRecordsRequest
+	34, // 68: nucleus.admin.v1.DataStudioService.GetRecord:input_type -> nucleus.admin.v1.GetRecordRequest
+	35, // 69: nucleus.admin.v1.DataStudioService.CreateRecord:input_type -> nucleus.admin.v1.CreateRecordRequest
+	36, // 70: nucleus.admin.v1.DataStudioService.UpdateRecord:input_type -> nucleus.admin.v1.UpdateRecordRequest
+	37, // 71: nucleus.admin.v1.DataStudioService.DeleteRecord:input_type -> nucleus.admin.v1.DeleteRecordRequest
+	39, // 72: nucleus.admin.v1.DataStudioService.BulkAction:input_type -> nucleus.admin.v1.BulkActionRequest
+	17, // 73: nucleus.admin.v1.AgentService.Stream:output_type -> nucleus.admin.v1.Frame
+	20, // 74: nucleus.admin.v1.ControlService.ListNodes:output_type -> nucleus.admin.v1.ListNodesResponse
+	10, // 75: nucleus.admin.v1.ControlService.StreamEvents:output_type -> nucleus.admin.v1.Event
+	23, // 76: nucleus.admin.v1.ControlService.GetSnapshot:output_type -> nucleus.admin.v1.Snapshot
+	30, // 77: nucleus.admin.v1.DataStudioService.ListModels:output_type -> nucleus.admin.v1.ListModelsResponse
+	27, // 78: nucleus.admin.v1.DataStudioService.GetSchema:output_type -> nucleus.admin.v1.ModelSchema
+	33, // 79: nucleus.admin.v1.DataStudioService.ListRecords:output_type -> nucleus.admin.v1.PaginatedRecords
+	28, // 80: nucleus.admin.v1.DataStudioService.GetRecord:output_type -> nucleus.admin.v1.Record
+	28, // 81: nucleus.admin.v1.DataStudioService.CreateRecord:output_type -> nucleus.admin.v1.Record
+	28, // 82: nucleus.admin.v1.DataStudioService.UpdateRecord:output_type -> nucleus.admin.v1.Record
+	38, // 83: nucleus.admin.v1.DataStudioService.DeleteRecord:output_type -> nucleus.admin.v1.DeleteRecordResponse
+	40, // 84: nucleus.admin.v1.DataStudioService.BulkAction:output_type -> nucleus.admin.v1.BulkActionResponse
+	73, // [73:85] is the sub-list for method output_type
+	61, // [61:73] is the sub-list for method input_type
+	61, // [61:61] is the sub-list for extension type_name
+	61, // [61:61] is the sub-list for extension extendee
+	0,  // [0:61] is the sub-list for field type_name
 }
 
 func init() { file_nucleus_admin_v1_admin_proto_init() }
@@ -2138,6 +4007,7 @@ func file_nucleus_admin_v1_admin_proto_init() {
 		(*Command_Unsubscribe)(nil),
 		(*Command_SnapshotRequest)(nil),
 		(*Command_Goodbye)(nil),
+		(*Command_DataStudio)(nil),
 	}
 	file_nucleus_admin_v1_admin_proto_msgTypes[14].OneofWrappers = []any{
 		(*Frame_Registration)(nil),
@@ -2146,6 +4016,25 @@ func file_nucleus_admin_v1_admin_proto_init() {
 		(*Frame_Command)(nil),
 		(*Frame_SnapshotResponse)(nil),
 		(*Frame_Goodbye)(nil),
+		(*Frame_DataStudioResponse)(nil),
+	}
+	file_nucleus_admin_v1_admin_proto_msgTypes[38].OneofWrappers = []any{
+		(*DataStudioRequest_ListModels)(nil),
+		(*DataStudioRequest_GetSchema)(nil),
+		(*DataStudioRequest_ListRecords)(nil),
+		(*DataStudioRequest_GetRecord)(nil),
+		(*DataStudioRequest_CreateRecord)(nil),
+		(*DataStudioRequest_UpdateRecord)(nil),
+		(*DataStudioRequest_DeleteRecord)(nil),
+		(*DataStudioRequest_BulkAction)(nil),
+	}
+	file_nucleus_admin_v1_admin_proto_msgTypes[39].OneofWrappers = []any{
+		(*DataStudioResponse_ListModels)(nil),
+		(*DataStudioResponse_Schema)(nil),
+		(*DataStudioResponse_RecordsPage)(nil),
+		(*DataStudioResponse_Record)(nil),
+		(*DataStudioResponse_DeleteRecord)(nil),
+		(*DataStudioResponse_BulkAction)(nil),
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
@@ -2153,9 +4042,9 @@ func file_nucleus_admin_v1_admin_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_nucleus_admin_v1_admin_proto_rawDesc), len(file_nucleus_admin_v1_admin_proto_rawDesc)),
 			NumEnums:      3,
-			NumMessages:   26,
+			NumMessages:   47,
 			NumExtensions: 0,
-			NumServices:   2,
+			NumServices:   3,
 		},
 		GoTypes:           file_nucleus_admin_v1_admin_proto_goTypes,
 		DependencyIndexes: file_nucleus_admin_v1_admin_proto_depIdxs,

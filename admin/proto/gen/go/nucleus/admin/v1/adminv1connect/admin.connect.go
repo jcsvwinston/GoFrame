@@ -35,6 +35,8 @@ const (
 	AgentServiceName = "nucleus.admin.v1.AgentService"
 	// ControlServiceName is the fully-qualified name of the ControlService service.
 	ControlServiceName = "nucleus.admin.v1.ControlService"
+	// DataStudioServiceName is the fully-qualified name of the DataStudioService service.
+	DataStudioServiceName = "nucleus.admin.v1.DataStudioService"
 )
 
 // These constants are the fully-qualified names of the RPCs defined in this package. They're
@@ -56,6 +58,30 @@ const (
 	// ControlServiceGetSnapshotProcedure is the fully-qualified name of the ControlService's
 	// GetSnapshot RPC.
 	ControlServiceGetSnapshotProcedure = "/nucleus.admin.v1.ControlService/GetSnapshot"
+	// DataStudioServiceListModelsProcedure is the fully-qualified name of the DataStudioService's
+	// ListModels RPC.
+	DataStudioServiceListModelsProcedure = "/nucleus.admin.v1.DataStudioService/ListModels"
+	// DataStudioServiceGetSchemaProcedure is the fully-qualified name of the DataStudioService's
+	// GetSchema RPC.
+	DataStudioServiceGetSchemaProcedure = "/nucleus.admin.v1.DataStudioService/GetSchema"
+	// DataStudioServiceListRecordsProcedure is the fully-qualified name of the DataStudioService's
+	// ListRecords RPC.
+	DataStudioServiceListRecordsProcedure = "/nucleus.admin.v1.DataStudioService/ListRecords"
+	// DataStudioServiceGetRecordProcedure is the fully-qualified name of the DataStudioService's
+	// GetRecord RPC.
+	DataStudioServiceGetRecordProcedure = "/nucleus.admin.v1.DataStudioService/GetRecord"
+	// DataStudioServiceCreateRecordProcedure is the fully-qualified name of the DataStudioService's
+	// CreateRecord RPC.
+	DataStudioServiceCreateRecordProcedure = "/nucleus.admin.v1.DataStudioService/CreateRecord"
+	// DataStudioServiceUpdateRecordProcedure is the fully-qualified name of the DataStudioService's
+	// UpdateRecord RPC.
+	DataStudioServiceUpdateRecordProcedure = "/nucleus.admin.v1.DataStudioService/UpdateRecord"
+	// DataStudioServiceDeleteRecordProcedure is the fully-qualified name of the DataStudioService's
+	// DeleteRecord RPC.
+	DataStudioServiceDeleteRecordProcedure = "/nucleus.admin.v1.DataStudioService/DeleteRecord"
+	// DataStudioServiceBulkActionProcedure is the fully-qualified name of the DataStudioService's
+	// BulkAction RPC.
+	DataStudioServiceBulkActionProcedure = "/nucleus.admin.v1.DataStudioService/BulkAction"
 )
 
 // AgentServiceClient is a client for the nucleus.admin.v1.AgentService service.
@@ -248,4 +274,256 @@ func (UnimplementedControlServiceHandler) StreamEvents(context.Context, *connect
 
 func (UnimplementedControlServiceHandler) GetSnapshot(context.Context, *connect.Request[v1.GetSnapshotRequest]) (*connect.Response[v1.Snapshot], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("nucleus.admin.v1.ControlService.GetSnapshot is not implemented"))
+}
+
+// DataStudioServiceClient is a client for the nucleus.admin.v1.DataStudioService service.
+type DataStudioServiceClient interface {
+	ListModels(context.Context, *connect.Request[v1.ListModelsRequest]) (*connect.Response[v1.ListModelsResponse], error)
+	GetSchema(context.Context, *connect.Request[v1.GetSchemaRequest]) (*connect.Response[v1.ModelSchema], error)
+	ListRecords(context.Context, *connect.Request[v1.ListRecordsRequest]) (*connect.Response[v1.PaginatedRecords], error)
+	GetRecord(context.Context, *connect.Request[v1.GetRecordRequest]) (*connect.Response[v1.Record], error)
+	CreateRecord(context.Context, *connect.Request[v1.CreateRecordRequest]) (*connect.Response[v1.Record], error)
+	UpdateRecord(context.Context, *connect.Request[v1.UpdateRecordRequest]) (*connect.Response[v1.Record], error)
+	DeleteRecord(context.Context, *connect.Request[v1.DeleteRecordRequest]) (*connect.Response[v1.DeleteRecordResponse], error)
+	BulkAction(context.Context, *connect.Request[v1.BulkActionRequest]) (*connect.Response[v1.BulkActionResponse], error)
+}
+
+// NewDataStudioServiceClient constructs a client for the nucleus.admin.v1.DataStudioService
+// service. By default, it uses the Connect protocol with the binary Protobuf Codec, asks for
+// gzipped responses, and sends uncompressed requests. To use the gRPC or gRPC-Web protocols, supply
+// the connect.WithGRPC() or connect.WithGRPCWeb() options.
+//
+// The URL supplied here should be the base URL for the Connect or gRPC server (for example,
+// http://api.acme.com or https://acme.com/grpc).
+func NewDataStudioServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) DataStudioServiceClient {
+	baseURL = strings.TrimRight(baseURL, "/")
+	dataStudioServiceMethods := v1.File_nucleus_admin_v1_admin_proto.Services().ByName("DataStudioService").Methods()
+	return &dataStudioServiceClient{
+		listModels: connect.NewClient[v1.ListModelsRequest, v1.ListModelsResponse](
+			httpClient,
+			baseURL+DataStudioServiceListModelsProcedure,
+			connect.WithSchema(dataStudioServiceMethods.ByName("ListModels")),
+			connect.WithClientOptions(opts...),
+		),
+		getSchema: connect.NewClient[v1.GetSchemaRequest, v1.ModelSchema](
+			httpClient,
+			baseURL+DataStudioServiceGetSchemaProcedure,
+			connect.WithSchema(dataStudioServiceMethods.ByName("GetSchema")),
+			connect.WithClientOptions(opts...),
+		),
+		listRecords: connect.NewClient[v1.ListRecordsRequest, v1.PaginatedRecords](
+			httpClient,
+			baseURL+DataStudioServiceListRecordsProcedure,
+			connect.WithSchema(dataStudioServiceMethods.ByName("ListRecords")),
+			connect.WithClientOptions(opts...),
+		),
+		getRecord: connect.NewClient[v1.GetRecordRequest, v1.Record](
+			httpClient,
+			baseURL+DataStudioServiceGetRecordProcedure,
+			connect.WithSchema(dataStudioServiceMethods.ByName("GetRecord")),
+			connect.WithClientOptions(opts...),
+		),
+		createRecord: connect.NewClient[v1.CreateRecordRequest, v1.Record](
+			httpClient,
+			baseURL+DataStudioServiceCreateRecordProcedure,
+			connect.WithSchema(dataStudioServiceMethods.ByName("CreateRecord")),
+			connect.WithClientOptions(opts...),
+		),
+		updateRecord: connect.NewClient[v1.UpdateRecordRequest, v1.Record](
+			httpClient,
+			baseURL+DataStudioServiceUpdateRecordProcedure,
+			connect.WithSchema(dataStudioServiceMethods.ByName("UpdateRecord")),
+			connect.WithClientOptions(opts...),
+		),
+		deleteRecord: connect.NewClient[v1.DeleteRecordRequest, v1.DeleteRecordResponse](
+			httpClient,
+			baseURL+DataStudioServiceDeleteRecordProcedure,
+			connect.WithSchema(dataStudioServiceMethods.ByName("DeleteRecord")),
+			connect.WithClientOptions(opts...),
+		),
+		bulkAction: connect.NewClient[v1.BulkActionRequest, v1.BulkActionResponse](
+			httpClient,
+			baseURL+DataStudioServiceBulkActionProcedure,
+			connect.WithSchema(dataStudioServiceMethods.ByName("BulkAction")),
+			connect.WithClientOptions(opts...),
+		),
+	}
+}
+
+// dataStudioServiceClient implements DataStudioServiceClient.
+type dataStudioServiceClient struct {
+	listModels   *connect.Client[v1.ListModelsRequest, v1.ListModelsResponse]
+	getSchema    *connect.Client[v1.GetSchemaRequest, v1.ModelSchema]
+	listRecords  *connect.Client[v1.ListRecordsRequest, v1.PaginatedRecords]
+	getRecord    *connect.Client[v1.GetRecordRequest, v1.Record]
+	createRecord *connect.Client[v1.CreateRecordRequest, v1.Record]
+	updateRecord *connect.Client[v1.UpdateRecordRequest, v1.Record]
+	deleteRecord *connect.Client[v1.DeleteRecordRequest, v1.DeleteRecordResponse]
+	bulkAction   *connect.Client[v1.BulkActionRequest, v1.BulkActionResponse]
+}
+
+// ListModels calls nucleus.admin.v1.DataStudioService.ListModels.
+func (c *dataStudioServiceClient) ListModels(ctx context.Context, req *connect.Request[v1.ListModelsRequest]) (*connect.Response[v1.ListModelsResponse], error) {
+	return c.listModels.CallUnary(ctx, req)
+}
+
+// GetSchema calls nucleus.admin.v1.DataStudioService.GetSchema.
+func (c *dataStudioServiceClient) GetSchema(ctx context.Context, req *connect.Request[v1.GetSchemaRequest]) (*connect.Response[v1.ModelSchema], error) {
+	return c.getSchema.CallUnary(ctx, req)
+}
+
+// ListRecords calls nucleus.admin.v1.DataStudioService.ListRecords.
+func (c *dataStudioServiceClient) ListRecords(ctx context.Context, req *connect.Request[v1.ListRecordsRequest]) (*connect.Response[v1.PaginatedRecords], error) {
+	return c.listRecords.CallUnary(ctx, req)
+}
+
+// GetRecord calls nucleus.admin.v1.DataStudioService.GetRecord.
+func (c *dataStudioServiceClient) GetRecord(ctx context.Context, req *connect.Request[v1.GetRecordRequest]) (*connect.Response[v1.Record], error) {
+	return c.getRecord.CallUnary(ctx, req)
+}
+
+// CreateRecord calls nucleus.admin.v1.DataStudioService.CreateRecord.
+func (c *dataStudioServiceClient) CreateRecord(ctx context.Context, req *connect.Request[v1.CreateRecordRequest]) (*connect.Response[v1.Record], error) {
+	return c.createRecord.CallUnary(ctx, req)
+}
+
+// UpdateRecord calls nucleus.admin.v1.DataStudioService.UpdateRecord.
+func (c *dataStudioServiceClient) UpdateRecord(ctx context.Context, req *connect.Request[v1.UpdateRecordRequest]) (*connect.Response[v1.Record], error) {
+	return c.updateRecord.CallUnary(ctx, req)
+}
+
+// DeleteRecord calls nucleus.admin.v1.DataStudioService.DeleteRecord.
+func (c *dataStudioServiceClient) DeleteRecord(ctx context.Context, req *connect.Request[v1.DeleteRecordRequest]) (*connect.Response[v1.DeleteRecordResponse], error) {
+	return c.deleteRecord.CallUnary(ctx, req)
+}
+
+// BulkAction calls nucleus.admin.v1.DataStudioService.BulkAction.
+func (c *dataStudioServiceClient) BulkAction(ctx context.Context, req *connect.Request[v1.BulkActionRequest]) (*connect.Response[v1.BulkActionResponse], error) {
+	return c.bulkAction.CallUnary(ctx, req)
+}
+
+// DataStudioServiceHandler is an implementation of the nucleus.admin.v1.DataStudioService service.
+type DataStudioServiceHandler interface {
+	ListModels(context.Context, *connect.Request[v1.ListModelsRequest]) (*connect.Response[v1.ListModelsResponse], error)
+	GetSchema(context.Context, *connect.Request[v1.GetSchemaRequest]) (*connect.Response[v1.ModelSchema], error)
+	ListRecords(context.Context, *connect.Request[v1.ListRecordsRequest]) (*connect.Response[v1.PaginatedRecords], error)
+	GetRecord(context.Context, *connect.Request[v1.GetRecordRequest]) (*connect.Response[v1.Record], error)
+	CreateRecord(context.Context, *connect.Request[v1.CreateRecordRequest]) (*connect.Response[v1.Record], error)
+	UpdateRecord(context.Context, *connect.Request[v1.UpdateRecordRequest]) (*connect.Response[v1.Record], error)
+	DeleteRecord(context.Context, *connect.Request[v1.DeleteRecordRequest]) (*connect.Response[v1.DeleteRecordResponse], error)
+	BulkAction(context.Context, *connect.Request[v1.BulkActionRequest]) (*connect.Response[v1.BulkActionResponse], error)
+}
+
+// NewDataStudioServiceHandler builds an HTTP handler from the service implementation. It returns
+// the path on which to mount the handler and the handler itself.
+//
+// By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
+// and JSON codecs. They also support gzip compression.
+func NewDataStudioServiceHandler(svc DataStudioServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
+	dataStudioServiceMethods := v1.File_nucleus_admin_v1_admin_proto.Services().ByName("DataStudioService").Methods()
+	dataStudioServiceListModelsHandler := connect.NewUnaryHandler(
+		DataStudioServiceListModelsProcedure,
+		svc.ListModels,
+		connect.WithSchema(dataStudioServiceMethods.ByName("ListModels")),
+		connect.WithHandlerOptions(opts...),
+	)
+	dataStudioServiceGetSchemaHandler := connect.NewUnaryHandler(
+		DataStudioServiceGetSchemaProcedure,
+		svc.GetSchema,
+		connect.WithSchema(dataStudioServiceMethods.ByName("GetSchema")),
+		connect.WithHandlerOptions(opts...),
+	)
+	dataStudioServiceListRecordsHandler := connect.NewUnaryHandler(
+		DataStudioServiceListRecordsProcedure,
+		svc.ListRecords,
+		connect.WithSchema(dataStudioServiceMethods.ByName("ListRecords")),
+		connect.WithHandlerOptions(opts...),
+	)
+	dataStudioServiceGetRecordHandler := connect.NewUnaryHandler(
+		DataStudioServiceGetRecordProcedure,
+		svc.GetRecord,
+		connect.WithSchema(dataStudioServiceMethods.ByName("GetRecord")),
+		connect.WithHandlerOptions(opts...),
+	)
+	dataStudioServiceCreateRecordHandler := connect.NewUnaryHandler(
+		DataStudioServiceCreateRecordProcedure,
+		svc.CreateRecord,
+		connect.WithSchema(dataStudioServiceMethods.ByName("CreateRecord")),
+		connect.WithHandlerOptions(opts...),
+	)
+	dataStudioServiceUpdateRecordHandler := connect.NewUnaryHandler(
+		DataStudioServiceUpdateRecordProcedure,
+		svc.UpdateRecord,
+		connect.WithSchema(dataStudioServiceMethods.ByName("UpdateRecord")),
+		connect.WithHandlerOptions(opts...),
+	)
+	dataStudioServiceDeleteRecordHandler := connect.NewUnaryHandler(
+		DataStudioServiceDeleteRecordProcedure,
+		svc.DeleteRecord,
+		connect.WithSchema(dataStudioServiceMethods.ByName("DeleteRecord")),
+		connect.WithHandlerOptions(opts...),
+	)
+	dataStudioServiceBulkActionHandler := connect.NewUnaryHandler(
+		DataStudioServiceBulkActionProcedure,
+		svc.BulkAction,
+		connect.WithSchema(dataStudioServiceMethods.ByName("BulkAction")),
+		connect.WithHandlerOptions(opts...),
+	)
+	return "/nucleus.admin.v1.DataStudioService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case DataStudioServiceListModelsProcedure:
+			dataStudioServiceListModelsHandler.ServeHTTP(w, r)
+		case DataStudioServiceGetSchemaProcedure:
+			dataStudioServiceGetSchemaHandler.ServeHTTP(w, r)
+		case DataStudioServiceListRecordsProcedure:
+			dataStudioServiceListRecordsHandler.ServeHTTP(w, r)
+		case DataStudioServiceGetRecordProcedure:
+			dataStudioServiceGetRecordHandler.ServeHTTP(w, r)
+		case DataStudioServiceCreateRecordProcedure:
+			dataStudioServiceCreateRecordHandler.ServeHTTP(w, r)
+		case DataStudioServiceUpdateRecordProcedure:
+			dataStudioServiceUpdateRecordHandler.ServeHTTP(w, r)
+		case DataStudioServiceDeleteRecordProcedure:
+			dataStudioServiceDeleteRecordHandler.ServeHTTP(w, r)
+		case DataStudioServiceBulkActionProcedure:
+			dataStudioServiceBulkActionHandler.ServeHTTP(w, r)
+		default:
+			http.NotFound(w, r)
+		}
+	})
+}
+
+// UnimplementedDataStudioServiceHandler returns CodeUnimplemented from all methods.
+type UnimplementedDataStudioServiceHandler struct{}
+
+func (UnimplementedDataStudioServiceHandler) ListModels(context.Context, *connect.Request[v1.ListModelsRequest]) (*connect.Response[v1.ListModelsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("nucleus.admin.v1.DataStudioService.ListModels is not implemented"))
+}
+
+func (UnimplementedDataStudioServiceHandler) GetSchema(context.Context, *connect.Request[v1.GetSchemaRequest]) (*connect.Response[v1.ModelSchema], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("nucleus.admin.v1.DataStudioService.GetSchema is not implemented"))
+}
+
+func (UnimplementedDataStudioServiceHandler) ListRecords(context.Context, *connect.Request[v1.ListRecordsRequest]) (*connect.Response[v1.PaginatedRecords], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("nucleus.admin.v1.DataStudioService.ListRecords is not implemented"))
+}
+
+func (UnimplementedDataStudioServiceHandler) GetRecord(context.Context, *connect.Request[v1.GetRecordRequest]) (*connect.Response[v1.Record], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("nucleus.admin.v1.DataStudioService.GetRecord is not implemented"))
+}
+
+func (UnimplementedDataStudioServiceHandler) CreateRecord(context.Context, *connect.Request[v1.CreateRecordRequest]) (*connect.Response[v1.Record], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("nucleus.admin.v1.DataStudioService.CreateRecord is not implemented"))
+}
+
+func (UnimplementedDataStudioServiceHandler) UpdateRecord(context.Context, *connect.Request[v1.UpdateRecordRequest]) (*connect.Response[v1.Record], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("nucleus.admin.v1.DataStudioService.UpdateRecord is not implemented"))
+}
+
+func (UnimplementedDataStudioServiceHandler) DeleteRecord(context.Context, *connect.Request[v1.DeleteRecordRequest]) (*connect.Response[v1.DeleteRecordResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("nucleus.admin.v1.DataStudioService.DeleteRecord is not implemented"))
+}
+
+func (UnimplementedDataStudioServiceHandler) BulkAction(context.Context, *connect.Request[v1.BulkActionRequest]) (*connect.Response[v1.BulkActionResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("nucleus.admin.v1.DataStudioService.BulkAction is not implemented"))
 }

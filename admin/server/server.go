@@ -63,6 +63,7 @@ func New(cfg Config) *Server {
 			Custom:  cfg.CustomReplayBufferSize,
 		}),
 		Snapshots:      routing.NewSnapshotRouter(0),
+		DataStudio:     routing.NewDataStudioRouter(0),
 		Logger:         cfg.Logger,
 		SendChanBuffer: 64,
 		HeartbeatGrace: cfg.AgentInactivityTimeout,
@@ -84,11 +85,13 @@ func New(cfg Config) *Server {
 	agentRoot.Handle("/", auth.AgentMiddleware(cfg.AgentToken)(protectedAgent))
 
 	// UI listener: protected by UIMiddleware. /healthz is carved out the
-	// same way; everything else (ControlService + UI assets) goes through
-	// the auth chain.
+	// same way; everything else (ControlService, DataStudioService, and
+	// the UI assets) goes through the auth chain.
 	controlSvc := services.NewControlService(state, cfg.EventChannelSize, cfg.SnapshotTimeout)
+	dataStudioSvc := services.NewDataStudioService(state, cfg.SnapshotTimeout)
 	protectedUI := http.NewServeMux()
 	protectedUI.Handle(adminv1connect.NewControlServiceHandler(controlSvc))
+	protectedUI.Handle(adminv1connect.NewDataStudioServiceHandler(dataStudioSvc))
 	protectedUI.Handle("/", staticUIHandler())
 	uiRoot := http.NewServeMux()
 	uiRoot.HandleFunc("/healthz", healthOK)

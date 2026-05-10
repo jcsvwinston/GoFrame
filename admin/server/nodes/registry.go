@@ -53,12 +53,13 @@ type Entry struct {
 
 // NodeInfo is the snapshot the UI sees via ControlService.ListNodes.
 type NodeInfo struct {
-	NodeID     string
-	Version    string
-	Labels     map[string]string
-	StartedAt  time.Time
-	LastSeenAt time.Time
-	Connected  bool
+	NodeID           string
+	Version          string
+	Labels           map[string]string
+	StartedAt        time.Time
+	LastSeenAt       time.Time
+	Connected        bool
+	RegisteredModels []string
 }
 
 // Registry maintains the live set of connected agents.
@@ -254,6 +255,58 @@ func (r *Registry) publish(change NodeChange) {
 			// drop silently — slow watcher
 		}
 	}
+}
+
+// AnyWithModel returns any connected entry that registered the named
+// model. Returns (nil, false) when no such agent is connected.
+//
+// The implementation is deliberately first-match (no scoring): models
+// are typically homogeneous across the fleet, and any agent that has
+// the model can answer.
+func (r *Registry) AnyWithModel(modelName string) (*Entry, bool) {
+	if r == nil || strings.TrimSpace(modelName) == "" {
+		return nil, false
+	}
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	for _, e := range r.entries {
+		for _, m := range e.Info.RegisteredModels {
+			if strings.EqualFold(m, modelName) {
+				return e, true
+			}
+		}
+	}
+	return nil, false
+}
+
+// AggregateModels returns the union of every connected agent's
+// RegisteredModels. The list is sorted alphabetically and de-duplicated
+// case-insensitively so the UI gets a stable view regardless of how
+// many agents reported it.
+func (r *Registry) AggregateModels() []string {
+	if r == nil {
+		return nil
+	}
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	seen := map[string]string{}
+	for _, e := range r.entries {
+		for _, m := range e.Info.RegisteredModels {
+			key := strings.ToLower(strings.TrimSpace(m))
+			if key == "" {
+				continue
+			}
+			if _, ok := seen[key]; !ok {
+				seen[key] = m
+			}
+		}
+	}
+	out := make([]string, 0, len(seen))
+	for _, v := range seen {
+		out = append(out, v)
+	}
+	sort.Strings(out)
+	return out
 }
 
 // Inactivity inspects every entry and returns those whose LastSeenAt is

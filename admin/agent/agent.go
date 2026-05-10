@@ -8,10 +8,13 @@ import (
 	"sync"
 	"time"
 
+	"github.com/jcsvwinston/nucleus/pkg/db"
+	"github.com/jcsvwinston/nucleus/pkg/model"
 	"github.com/jcsvwinston/nucleus/pkg/observability"
 
 	"github.com/jcsvwinston/nucleus/admin/agent/buffer"
 	"github.com/jcsvwinston/nucleus/admin/agent/connection"
+	dstudio "github.com/jcsvwinston/nucleus/admin/agent/datastudio"
 	"github.com/jcsvwinston/nucleus/admin/agent/identity"
 	"github.com/jcsvwinston/nucleus/admin/agent/metrics"
 	"github.com/jcsvwinston/nucleus/admin/agent/stream"
@@ -68,6 +71,21 @@ type Config struct {
 	// server on this address.
 	MetricsAddr string
 
+	// Registry is the framework's model registry. Required for Data
+	// Studio support; nil disables the Data Studio path on this agent.
+	Registry *model.Registry
+
+	// Databases are the framework's DB handles keyed by alias. The
+	// agent's Data Studio handler uses them to execute model.CRUD
+	// operations on behalf of UI requests routed through the admin
+	// server. Empty disables the Data Studio path.
+	Databases map[string]*db.DB
+
+	// DefaultDatabaseAlias is the alias used when a Data Studio request
+	// arrives with an empty database_alias. Falls back to "default" if
+	// unset.
+	DefaultDatabaseAlias string
+
 	// Logger receives WARN/INFO/DEBUG diagnostics. Pass nil for
 	// slog.Default.
 	Logger *slog.Logger
@@ -113,9 +131,10 @@ type Agent struct {
 	cfg    Config
 	nodeID string
 
-	bufs    *buffer.PerKind
-	metrics *metrics.Metrics
-	dialer  *connection.Dialer
+	bufs       *buffer.PerKind
+	metrics    *metrics.Metrics
+	dialer     *connection.Dialer
+	dataStudio *dstudio.Handler
 
 	// connectedOnce is closed the first time Run successfully establishes
 	// a stream to any admin endpoint. Used by Extension wrappers that
@@ -162,12 +181,19 @@ func New(cfg Config) (*Agent, error) {
 		Logger:    cfg.Logger,
 	})
 
+	dataStudio := dstudio.New(dstudio.Config{
+		Registry:     cfg.Registry,
+		Databases:    cfg.Databases,
+		DefaultAlias: cfg.DefaultDatabaseAlias,
+	})
+
 	return &Agent{
 		cfg:           cfg,
 		nodeID:        nodeID,
 		bufs:          bufs,
 		metrics:       m,
 		dialer:        dialer,
+		dataStudio:    dataStudio,
 		connectedOnce: make(chan struct{}),
 	}, nil
 }
@@ -270,7 +296,7 @@ func (a *Agent) runOnce(ctx context.Context) error {
 	a.cfg.Logger.Info("admin agent connected",
 		"endpoint", res.Endpoint, "node_id", a.nodeID)
 
-	st := stream.New(res.Client, stream.Config{
+	streamCfg := stream.Config{
 		NodeID:       a.nodeID,
 		Version:      a.cfg.Version,
 		Labels:       a.cfg.Labels,
@@ -281,7 +307,13 @@ func (a *Agent) runOnce(ctx context.Context) error {
 		Logger:       a.cfg.Logger,
 		Heartbeat:    a.cfg.HeartbeatInterval,
 		DrainTimeout: a.cfg.DrainTimeout,
-	})
+	}
+	// Avoid the typed-nil-into-interface trap: only set the field when
+	// we actually have a constructed handler.
+	if a.dataStudio != nil {
+		streamCfg.DataStudio = a.dataStudio
+	}
+	st := stream.New(res.Client, streamCfg)
 
 	// streamLifeCtx is intentionally NOT a child of ctx. It is cancelled
 	// only after the agent has had a chance to flush a Goodbye frame and

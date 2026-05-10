@@ -13,7 +13,7 @@
 /* eslint-disable */
 // @ts-nocheck
 
-import { Event, Frame, GetSnapshotRequest, ListNodesRequest, ListNodesResponse, Snapshot, StreamEventsRequest } from "./admin_pb.js";
+import { BulkActionRequest, BulkActionResponse, CreateRecordRequest, DeleteRecordRequest, DeleteRecordResponse, Event, Frame, GetRecordRequest, GetSchemaRequest, GetSnapshotRequest, ListModelsRequest, ListModelsResponse, ListNodesRequest, ListNodesResponse, ListRecordsRequest, ModelSchema, PaginatedRecords, Record, Snapshot, StreamEventsRequest, UpdateRecordRequest } from "./admin_pb.js";
 import { MethodKind } from "@bufbuild/protobuf";
 
 /**
@@ -73,6 +73,91 @@ export const ControlService = {
       name: "GetSnapshot",
       I: GetSnapshotRequest,
       O: Snapshot,
+      kind: MethodKind.Unary,
+    },
+  }
+} as const;
+
+/**
+ * DataStudioService is the UI-facing surface. The admin server
+ * translates each call into a DataStudioRequest on a chosen agent's
+ * stream and waits for the matching DataStudioResponse.
+ *
+ * @generated from service nucleus.admin.v1.DataStudioService
+ */
+export const DataStudioService = {
+  typeName: "nucleus.admin.v1.DataStudioService",
+  methods: {
+    /**
+     * @generated from rpc nucleus.admin.v1.DataStudioService.ListModels
+     */
+    listModels: {
+      name: "ListModels",
+      I: ListModelsRequest,
+      O: ListModelsResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * @generated from rpc nucleus.admin.v1.DataStudioService.GetSchema
+     */
+    getSchema: {
+      name: "GetSchema",
+      I: GetSchemaRequest,
+      O: ModelSchema,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * @generated from rpc nucleus.admin.v1.DataStudioService.ListRecords
+     */
+    listRecords: {
+      name: "ListRecords",
+      I: ListRecordsRequest,
+      O: PaginatedRecords,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * @generated from rpc nucleus.admin.v1.DataStudioService.GetRecord
+     */
+    getRecord: {
+      name: "GetRecord",
+      I: GetRecordRequest,
+      O: Record,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * @generated from rpc nucleus.admin.v1.DataStudioService.CreateRecord
+     */
+    createRecord: {
+      name: "CreateRecord",
+      I: CreateRecordRequest,
+      O: Record,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * @generated from rpc nucleus.admin.v1.DataStudioService.UpdateRecord
+     */
+    updateRecord: {
+      name: "UpdateRecord",
+      I: UpdateRecordRequest,
+      O: Record,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * @generated from rpc nucleus.admin.v1.DataStudioService.DeleteRecord
+     */
+    deleteRecord: {
+      name: "DeleteRecord",
+      I: DeleteRecordRequest,
+      O: DeleteRecordResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * @generated from rpc nucleus.admin.v1.DataStudioService.BulkAction
+     */
+    bulkAction: {
+      name: "BulkAction",
+      I: BulkActionRequest,
+      O: BulkActionResponse,
       kind: MethodKind.Unary,
     },
   }
