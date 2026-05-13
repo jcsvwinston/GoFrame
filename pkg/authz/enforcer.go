@@ -13,22 +13,44 @@ import (
 )
 
 // Default RBAC model configuration.
+//
+// Default-deny with deny-override semantics:
+//
+//   - No policy matches  → request is denied (the absence of an `allow`
+//     match is treated as deny by `some(where (p.eft == allow))`).
+//   - Allow + deny match  → request is denied. An explicit deny rule
+//     overrides every matching allow rule, so operators can write
+//     "this user is blocked even though their role normally has access"
+//     policies without having to revoke the role's broader allow.
+//
+// Policies carry an `eft` field. AddPolicy auto-stamps `allow`; Deny
+// auto-stamps `deny`. The programmatic API has not changed shape, but
+// CSV policy files loaded via fileadapter MUST now have four columns
+// per row (sub, obj, act, eft) — the loader treats a missing eft as
+// empty which neither matches `allow` nor `deny`, making the policy
+// inert. See MigrateCSVPolicyFile for a one-shot migration helper.
 const defaultRBACModel = `
 [request_definition]
 r = sub, obj, act
 
 [policy_definition]
-p = sub, obj, act
+p = sub, obj, act, eft
 
 [role_definition]
 g = _, _
 
 [policy_effect]
-e = some(where (p.eft == allow))
+e = some(where (p.eft == allow)) && !some(where (p.eft == deny))
 
 [matchers]
 m = g(r.sub, p.sub) && keyMatch(r.obj, p.obj) && (r.act == p.act || p.act == "*")
 `
+
+// Policy effect values stamped into the model's eft column.
+const (
+	effectAllow = "allow"
+	effectDeny  = "deny"
+)
 
 // Enforcer wraps a Casbin enforcer with logging and convenience methods.
 type Enforcer struct {
@@ -90,20 +112,45 @@ func (e *Enforcer) Can(sub, obj, act string) bool {
 	return ok
 }
 
-// AddPolicy adds a permission policy (subject, object, action).
+// AddPolicy adds an allow policy (subject, object, action). The eft
+// column is auto-stamped to `allow`. To add a deny rule, use Deny.
 func (e *Enforcer) AddPolicy(sub, obj, act string) error {
-	_, err := e.Enforcer.AddPolicy(sub, obj, act)
+	_, err := e.Enforcer.AddPolicy(sub, obj, act, effectAllow)
 	if err != nil {
 		return fmt.Errorf("authz.AddPolicy: %w", err)
 	}
 	return nil
 }
 
-// RemovePolicy removes a permission policy.
-func (e *Enforcer) RemovePolicy(sub, obj, act string) error {
-	_, err := e.Enforcer.RemovePolicy(sub, obj, act)
+// Deny adds an explicit deny policy (subject, object, action). Deny
+// rules override every matching allow rule under the model's
+// deny-override effect formula, so this is the primitive for "block
+// this user even though their role normally has access".
+func (e *Enforcer) Deny(sub, obj, act string) error {
+	_, err := e.Enforcer.AddPolicy(sub, obj, act, effectDeny)
 	if err != nil {
-		return fmt.Errorf("authz.RemovePolicy: %w", err)
+		return fmt.Errorf("authz.Deny: %w", err)
+	}
+	return nil
+}
+
+// RemovePolicy removes a permission policy regardless of its eft. Both
+// allow and deny variants matching (sub, obj, act) are dropped, which
+// matches operator intent — "stop applying this rule" should not
+// require knowing how the rule was originally written.
+func (e *Enforcer) RemovePolicy(sub, obj, act string) error {
+	removedAllow, errAllow := e.Enforcer.RemovePolicy(sub, obj, act, effectAllow)
+	removedDeny, errDeny := e.Enforcer.RemovePolicy(sub, obj, act, effectDeny)
+	if errAllow != nil {
+		return fmt.Errorf("authz.RemovePolicy (allow): %w", errAllow)
+	}
+	if errDeny != nil {
+		return fmt.Errorf("authz.RemovePolicy (deny): %w", errDeny)
+	}
+	if !removedAllow && !removedDeny {
+		// Casbin doesn't treat "nothing to remove" as an error. Mirror
+		// that semantics rather than surfacing a fresh one.
+		return nil
 	}
 	return nil
 }
