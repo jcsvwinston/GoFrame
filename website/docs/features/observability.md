@@ -87,15 +87,20 @@ The set of probes is derived from current app state on every request:
 | `db:<alias>`   | one per entry in `databases:`                         | `db.DB.Health` → `sql.DB.PingContext`                    |
 | `redis`        | `redis_url` is non-empty                              | `redis.Client.Ping` against a short-lived client          |
 | `storage`      | a `storage.Store` is attached (default subsystems)    | `storage.Store.List` with `_nucleus_healthz/` prefix, limit 1 |
+| `mail`         | the configured `mail.Sender` implements `HealthChecker` | `mail.HealthChecker.Healthy` (TCP dial + HELO + QUIT for SMTP) |
 
 Each probe runs concurrently with a 2-second per-probe budget; total
 wall time is bounded by the slowest probe.
 
-Mail probes are still a follow-up — `mail.Sender` has no native
-healthcheck method and per-provider semantics (SMTP `NOOP`, SendGrid
-API health) diverge enough that the cleanest path is adding an
-optional `Healthy(ctx) error` to the provider interface in a future
-iteration.
+The mail probe is opt-in by provider: a `Sender` must implement the
+optional `mail.HealthChecker` interface to be probed. SMTP implements
+it natively (no auth, no message sent — just a dial + HELO + QUIT).
+The `noop` provider, the `sendgrid` provider, and external plugin
+senders do not implement `HealthChecker` today; deployments using
+those drivers will not see a `mail` row in the `/healthz` response.
+SendGrid will gain a probe once the HTTP user-profile endpoint is
+wired through the provider; external-plugin probes need a new RPC on
+the plugin protocol and are deferred.
 
 ## Metrics
 

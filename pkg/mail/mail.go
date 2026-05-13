@@ -27,6 +27,20 @@ type Sender interface {
 	Send(ctx context.Context, message Message) error
 }
 
+// HealthChecker is an optional interface a Sender may implement to
+// expose a non-destructive liveness check. The /healthz handler in
+// pkg/app type-asserts for this interface; senders that do not
+// implement it are not probed (so the response stays free of
+// information-free "skipped" rows).
+//
+// Implementations should keep Healthy cheap and non-destructive — at
+// minimum, no actual mail is sent. For SMTP that means a TCP dial
+// plus HELO/QUIT; for HTTP API providers it typically means a HEAD
+// against a documented health endpoint.
+type HealthChecker interface {
+	Healthy(ctx context.Context) error
+}
+
 // ProviderFactory builds a Sender from provider-specific configuration.
 type ProviderFactory func(cfg Config) (Sender, error)
 
