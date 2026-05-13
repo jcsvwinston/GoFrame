@@ -104,3 +104,36 @@ func (s *smtpSender) Send(ctx context.Context, msg Message) error {
 	}
 	return nil
 }
+
+// Healthy performs a non-destructive liveness check against the
+// configured SMTP host: TCP dial → server greeting → HELO → QUIT.
+// Auth is intentionally skipped — the goal is to verify reachability
+// and that the server speaks SMTP, not to repeatedly hit per-user
+// rate limits on every probe interval. Implements mail.HealthChecker.
+func (s *smtpSender) Healthy(ctx context.Context) error {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	addr := net.JoinHostPort(s.host, strconv.Itoa(s.port))
+	dialer := &net.Dialer{Timeout: s.timeout}
+	conn, err := dialer.DialContext(ctx, "tcp", addr)
+	if err != nil {
+		return fmt.Errorf("connect smtp server %s: %w", addr, err)
+	}
+	_ = conn.SetDeadline(time.Now().Add(s.timeout))
+
+	client, err := smtp.NewClient(conn, s.host)
+	if err != nil {
+		_ = conn.Close()
+		return fmt.Errorf("start smtp client: %w", err)
+	}
+	defer client.Close()
+
+	if err := client.Hello("nucleus-healthz"); err != nil {
+		return fmt.Errorf("smtp HELO failed: %w", err)
+	}
+	if err := client.Quit(); err != nil {
+		return fmt.Errorf("smtp quit failed: %w", err)
+	}
+	return nil
+}

@@ -110,5 +110,9 @@ func (a *App) buildHealthProbes() []health.Prober {
 		probes = append(probes, health.NewStorageProbe("storage", a.Storage))
 	}
 
+	if a.Mailer != nil && health.SupportsMailProbe(a.Mailer) {
+		probes = append(probes, health.NewMailProbe("mail", a.Mailer))
+	}
+
 	return probes
 }
