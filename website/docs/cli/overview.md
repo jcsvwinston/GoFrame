@@ -33,6 +33,7 @@ The summary below groups the commands by purpose.
 | ----------------------------- | ------------------------------------------------- |
 | `nucleus migrate`             | Apply pending migrations.                         |
 | `nucleus migrate status`      | Show plan vs. applied.                            |
+| `nucleus migrate drift`       | Detect applied migrations whose `.up.sql` file is missing on disk. Exits non-zero when drift is detected (CI-friendly). |
 | `nucleus migrate down`        | Roll back the most recent batch.                  |
 | `nucleus generate migration`  | Scaffold a new migration (with `--from-model`).   |
 | `nucleus inspectdb`           | Inspect a live database schema.                   |

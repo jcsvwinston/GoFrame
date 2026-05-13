@@ -158,6 +158,71 @@ func (m *Migrator) Status() ([]MigrationStatus, error) {
 	return status, nil
 }
 
+// DriftEntry describes a divergence between the migrations recorded as
+// applied in the database and the migration files on disk.
+type DriftEntry struct {
+	ID        string    `json:"id"`
+	Kind      string    `json:"kind"`
+	AppliedAt time.Time `json:"applied_at"`
+}
+
+// Drift kinds reported by Migrator.Drift.
+const (
+	// DriftKindMissingUpFile is reported when a migration ID is recorded as
+	// applied in nucleus_schema_migrations but the corresponding .up.sql
+	// file is absent from the migrations directory. Typical cause: someone
+	// deleted a migration after applying it — the database remembers the
+	// row, but no reproducible script exists to recreate that state.
+	DriftKindMissingUpFile = "missing_up_file"
+)
+
+// Drift returns entries that indicate the migrations log no longer
+// matches the files on disk.
+//
+// Today this detects file-level drift only. Schema-level drift
+// (actual `information_schema.columns` shape vs what the migration
+// files would have produced) is a separate, more invasive check that
+// requires per-dialect schema introspection — tracked as a follow-up.
+func (m *Migrator) Drift() ([]DriftEntry, error) {
+	if m == nil {
+		return nil, fmt.Errorf("db.Migrator.Drift: nil receiver")
+	}
+	sqlDB, err := m.sqlDB()
+	if err != nil {
+		return nil, err
+	}
+	if err := ensureMigrationsTable(sqlDB, m.db.system); err != nil {
+		return nil, err
+	}
+	migs, err := m.loadMigrations()
+	if err != nil {
+		return nil, err
+	}
+	applied, err := loadApplied(sqlDB)
+	if err != nil {
+		return nil, err
+	}
+
+	onDisk := make(map[string]migrationFile, len(migs))
+	for _, mig := range migs {
+		onDisk[mig.ID] = mig
+	}
+
+	drift := make([]DriftEntry, 0)
+	for id, at := range applied {
+		mig, ok := onDisk[id]
+		if !ok || mig.UpPath == "" {
+			drift = append(drift, DriftEntry{
+				ID:        id,
+				Kind:      DriftKindMissingUpFile,
+				AppliedAt: at,
+			})
+		}
+	}
+	sort.Slice(drift, func(i, j int) bool { return drift[i].ID < drift[j].ID })
+	return drift, nil
+}
+
 // Create generates a pair of empty migration files with a timestamp prefix.
 // Files are created as {timestamp}_{name}.up.sql and {timestamp}_{name}.down.sql.
 func (m *Migrator) Create(name string) error {

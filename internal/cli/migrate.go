@@ -138,6 +138,24 @@ func runMigrate(args []string, stdin io.Reader, stdout, stderr io.Writer) error 
 		}
 		return nil
 
+	case "drift":
+		if len(rest) != 0 {
+			return fmt.Errorf("migrate drift does not accept extra arguments")
+		}
+		drift, err := migrator.Drift()
+		if err != nil {
+			return err
+		}
+		if len(drift) == 0 {
+			fmt.Fprintln(stdout, "No drift detected")
+			return nil
+		}
+		for _, d := range drift {
+			fmt.Fprintf(stdout, "%s\t%s\t%s\n", d.ID, d.Kind, d.AppliedAt.UTC().Format("2006-01-02T15:04:05Z"))
+		}
+		// Non-zero exit so CI gates can detect drift programmatically.
+		return fmt.Errorf("%d migration(s) drifted from disk", len(drift))
+
 	case "reset":
 		if len(rest) != 0 {
 			return fmt.Errorf("migrate reset does not accept extra arguments")
@@ -190,7 +208,7 @@ func runMigrate(args []string, stdin io.Reader, stdout, stderr io.Writer) error 
 
 func isMigrateActionSupported(action string) bool {
 	switch action {
-	case "up", "down", "steps", "status", "reset", "refresh":
+	case "up", "down", "steps", "status", "drift", "reset", "refresh":
 		return true
 	default:
 		return false
