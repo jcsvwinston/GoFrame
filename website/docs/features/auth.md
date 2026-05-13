@@ -48,16 +48,89 @@ ok,   err := auth.VerifyPassword(hash, "hunter2")
 
 ## JWT
 
-`pkg/auth` exposes JWT helpers for stateless auth:
+`pkg/auth` exposes a `JWTManager` for stateless auth. It supports two
+modes that coexist within the same process: a legacy single-secret
+HS256 path for quick starts, and a multi-key keyset with rotation and
+JWKS publication for production deployments.
+
+### Single-secret HS256 (quick start)
 
 ```go
-token, err := auth.IssueJWT(secret, claims, 24*time.Hour)
-claims, err := auth.ParseJWT(secret, token)
+mgr := auth.NewJWTManager(secret, 24*time.Hour, "my-issuer")
+
+token, err := mgr.Generate(userID, username, role)
+claims, err := mgr.Validate(token)
 ```
 
 The JWT secret is read from the env var named in `auth.jwt_secret_env`
 (`NUCLEUS_JWT_SECRET` by default). It is never read from `nucleus.yml`
 directly, by design — config files end up checked in.
+
+Tokens in this mode carry no `kid` header.
+
+### Multi-key with rotation (production)
+
+```go
+mgr, err := auth.NewJWTManagerFromKeys([]auth.SigningKey{
+    {KID: "2026-q2-rsa", Algorithm: auth.RS256, RSAPrivate: priv},
+}, "2026-q2-rsa", 24*time.Hour, "my-issuer")
+
+token, _ := mgr.Generate(userID, username, role)
+claims, _ := mgr.Validate(token)
+```
+
+Tokens carry a `kid` header identifying the signing key. `Validate`
+looks the key up in the keyset, rejecting tokens whose `kid` is
+unknown.
+
+To rotate signing keys without invalidating outstanding tokens:
+
+```go
+// 1. Add a new key, mark it as current. New tokens are signed with it.
+err := mgr.RotateKey(auth.SigningKey{
+    KID: "2026-q3-rsa", Algorithm: auth.RS256, RSAPrivate: nextPriv,
+}, true)
+
+// 2. Existing tokens (signed with the previous key) keep validating
+//    until they expire on their own.
+
+// 3. After the access-token lifetime has passed, drop the old key.
+err = mgr.RemoveKey("2026-q2-rsa")
+```
+
+`HS256` keys are also supported in the keyset (use `SigningKey.HMACSecret`
+instead of `RSAPrivate`); the same rotation primitives apply.
+
+### JWKS endpoint
+
+Relying parties consuming RS256 tokens (other services, API gateways,
+identity proxies) typically fetch the public key set from a
+well-known URL. Mount the handler at the canonical path:
+
+```go
+a.Router.Get("/.well-known/jwks.json", router.FromHTTP(mgr.JWKSHandler()))
+```
+
+The handler emits the standard RFC 7517 / RFC 7518 shape:
+
+```json
+{
+  "keys": [
+    {
+      "kid": "2026-q2-rsa",
+      "kty": "RSA",
+      "alg": "RS256",
+      "use": "sig",
+      "n": "<base64url(modulus)>",
+      "e": "<base64url(exponent)>"
+    }
+  ]
+}
+```
+
+`HS256` keys are intentionally excluded from the JWKS response — the
+endpoint is public and HMAC keys are shared secrets. Callers using
+HS256-only managers will see an empty `keys` array.
 
 ## RBAC
 
