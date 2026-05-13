@@ -150,6 +150,39 @@ The admin panel exposes a UI for policy and role management, backed by
 the same enforcer. A superuser bypass is built in for the bootstrap
 case.
 
+### Default-deny with deny-override
+
+The built-in Casbin model is **default-deny with deny-override
+semantics**:
+
+- A request with **no matching policy** is denied. Operators must
+  grant access explicitly.
+- A request matching an **allow** rule is permitted — unless a
+  matching **deny** rule also exists, in which case it is denied.
+  Deny rules always override allows.
+
+The programmatic API mirrors that:
+
+```go
+// Grant a role full access to an API surface.
+e.AddPolicy("admin", "/api/*", "*")
+
+// Block a specific user from one endpoint, even though their role
+// would otherwise allow it.
+e.Deny("alice", "/api/users/1", "delete")
+
+// RemovePolicy lifts BOTH the allow and the deny variants matching
+// (sub, obj, act) — operators say "stop applying this rule" without
+// having to know which effect was originally written.
+e.RemovePolicy("alice", "/api/users/1", "delete")
+```
+
+CSV policy files now carry an `eft` column. A row reads
+`p, <subject>, <object>, <action>, <effect>` where effect is `allow`
+or `deny`. Programmatic callers should keep using `AddPolicy` (which
+stamps `allow`) and `Deny` rather than reaching into the Casbin
+backing enforcer directly.
+
 ## Authentication middleware
 
 For routes that require an authenticated session, plug the auth
