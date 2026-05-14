@@ -46,6 +46,43 @@ Key attributes:
 - `task.queue`
 - `job.outcome` (`success`, `retry`, `failure`)
 
+## Structured Logging and Secret Redaction
+
+`observe.NewLogger(level, format)` builds the framework's `*slog.Logger`.
+**Secret redaction is on by default** (ADR-007): the value of any log
+attribute whose key is in the built-in denylist is replaced with
+`observe.RedactionPlaceholder` (`[REDACTED]`) before it reaches the
+output. The key and the log-line shape are unchanged — only the value
+is masked.
+
+The built-in denylist is curated and exact-match (case-insensitive):
+`authorization`, `cookie`, `set-cookie`, `password`, `secret`, `token`,
+`api_key`, `access_token`, `refresh_token`, `private_key`,
+`encryption_key`, `csrf_token`, … — the complete set is returned by
+`observe.DefaultRedactedKeys()` so it can be audited at runtime.
+
+```go
+logger.Info("auth failed", "authorization", token)
+// → {"level":"INFO","msg":"auth failed","authorization":"[REDACTED]"}
+```
+
+Customisation goes through `observe.NewLoggerWithRedaction(level, format,
+observe.RedactionConfig{...})`:
+
+| Field | Effect |
+|-------|--------|
+| `ExtraKeys` | Additional keys to redact, on top of the built-in set. Also reachable from config via `log_redact_extra_keys`. |
+| `Placeholder` | Override the `[REDACTED]` string. |
+| `Disabled` | Turn redaction off entirely. **Code-level only — there is no config key to disable redaction**, so the decision surfaces in code review (same discipline as `app.WithOpenAuthz()`). |
+
+`App.New` wires `log_redact_extra_keys` from `nucleus.yml` automatically.
+
+**Redaction is a safety net, not a license to log secrets.** Exact-match
+key redaction cannot catch a secret logged under a non-obvious key
+(`auth_header`, a typo, an interpolated message string). Do not log
+secret material; treat redaction as defence-in-depth for the cases that
+slip through.
+
 ## Tracing and Correlation
 
 - HTTP requests emit server spans in `pkg/router`.

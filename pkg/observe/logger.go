@@ -4,6 +4,7 @@ package observe
 
 import (
 	"context"
+	"io"
 	"log/slog"
 	"os"
 	"strings"
@@ -21,16 +22,51 @@ const (
 // NewLogger creates a *slog.Logger configured with the given level and format.
 // Supported levels: "debug", "info", "warn", "error" (default: "info").
 // Supported formats: "json", "text" (default: "json").
+//
+// Secret redaction is ON by default: attribute values whose key is in
+// DefaultRedactedKeys (authorization, cookie, password, token, …) are
+// replaced with RedactionPlaceholder before they reach the output. To
+// extend the key set, change the placeholder, or disable redaction
+// entirely, use NewLoggerWithRedaction. See ADR-007.
+//
+// Redaction is key-based and applies only to structured key-value
+// attributes. It does NOT scan the message string — a secret
+// interpolated into the msg (e.g. fmt.Sprintf("token=%s", t)) is logged
+// verbatim. It also does not recurse into a struct logged via slog.Any
+// under a non-secret key; only slog.Group attrs are expanded and
+// matched. Always pass secrets as their own named attrs, and do not log
+// secret material in the first place — redaction is defence-in-depth,
+// not a license.
 func NewLogger(level, format string) *slog.Logger {
+	return NewLoggerWithRedaction(level, format, RedactionConfig{})
+}
+
+// NewLoggerWithRedaction is NewLogger with explicit control over secret
+// redaction. The zero-value RedactionConfig is identical to NewLogger:
+// redaction on, built-in key set, standard placeholder.
+func NewLoggerWithRedaction(level, format string, cfg RedactionConfig) *slog.Logger {
+	return newLogger(os.Stdout, level, format, cfg)
+}
+
+// newLogger is the shared constructor behind NewLogger and
+// NewLoggerWithRedaction. The io.Writer is a parameter so tests can
+// capture and assert on the actual rendered output; the exported
+// constructors always pass os.Stdout.
+func newLogger(w io.Writer, level, format string, cfg RedactionConfig) *slog.Logger {
 	lvl := parseLevel(level)
-	opts := &slog.HandlerOptions{Level: lvl}
+	opts := &slog.HandlerOptions{
+		Level: lvl,
+		// newRedactor returns nil when cfg.Disabled is set, leaving
+		// ReplaceAttr unset (zero overhead) in that case.
+		ReplaceAttr: newRedactor(cfg),
+	}
 
 	var handler slog.Handler
 	switch strings.ToLower(format) {
 	case "text":
-		handler = slog.NewTextHandler(os.Stdout, opts)
+		handler = slog.NewTextHandler(w, opts)
 	default:
-		handler = slog.NewJSONHandler(os.Stdout, opts)
+		handler = slog.NewJSONHandler(w, opts)
 	}
 
 	return slog.New(handler)

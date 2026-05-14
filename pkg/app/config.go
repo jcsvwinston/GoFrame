@@ -128,6 +128,14 @@ type Config struct {
 	OTLPEndpoint string `koanf:"otlp_endpoint"`
 	MetricsPath  string `koanf:"metrics_path"`
 
+	// LogRedactExtraKeys are additional log attribute keys whose values
+	// the structured logger redacts, on top of the built-in denylist
+	// (observe.DefaultRedactedKeys). Use it for app-specific sensitive
+	// fields. There is intentionally no config key to *disable*
+	// redaction — that requires an explicit code-level opt-out via
+	// observe.NewLoggerWithRedaction. See ADR-007.
+	LogRedactExtraKeys []string `koanf:"log_redact_extra_keys"`
+
 	// Security
 	RateLimitRequests int           `koanf:"rate_limit_requests"`
 	RateLimitWindow   time.Duration `koanf:"rate_limit_window"`

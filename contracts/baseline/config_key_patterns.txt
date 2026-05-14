@@ -15,6 +15,7 @@ jwt_secret
 locales_path
 log_format
 log_level
+log_redact_extra_keys[]
 mail_driver
 mail_from
 metrics_path

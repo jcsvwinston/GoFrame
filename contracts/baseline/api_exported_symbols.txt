@@ -584,6 +584,10 @@ github.com/jcsvwinston/nucleus/pkg/model type:QueryOpts
 github.com/jcsvwinston/nucleus/pkg/model type:Registry
 github.com/jcsvwinston/nucleus/pkg/model type:SQLQueryEvent
 github.com/jcsvwinston/nucleus/pkg/model type:SQLQueryObserver
+github.com/jcsvwinston/nucleus/pkg/observe const:RedactionPlaceholder
+github.com/jcsvwinston/nucleus/pkg/observe field:RedactionConfig.Disabled
+github.com/jcsvwinston/nucleus/pkg/observe field:RedactionConfig.ExtraKeys
+github.com/jcsvwinston/nucleus/pkg/observe field:RedactionConfig.Placeholder
 github.com/jcsvwinston/nucleus/pkg/observe field:TelemetryConfig.OTLPEndpoint
 github.com/jcsvwinston/nucleus/pkg/observe field:TelemetryConfig.PrometheusEnabled
 github.com/jcsvwinston/nucleus/pkg/observe field:TelemetryConfig.ServiceName
@@ -591,13 +595,16 @@ github.com/jcsvwinston/nucleus/pkg/observe func:CtxWithRequestID
 github.com/jcsvwinston/nucleus/pkg/observe func:CtxWithTenantID
 github.com/jcsvwinston/nucleus/pkg/observe func:CtxWithTraceID
 github.com/jcsvwinston/nucleus/pkg/observe func:CtxWithUserID
+github.com/jcsvwinston/nucleus/pkg/observe func:DefaultRedactedKeys
 github.com/jcsvwinston/nucleus/pkg/observe func:NewLogger
+github.com/jcsvwinston/nucleus/pkg/observe func:NewLoggerWithRedaction
 github.com/jcsvwinston/nucleus/pkg/observe func:RequestIDFromCtx
 github.com/jcsvwinston/nucleus/pkg/observe func:SetupOpenTelemetry
 github.com/jcsvwinston/nucleus/pkg/observe func:TenantIDFromCtx
 github.com/jcsvwinston/nucleus/pkg/observe func:TraceIDFromCtx
 github.com/jcsvwinston/nucleus/pkg/observe func:UserIDFromCtx
 github.com/jcsvwinston/nucleus/pkg/observe func:WithContext
+github.com/jcsvwinston/nucleus/pkg/observe type:RedactionConfig
 github.com/jcsvwinston/nucleus/pkg/observe type:TelemetryConfig
 github.com/jcsvwinston/nucleus/pkg/plugins const:CapabilityMailSend
 github.com/jcsvwinston/nucleus/pkg/plugins const:CapabilityQueuePublish
