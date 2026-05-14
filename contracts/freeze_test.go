@@ -158,6 +158,7 @@ func stableAPISymbolBaselineLines(t *testing.T) []string {
 		{importPath: "github.com/jcsvwinston/nucleus/pkg/plugins", relative: "pkg/plugins"},
 		{importPath: "github.com/jcsvwinston/nucleus/pkg/router", relative: "pkg/router"},
 		{importPath: "github.com/jcsvwinston/nucleus/pkg/signals", relative: "pkg/signals"},
+		{importPath: "github.com/jcsvwinston/nucleus/pkg/storage", relative: "pkg/storage"},
 		{importPath: "github.com/jcsvwinston/nucleus/pkg/tasks", relative: "pkg/tasks"},
 		{importPath: "github.com/jcsvwinston/nucleus/pkg/validate", relative: "pkg/validate"},
 	}

@@ -74,15 +74,19 @@ import time.
 
 :::warning AutoMigrate is dev-mode only
 
-`.AutoMigrate()` derives `CREATE TABLE IF NOT EXISTS` statements from
-struct tags and runs them against the configured database. Three
-dialects are supported today: **SQLite, PostgreSQL, and MySQL** —
-each via its own deterministic scaffold builder in
+`.AutoMigrate()` derives idempotent `CREATE TABLE` statements from
+struct tags and runs them against the configured database. Five
+dialects are supported: **SQLite, PostgreSQL, MySQL, MSSQL, and
+Oracle** — each via its own deterministic scaffold builder in
 [`pkg/model`](https://github.com/jcsvwinston/nucleus/blob/main/pkg/model).
+On SQLite/Postgres/MySQL the generated SQL uses `CREATE TABLE IF NOT
+EXISTS`; on MSSQL it wraps the CREATE in `IF OBJECT_ID(..., 'U') IS
+NULL`; on Oracle it wraps it in a PL/SQL block that swallows
+`ORA-00955` ("name is already used by an existing object"). Either way
+the operation is safe to re-run.
 
-`AutoMigrate` returns `db.ErrAutoMigrate` on MSSQL, Oracle, and any
-other unknown driver. Use explicit SQL migration files plus
-`nucleus migrate` for those engines.
+`AutoMigrate` returns `db.ErrAutoMigrate` only for unknown drivers —
+anything outside the five supported dialects above.
 
 Even on supported dialects, `AutoMigrate` does **not** alter existing
 tables — it is `CREATE IF NOT EXISTS` only. For production schema
