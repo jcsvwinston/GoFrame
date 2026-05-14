@@ -1,7 +1,9 @@
 package db
 
 import (
+	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
 	"fmt"
 	"log/slog"
 	"os"
@@ -11,7 +13,10 @@ import (
 	"time"
 )
 
-const migrationsTable = "nucleus_schema_migrations"
+const (
+	migrationsTable          = "nucleus_schema_migrations"
+	migrationsChecksumsTable = "nucleus_schema_migration_checksums"
+)
 
 // MigrationStatus describes the migration state for one migration ID.
 type MigrationStatus struct {
@@ -22,8 +27,11 @@ type MigrationStatus struct {
 	HasDown   bool       `json:"has_down"`
 }
 
-// AutoMigrate is intentionally unsupported in the SQL-native runtime.
-// Use explicit SQL migration files through Migrator instead.
+// AutoMigrate is intentionally unsupported at the db.DB layer. Use
+// explicit SQL migration files through Migrator, or call the
+// application-level App.AutoMigrate (pkg/app), which builds a
+// dialect-aware scaffold for SQLite, PostgreSQL, MySQL, MSSQL, and
+// Oracle and applies it through the same Migrator pipeline.
 func (d *DB) AutoMigrate(models ...interface{}) error {
 	return fmt.Errorf("db.AutoMigrate: %w", ErrAutoMigrate)
 }
@@ -66,6 +74,9 @@ func (m *Migrator) Steps(n int) error {
 		return err
 	}
 	if err := ensureMigrationsTable(sqlDB, m.db.system); err != nil {
+		return err
+	}
+	if err := ensureChecksumsTable(sqlDB, m.db.system); err != nil {
 		return err
 	}
 
@@ -132,6 +143,9 @@ func (m *Migrator) Status() ([]MigrationStatus, error) {
 	if err := ensureMigrationsTable(sqlDB, m.db.system); err != nil {
 		return nil, err
 	}
+	if err := ensureChecksumsTable(sqlDB, m.db.system); err != nil {
+		return nil, err
+	}
 	migs, err := m.loadMigrations()
 	if err != nil {
 		return nil, err
@@ -164,6 +178,13 @@ type DriftEntry struct {
 	ID        string    `json:"id"`
 	Kind      string    `json:"kind"`
 	AppliedAt time.Time `json:"applied_at"`
+	// ExpectedChecksum is the SHA-256 hex of the .up.sql file as it
+	// existed when the migration was originally applied. Populated only
+	// for `checksum_mismatch` drift entries.
+	ExpectedChecksum string `json:"expected_checksum,omitempty"`
+	// ActualChecksum is the SHA-256 hex of the .up.sql file currently on
+	// disk. Populated only for `checksum_mismatch` drift entries.
+	ActualChecksum string `json:"actual_checksum,omitempty"`
 }
 
 // Drift kinds reported by Migrator.Drift.
@@ -174,15 +195,33 @@ const (
 	// deleted a migration after applying it — the database remembers the
 	// row, but no reproducible script exists to recreate that state.
 	DriftKindMissingUpFile = "missing_up_file"
+
+	// DriftKindChecksumMismatch is reported when the SHA-256 of the
+	// `.up.sql` currently on disk does not match the checksum recorded in
+	// nucleus_schema_migration_checksums when the migration was originally
+	// applied. Typical cause: someone edited a migration file in place
+	// after it had already been applied — the database state reflects the
+	// pre-edit script, but the on-disk content claims something else.
+	// Migrations applied before checksum tracking was introduced have no
+	// recorded checksum and are not reported as drift on that basis.
+	DriftKindChecksumMismatch = "checksum_mismatch"
 )
 
 // Drift returns entries that indicate the migrations log no longer
 // matches the files on disk.
 //
-// Today this detects file-level drift only. Schema-level drift
-// (actual `information_schema.columns` shape vs what the migration
-// files would have produced) is a separate, more invasive check that
-// requires per-dialect schema introspection — tracked as a follow-up.
+// Two kinds are detected:
+//
+//   - DriftKindMissingUpFile — the migration is recorded as applied but
+//     the `.up.sql` file is gone.
+//   - DriftKindChecksumMismatch — the migration is recorded as applied,
+//     the `.up.sql` is present, but its SHA-256 differs from the
+//     checksum stored at apply time.
+//
+// Schema-level drift (actual `information_schema.columns` shape vs what
+// the migration files would have produced) is a separate, more invasive
+// check that requires per-dialect schema introspection — tracked as a
+// follow-up.
 func (m *Migrator) Drift() ([]DriftEntry, error) {
 	if m == nil {
 		return nil, fmt.Errorf("db.Migrator.Drift: nil receiver")
@@ -194,11 +233,18 @@ func (m *Migrator) Drift() ([]DriftEntry, error) {
 	if err := ensureMigrationsTable(sqlDB, m.db.system); err != nil {
 		return nil, err
 	}
+	if err := ensureChecksumsTable(sqlDB, m.db.system); err != nil {
+		return nil, err
+	}
 	migs, err := m.loadMigrations()
 	if err != nil {
 		return nil, err
 	}
 	applied, err := loadApplied(sqlDB)
+	if err != nil {
+		return nil, err
+	}
+	checksums, err := loadChecksums(sqlDB)
 	if err != nil {
 		return nil, err
 	}
@@ -216,6 +262,26 @@ func (m *Migrator) Drift() ([]DriftEntry, error) {
 				ID:        id,
 				Kind:      DriftKindMissingUpFile,
 				AppliedAt: at,
+			})
+			continue
+		}
+		expected, hasChecksum := checksums[id]
+		if !hasChecksum {
+			// Pre-checksum-tracking migration; nothing to compare. Not
+			// reported as drift — the absence is informational only.
+			continue
+		}
+		actual, err := fileSHA256(mig.UpPath)
+		if err != nil {
+			return nil, fmt.Errorf("db.Migrator.Drift checksum %s: %w", id, err)
+		}
+		if actual != expected {
+			drift = append(drift, DriftEntry{
+				ID:               id,
+				Kind:             DriftKindChecksumMismatch,
+				AppliedAt:        at,
+				ExpectedChecksum: expected,
+				ActualChecksum:   actual,
 			})
 		}
 	}
@@ -403,6 +469,8 @@ func applyMigration(db *sql.DB, mig migrationFile) error {
 	if err != nil {
 		return fmt.Errorf("db.Migrator read up migration %s: %w", mig.ID, err)
 	}
+	sum := sha256.Sum256(script)
+	checksum := hex.EncodeToString(sum[:])
 
 	tx, err := db.Begin()
 	if err != nil {
@@ -423,6 +491,16 @@ func applyMigration(db *sql.DB, mig migrationFile) error {
 	)
 	if _, err := tx.Exec(insert); err != nil {
 		return fmt.Errorf("db.Migrator mark applied %s: %w", mig.ID, err)
+	}
+
+	insertChecksum := fmt.Sprintf(
+		"INSERT INTO %s (id, checksum) VALUES (%s, %s)",
+		migrationsChecksumsTable,
+		quoteSQLString(mig.ID),
+		quoteSQLString(checksum),
+	)
+	if _, err := tx.Exec(insertChecksum); err != nil {
+		return fmt.Errorf("db.Migrator record checksum %s: %w", mig.ID, err)
 	}
 
 	if err := tx.Commit(); err != nil {
@@ -456,6 +534,11 @@ func rollbackMigration(db *sql.DB, mig migrationFile) error {
 		return fmt.Errorf("db.Migrator unmark applied %s: %w", mig.ID, err)
 	}
 
+	delChecksum := fmt.Sprintf("DELETE FROM %s WHERE id = %s", migrationsChecksumsTable, quoteSQLString(mig.ID))
+	if _, err := tx.Exec(delChecksum); err != nil {
+		return fmt.Errorf("db.Migrator drop checksum %s: %w", mig.ID, err)
+	}
+
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("db.Migrator commit rollback %s: %w", mig.ID, err)
 	}
@@ -464,4 +547,74 @@ func rollbackMigration(db *sql.DB, mig migrationFile) error {
 
 func quoteSQLString(s string) string {
 	return "'" + strings.ReplaceAll(s, "'", "''") + "'"
+}
+
+func ensureChecksumsTable(db *sql.DB, system string) error {
+	if db == nil {
+		return fmt.Errorf("db.Migrator ensure checksums table: nil sql DB")
+	}
+	q := checksumsTableDDL(system)
+	if _, err := db.Exec(q); err != nil {
+		return fmt.Errorf("db.Migrator ensure checksums table: %w", err)
+	}
+	return nil
+}
+
+// checksumsTableDDL returns the CREATE-TABLE-if-not-exists statement for
+// the migration checksums tracking table. Mirrors the dialect handling of
+// migrationsTableDDL.
+func checksumsTableDDL(system string) string {
+	switch system {
+	case "mssql":
+		return fmt.Sprintf(`IF OBJECT_ID('%s', 'U') IS NULL
+	CREATE TABLE %s (
+		id NVARCHAR(255) NOT NULL PRIMARY KEY,
+		checksum NVARCHAR(64) NOT NULL
+	)`, migrationsChecksumsTable, migrationsChecksumsTable)
+	case "oracle":
+		return fmt.Sprintf(`BEGIN
+	EXECUTE IMMEDIATE 'CREATE TABLE %s (
+		id VARCHAR2(255) NOT NULL PRIMARY KEY,
+		checksum VARCHAR2(64) NOT NULL
+	)';
+EXCEPTION
+	WHEN OTHERS THEN
+		IF SQLCODE != -955 THEN RAISE; END IF;
+END;`, migrationsChecksumsTable)
+	default:
+		return fmt.Sprintf(`CREATE TABLE IF NOT EXISTS %s (
+			id VARCHAR(255) PRIMARY KEY,
+			checksum TEXT NOT NULL
+		)`, migrationsChecksumsTable)
+	}
+}
+
+func loadChecksums(db *sql.DB) (map[string]string, error) {
+	rows, err := db.Query(fmt.Sprintf("SELECT id, checksum FROM %s", migrationsChecksumsTable))
+	if err != nil {
+		return nil, fmt.Errorf("db.Migrator load checksums: %w", err)
+	}
+	defer rows.Close()
+
+	out := map[string]string{}
+	for rows.Next() {
+		var id, checksum string
+		if err := rows.Scan(&id, &checksum); err != nil {
+			return nil, fmt.Errorf("db.Migrator load checksums scan: %w", err)
+		}
+		out[id] = checksum
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("db.Migrator load checksums rows: %w", err)
+	}
+	return out, nil
+}
+
+func fileSHA256(path string) (string, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return "", fmt.Errorf("read %s: %w", path, err)
+	}
+	sum := sha256.Sum256(data)
+	return hex.EncodeToString(sum[:]), nil
 }

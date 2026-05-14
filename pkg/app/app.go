@@ -77,13 +77,16 @@ type App struct {
 }
 
 // AutoMigrate synchronizes the database schema with the provided model
-// definitions. Supported dialects today: SQLite, PostgreSQL, MySQL.
-// MSSQL and Oracle return ErrAutoMigrate — use explicit SQL migration
-// files plus `nucleus migrate` for those engines (see
+// definitions. Supported dialects: SQLite, PostgreSQL, MySQL, MSSQL,
+// and Oracle. Unknown engines return ErrAutoMigrate — use explicit SQL
+// migration files plus `nucleus migrate` instead (see
 // `website/docs/getting-started/quickstart.md` for the multi-driver
 // path). It extracts metadata from models and executes dialect-aware
-// `CREATE TABLE IF NOT EXISTS` statements; existing tables are not
-// modified by AutoMigrate — schema evolution still requires migrations.
+// `CREATE TABLE` statements, idempotent where the engine supports it
+// (`CREATE TABLE IF NOT EXISTS` on sqlite/postgres/mysql, `IF
+// OBJECT_ID … IS NULL` on MSSQL, PL/SQL ORA-00955 swallow on Oracle).
+// Existing tables are not modified by AutoMigrate — schema evolution
+// still requires migrations.
 func (a *App) AutoMigrate(models ...any) error {
 	a.Logger.Info("starting auto-migration", "count", len(models))
 
@@ -125,10 +128,9 @@ func (a *App) AutoMigrate(models ...any) error {
 
 // buildAutoMigrateScaffold dispatches to a dialect-specific scaffold
 // builder based on the resolved SQL system. Returning ErrAutoMigrate
-// for unsupported engines preserves the contract previously documented
-// by the package-level comment on `AutoMigrate` for non-SQLite drivers,
-// so callers can `errors.Is` against the same sentinel after the
-// multi-driver expansion shipped.
+// for unknown engines preserves the contract previously documented by
+// the package-level comment on `AutoMigrate`, so callers can
+// `errors.Is` against the same sentinel.
 func buildAutoMigrateScaffold(system string, meta *model.ModelMeta) (string, error) {
 	switch system {
 	case "sqlite":
@@ -149,8 +151,20 @@ func buildAutoMigrateScaffold(system string, meta *model.ModelMeta) (string, err
 			return "", fmt.Errorf("failed to build mysql scaffold for %s: %w", meta.Name, err)
 		}
 		return up, nil
+	case "mssql":
+		up, _, err := model.BuildMSSQLMigrationScaffold(meta)
+		if err != nil {
+			return "", fmt.Errorf("failed to build mssql scaffold for %s: %w", meta.Name, err)
+		}
+		return up, nil
+	case "oracle":
+		up, _, err := model.BuildOracleMigrationScaffold(meta)
+		if err != nil {
+			return "", fmt.Errorf("failed to build oracle scaffold for %s: %w", meta.Name, err)
+		}
+		return up, nil
 	default:
-		// mssql, oracle, unknown — AutoMigrate intentionally unsupported.
+		// Unknown engine — AutoMigrate has no dialect-aware builder.
 		return "", fmt.Errorf("%w (system=%q)", db.ErrAutoMigrate, system)
 	}
 }

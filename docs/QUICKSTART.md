@@ -80,11 +80,16 @@ SQLite, PostgreSQL, and MySQL are included by default.
 
 ## 7. AutoMigrate — dev mode only
 
-`app.New(cfg).AutoMigrate(&Article{})` derives `CREATE TABLE IF NOT EXISTS` statements from struct tags and runs them against the configured database. **Supported dialects: SQLite, PostgreSQL, MySQL.** MSSQL and Oracle return `db.ErrAutoMigrate` — use explicit SQL migration files plus `nucleus migrate` for those engines.
+`app.New(cfg).AutoMigrate(&Article{})` derives idempotent `CREATE TABLE` statements from struct tags and runs them against the configured database. **Supported dialects: SQLite, PostgreSQL, MySQL, MSSQL, and Oracle** — each via its own dialect-aware scaffold builder. SQLite/Postgres/MySQL use `CREATE TABLE IF NOT EXISTS`; MSSQL wraps the CREATE in `IF OBJECT_ID(..., 'U') IS NULL`; Oracle uses a PL/SQL block that swallows ORA-00955. The result is safe to re-run on every dialect.
 
-`AutoMigrate` is `CREATE IF NOT EXISTS` only: it never alters existing tables. For production schema evolution use explicit migration files (`migrations/*.up.sql`) — they are reversible, reviewable in PR diffs, and the only path the framework offers compatibility guarantees on.
+`AutoMigrate` never alters existing tables: it only creates them when absent. For production schema evolution use explicit migration files (`migrations/*.up.sql`) — they are reversible, reviewable in PR diffs, and the only path the framework offers compatibility guarantees on.
 
-`nucleus migrate drift` surfaces any applied migration that has since lost its `.up.sql` file on disk — wire it into CI predeploy to catch the most common form of schema drift.
+`nucleus migrate drift` reports two failure modes:
+
+- **`missing_up_file`** — a migration is marked applied in `nucleus_schema_migrations` but its `.up.sql` is gone from the working tree.
+- **`checksum_mismatch`** — the migration was applied with one content and the file on disk has changed since (someone edited `.up.sql` in place after it was applied).
+
+Wire `nucleus migrate drift` into CI predeploy to catch both forms.
 
 ## Next Reading
 

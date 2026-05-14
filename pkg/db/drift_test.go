@@ -74,6 +74,114 @@ func TestMigrator_Drift_FlagsAppliedWithMissingUpFile(t *testing.T) {
 	}
 }
 
+func TestMigrator_Drift_FlagsChecksumMismatchWhenUpFileEdited(t *testing.T) {
+	d := newTestDB(t)
+	dir := t.TempDir()
+	originalUp := "CREATE TABLE items (id INTEGER PRIMARY KEY, name TEXT NOT NULL);"
+	writeMigrationPair(t, dir, "000001_create_items", originalUp, "DROP TABLE IF EXISTS items;")
+
+	m := NewMigrator(d, dir, observe.NewLogger("error", "text"))
+	if err := m.Up(); err != nil {
+		t.Fatalf("Up: %v", err)
+	}
+
+	// Operator edits the .up.sql in place after it was already applied.
+	editedUp := originalUp + "\nALTER TABLE items ADD COLUMN owner TEXT;"
+	upPath := filepath.Join(dir, "000001_create_items.up.sql")
+	if err := os.WriteFile(upPath, []byte(editedUp), 0o600); err != nil {
+		t.Fatalf("rewrite up file: %v", err)
+	}
+
+	drift, err := m.Drift()
+	if err != nil {
+		t.Fatalf("Drift: %v", err)
+	}
+	if len(drift) != 1 {
+		t.Fatalf("expected one drift entry, got %d (%+v)", len(drift), drift)
+	}
+	got := drift[0]
+	if got.Kind != DriftKindChecksumMismatch {
+		t.Fatalf("expected checksum_mismatch kind, got %q", got.Kind)
+	}
+	if got.ExpectedChecksum == "" || got.ActualChecksum == "" {
+		t.Fatalf("expected both checksums populated, got %+v", got)
+	}
+	if got.ExpectedChecksum == got.ActualChecksum {
+		t.Fatalf("expected differing checksums, both are %q", got.ExpectedChecksum)
+	}
+}
+
+func TestMigrator_Drift_NoChecksumDriftWhenFilePreserved(t *testing.T) {
+	d := newTestDB(t)
+	dir := t.TempDir()
+	writeMigrationPair(t, dir, "000001_create_items",
+		"CREATE TABLE items (id INTEGER PRIMARY KEY);",
+		"DROP TABLE IF EXISTS items;",
+	)
+
+	m := NewMigrator(d, dir, observe.NewLogger("error", "text"))
+	if err := m.Up(); err != nil {
+		t.Fatalf("Up: %v", err)
+	}
+
+	// Read-modify-write with identical content must not register as drift.
+	upPath := filepath.Join(dir, "000001_create_items.up.sql")
+	data, err := os.ReadFile(upPath)
+	if err != nil {
+		t.Fatalf("read: %v", err)
+	}
+	if err := os.WriteFile(upPath, data, 0o600); err != nil {
+		t.Fatalf("rewrite: %v", err)
+	}
+
+	drift, err := m.Drift()
+	if err != nil {
+		t.Fatalf("Drift: %v", err)
+	}
+	if len(drift) != 0 {
+		t.Fatalf("expected no drift for byte-identical rewrite, got %+v", drift)
+	}
+}
+
+func TestMigrator_Drift_PreChecksumMigrationsNotReported(t *testing.T) {
+	d := newTestDB(t)
+	dir := t.TempDir()
+	writeMigrationPair(t, dir, "000001_legacy",
+		"CREATE TABLE legacy (id INTEGER PRIMARY KEY);",
+		"DROP TABLE IF EXISTS legacy;",
+	)
+
+	m := NewMigrator(d, dir, observe.NewLogger("error", "text"))
+	if err := m.Up(); err != nil {
+		t.Fatalf("Up: %v", err)
+	}
+
+	// Simulate a database upgraded from a pre-checksum-tracking version:
+	// the migrations row exists but the checksums row does not.
+	sqlDB, err := d.SqlDB()
+	if err != nil {
+		t.Fatalf("SqlDB: %v", err)
+	}
+	if _, err := sqlDB.Exec("DELETE FROM " + migrationsChecksumsTable + " WHERE id = '000001_legacy'"); err != nil {
+		t.Fatalf("delete checksum row: %v", err)
+	}
+
+	// Edit the up file. Without a recorded checksum, we cannot prove drift,
+	// and Drift must NOT fabricate a false positive.
+	upPath := filepath.Join(dir, "000001_legacy.up.sql")
+	if err := os.WriteFile(upPath, []byte("CREATE TABLE legacy_v2 (id INTEGER PRIMARY KEY);"), 0o600); err != nil {
+		t.Fatalf("rewrite: %v", err)
+	}
+
+	drift, err := m.Drift()
+	if err != nil {
+		t.Fatalf("Drift: %v", err)
+	}
+	if len(drift) != 0 {
+		t.Fatalf("expected no drift for pre-checksum migration, got %+v", drift)
+	}
+}
+
 func TestMigrator_Drift_ResultsSortedByID(t *testing.T) {
 	d := newTestDB(t)
 	dir := t.TempDir()

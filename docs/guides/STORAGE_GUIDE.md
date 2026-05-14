@@ -348,7 +348,7 @@ The `TenantStore` wrapper provides automatic key prefixing for multi-tenant isol
 
 ### How it works
 
-```
+```go
 // App code (tenant-agnostic):
 store.Put(ctx, "uploads/invoice.pdf", ...)
 
