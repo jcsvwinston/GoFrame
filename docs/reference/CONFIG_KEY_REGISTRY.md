@@ -151,6 +151,7 @@ For vendor-specific drivers (SendGrid, Mailgun, AWS SES, Postmark, Resend, …) 
 | --- | --- | --- | --- |
 | `log_level` | `info` | `stable` | Logger level selector. |
 | `log_format` | `json` | `stable` | `json`/`text` formatter contract. |
+| `log_redact_extra_keys[]` | `[]` | `transitional` | Additional log attribute keys whose values the structured logger redacts, on top of the built-in denylist (`observe.DefaultRedactedKeys`). Case-insensitive. Use it for app-specific sensitive fields (`ssn`, `card_number`, …). There is intentionally **no** config key to *disable* redaction — redaction is on by default and turning it off requires an explicit code-level opt-out via `observe.NewLoggerWithRedaction`. See ADR-007. |
 | `otlp_endpoint` | `""` | `stable` | Optional OTLP-HTTP push endpoint for traces + metrics. Coexists with `metrics_path` — when both are set, the MeterProvider feeds both readers. |
 | `metrics_path` | `/metrics` | `stable` | Mount path for the Prometheus / OpenMetrics scrape endpoint. Empty string disables the endpoint. When non-empty, `App.New` attaches a Prometheus reader to the OTel MeterProvider and serves it at this path with `application/openmetrics-text` content type. |
 | `rate_limit_requests` | `0` | `stable` | Sustained rate budget (0 disables). |
