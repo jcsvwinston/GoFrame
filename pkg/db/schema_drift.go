@@ -10,12 +10,12 @@ import (
 )
 
 // ErrSchemaDriftUnsupported is returned by Migrator.SchemaDrift when
-// the underlying database dialect does not yet have an introspection
-// implementation. Today this covers MSSQL and Oracle; SQLite,
-// PostgreSQL, and MySQL are supported. Callers can `errors.Is` against
-// this sentinel to distinguish "no drift detected" from "drift could
-// not be checked on this engine".
-var ErrSchemaDriftUnsupported = errors.New("db.Migrator.SchemaDrift: schema-level introspection is not yet implemented for this database engine")
+// the underlying database dialect does not have an introspection
+// implementation. Today this covers any engine outside the supported
+// set (SQLite, PostgreSQL, MySQL, MSSQL, Oracle). Callers can
+// `errors.Is` against this sentinel to distinguish "no drift detected"
+// from "drift could not be checked on this engine".
+var ErrSchemaDriftUnsupported = errors.New("db.Migrator.SchemaDrift: schema-level introspection is not implemented for this database engine")
 
 // Drift kinds reported by Migrator.SchemaDrift. These complement the
 // file-level kinds in migrate.go (DriftKindMissingUpFile,
@@ -115,8 +115,8 @@ type liveColumn struct {
 //   - It does NOT compare column types — see ExpectedColumn's
 //     comment for the reasoning.
 //
-// MSSQL and Oracle return ErrSchemaDriftUnsupported until per-dialect
-// introspection lands in a follow-up iteration.
+// All five supported engines are covered: SQLite, PostgreSQL, MySQL,
+// MSSQL, and Oracle. Unknown engines return ErrSchemaDriftUnsupported.
 func (m *Migrator) SchemaDrift(ctx context.Context, expected []ExpectedTable) ([]SchemaDriftEntry, error) {
 	if m == nil {
 		return nil, fmt.Errorf("db.Migrator.SchemaDrift: nil receiver")
@@ -129,10 +129,8 @@ func (m *Migrator) SchemaDrift(ctx context.Context, expected []ExpectedTable) ([
 	// failing) to acquire a sql handle.
 	system := m.db.system
 	switch system {
-	case "sqlite", "postgresql", "mysql":
+	case "sqlite", "postgresql", "mysql", "mssql", "oracle":
 		// Supported; fall through.
-	case "mssql", "oracle":
-		return nil, fmt.Errorf("%w (system=%q)", ErrSchemaDriftUnsupported, system)
 	default:
 		return nil, fmt.Errorf("%w (unknown system=%q)", ErrSchemaDriftUnsupported, system)
 	}
@@ -325,6 +323,61 @@ func introspectTableColumns(ctx context.Context, db *sql.DB, system, table strin
 		         WHERE table_schema = DATABASE() AND table_name = ?
 		         ORDER BY ORDINAL_POSITION`
 		args = []any{table}
+	case "mssql":
+		// MSSQL uses INFORMATION_SCHEMA the same way PG/MySQL do, but
+		// the parameter placeholders are @p1-style (go-mssqldb), and
+		// the current-schema scoping is SCHEMA_NAME() rather than
+		// current_schema() or DATABASE(). IS_NULLABLE returns
+		// 'YES'/'NO' identically to PG/MySQL.
+		var exists int
+		err := db.QueryRowContext(ctx,
+			`SELECT 1 FROM INFORMATION_SCHEMA.TABLES
+			 WHERE TABLE_SCHEMA = SCHEMA_NAME() AND TABLE_NAME = @p1`, table).Scan(&exists)
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, nil
+		}
+		if err != nil {
+			return nil, err
+		}
+		query = `SELECT COLUMN_NAME,
+		                CASE WHEN IS_NULLABLE = 'YES' THEN 1 ELSE 0 END AS nullable
+		         FROM INFORMATION_SCHEMA.COLUMNS
+		         WHERE TABLE_SCHEMA = SCHEMA_NAME() AND TABLE_NAME = @p1
+		         ORDER BY ORDINAL_POSITION`
+		args = []any{table}
+	case "oracle":
+		// Oracle has its own catalog (no information_schema). USER_*
+		// views scope to the current user's schema. Two Oracle-isms
+		// the comparator must accommodate:
+		//   1. Identifiers are folded to UPPER CASE unless the DDL
+		//      double-quoted them. The AutoMigrate scaffold writes
+		//      `CREATE TABLE "name"` (double-quoted, see
+		//      pkg/model/migration_scaffold_oracle.go), so the stored
+		//      identifier is the literal lower-snake-case from the
+		//      model meta. We still UPPER-case the parameter as a
+		//      compatibility hedge: if a caller hand-rolled an
+		//      unquoted CREATE TABLE, the table is stored as upper,
+		//      and the lookup would miss without this.
+		//   2. NULLABLE in USER_TAB_COLUMNS is 'Y'/'N', not
+		//      'YES'/'NO'.
+		// Bind parameters use :1-style for go-ora.
+		upper := strings.ToUpper(table)
+		var exists int
+		err := db.QueryRowContext(ctx,
+			`SELECT 1 FROM USER_TABLES WHERE TABLE_NAME = :1 OR TABLE_NAME = :2`,
+			upper, table).Scan(&exists)
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, nil
+		}
+		if err != nil {
+			return nil, err
+		}
+		query = `SELECT COLUMN_NAME,
+		                CASE WHEN NULLABLE = 'Y' THEN 1 ELSE 0 END AS nullable
+		         FROM USER_TAB_COLUMNS
+		         WHERE TABLE_NAME = :1 OR TABLE_NAME = :2
+		         ORDER BY COLUMN_ID`
+		args = []any{upper, table}
 	default:
 		return nil, fmt.Errorf("introspectTableColumns: unsupported system %q", system)
 	}
