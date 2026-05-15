@@ -249,26 +249,19 @@ func TestSchemaDrift_ResultsSortedByTableThenKindThenColumn(t *testing.T) {
 	}
 }
 
-func TestSchemaDrift_ReturnsErrSchemaDriftUnsupported_ForMSSQL(t *testing.T) {
-	// The system check is meant to short-circuit BEFORE acquiring a
-	// sql handle. Construct a Migrator with a forced "mssql" system
-	// and confirm the sentinel comes back without the call needing a
-	// real DB.
-	d := &DB{system: "mssql"}
+// TestSchemaDrift_ReturnsErrSchemaDriftUnsupported_ForUnknownSystem
+// guards the sentinel error path. All five engines Nucleus supports
+// today (sqlite, postgresql, mysql, mssql, oracle) flow through the
+// supported case; only a genuinely unrecognised engine label trips
+// the sentinel. The test forges a `*DB` with an unknown `system`
+// field so the check short-circuits before any sql handle acquisition.
+func TestSchemaDrift_ReturnsErrSchemaDriftUnsupported_ForUnknownSystem(t *testing.T) {
+	d := &DB{system: "imaginary-engine"}
 	m := &Migrator{db: d}
 	_, err := m.SchemaDrift(context.Background(), []ExpectedTable{expectedDriftUsersTable})
 	if err == nil {
-		t.Fatal("expected an error for mssql, got nil")
+		t.Fatal("expected an error for an unknown engine, got nil")
 	}
-	if !errors.Is(err, ErrSchemaDriftUnsupported) {
-		t.Fatalf("expected ErrSchemaDriftUnsupported, got %v", err)
-	}
-}
-
-func TestSchemaDrift_ReturnsErrSchemaDriftUnsupported_ForOracle(t *testing.T) {
-	d := &DB{system: "oracle"}
-	m := &Migrator{db: d}
-	_, err := m.SchemaDrift(context.Background(), []ExpectedTable{expectedDriftUsersTable})
 	if !errors.Is(err, ErrSchemaDriftUnsupported) {
 		t.Fatalf("expected ErrSchemaDriftUnsupported, got %v", err)
 	}

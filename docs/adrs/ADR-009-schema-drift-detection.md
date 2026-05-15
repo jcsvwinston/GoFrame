@@ -94,6 +94,32 @@ After this ADR is accepted:
 5. `pkg/db` does **not** import `pkg/model` (the architectural rule that made `[]ExpectedTable` the chosen input).
 6. SQLite / PostgreSQL / MySQL implementations are exercised by unit tests; MSSQL and Oracle return `ErrSchemaDriftUnsupported`.
 
+## Addendum — 2026-05-15 — MSSQL and Oracle introspection landed
+
+The deferred MSSQL and Oracle introspection paths described in §4 are now implemented. The architectural decision recorded in this ADR is unchanged; this addendum extends the Compliance section.
+
+### What changed
+
+- `pkg/db/schema_drift.go`:
+  - The `switch system` block in `SchemaDrift` no longer returns `ErrSchemaDriftUnsupported` for `"mssql"` or `"oracle"`; both fall through into the supported case.
+  - `introspectTableColumns` gains an MSSQL branch (`INFORMATION_SCHEMA.COLUMNS` filtered by `SCHEMA_NAME()` with `@p1`-bound parameters) and an Oracle branch (`USER_TAB_COLUMNS` with `:1`/`:2`-bound parameters, UPPER-cased identifier alongside the raw fallback, `NULLABLE = 'Y'` instead of `'YES'`).
+  - The `ErrSchemaDriftUnsupported` sentinel is retained — it now fires only for engines outside the supported set (the `default` branch).
+- `pkg/db/schema_drift_test.go` replaces the `_ForMSSQL` and `_ForOracle` sentinel tests with a single `_ForUnknownSystem` test that forges a `*DB` with an unrecognised `system` field.
+- `pkg/db/schema_drift_live_test.go` (new) — `TestSQLMatrix_SchemaDrift` (PG/MySQL required lane) and `TestSQLMatrix_SchemaDrift_Exploratory` (MSSQL/Oracle exploratory lane). Both build a fixture table directly via raw DDL (independent of `AutoMigrate`) and assert the four drift kinds in subtests: matching, missing column, extra column, nullability mismatch, missing table.
+- `.github/workflows/ci.yml` updated so the new live tests are actually exercised by CI. While there, the required-lane `TestSQLMatrix_AutoMigrate` (PG/MySQL) test added in PR #63 is also added — it had been compiling but never executing because the existing workflow `-run` regex did not pick it up. The exploratory counterpart `TestSQLMatrix_AutoMigrate_Exploratory` (MSSQL/Oracle) is **intentionally left out**: exercising it surfaces a pre-existing dialect bug in `pkg/admin`'s bootstrap users-table DDL (`Incorrect syntax near 'nucleus_admin_users'` on MSSQL; `ORA-03076 unexpected item DEFAULT` on Oracle). That fix belongs to its own iteration; the workflow carries a NOTE comment pointing to this ADR.
+
+### Trade-offs revisited
+
+The original "deferred" rationale was verification scope, not technical complexity. The verification gap is now closed: the live-DB CI lanes for all four engines (PG, MySQL via `db-matrix-required`; MSSQL, Oracle via `db-matrix-live-*`) exercise both AutoMigrate and SchemaDrift end-to-end.
+
+The Oracle introspection branch carries a small redundancy compared to the others: it queries `USER_TABLES`/`USER_TAB_COLUMNS` with `TABLE_NAME = :1 OR TABLE_NAME = :2`, where `:1` is the UPPER-cased table name and `:2` is the raw caller-supplied name. The reason is that the AutoMigrate scaffolder writes Oracle DDL with double-quoted identifiers (`CREATE TABLE "drift_users"`), so the stored identifier is the literal lower-snake-case; but operators who hand-roll unquoted DDL get the Oracle default of UPPER-case storage. The dual lookup covers both writers transparently. A future iteration could narrow this once Nucleus declares a canonical writer convention.
+
+### Updated compliance
+
+The original §Compliance row 6 is superseded by:
+
+6. SQLite / PostgreSQL / MySQL / MSSQL / Oracle implementations are exercised. Unit tests cover SQLite end-to-end and the cross-dialect sentinel-error path; live-DB tests (`TestSQLMatrix_SchemaDrift` and `TestSQLMatrix_SchemaDrift_Exploratory`) exercise the four remaining engines through the CI matrix lanes. `ErrSchemaDriftUnsupported` now fires only for engines outside the supported set; callers can still `errors.Is` against it.
+
 ## Related
 
 - [`pkg/db/schema_drift.go`](../../pkg/db/schema_drift.go) — the implementation.

@@ -117,7 +117,12 @@ jobs:
       - name: Run DB runtime smoke
         env:
           NUCLEUS_SQL_MATRIX_URL: ${{ matrix.database_url }}
-        run: go test ./pkg/db -run '^TestSQLMatrix_ConnectAndPing$' -v
+        run: go test ./pkg/db -run '^TestSQLMatrix_ConnectAndPing$|^TestSQLMatrix_SchemaDrift$' -v
+
+      - name: Run App AutoMigrate live smoke
+        env:
+          NUCLEUS_SQL_MATRIX_URL: ${{ matrix.database_url }}
+        run: go test ./pkg/app -run '^TestSQLMatrix_AutoMigrate$' -v
 
       - name: Run CLI critical command smoke
         env:
@@ -163,7 +168,16 @@ jobs:
         env:
           NUCLEUS_SQL_EXPLORATORY_URL: 'sqlserver://sa:StrongPassw0rd!@127.0.0.1:1433/master'
         run: |
-          go test -tags mssql ./pkg/db -run '^TestSQLMatrix_ExploratoryLiveConnectAndPing$' -v
+          go test -tags mssql ./pkg/db -run '^TestSQLMatrix_ExploratoryLiveConnectAndPing$|^TestSQLMatrix_SchemaDrift_Exploratory$' -v
+          # NOTE: ./pkg/app TestSQLMatrix_AutoMigrate_Exploratory is
+          # intentionally NOT wired here. PR #66 verified the test
+          # exists and compiles, but exercising it surfaces a
+          # pre-existing dialect bug in pkg/admin's bootstrap users
+          # table DDL (`Incorrect syntax near 'nucleus_admin_users'`
+          # on MSSQL; `ORA-03076 unexpected item DEFAULT` on Oracle).
+          # That bug is out of scope for the SchemaDrift iteration —
+          # tracked as a follow-up to land before this line is added
+          # back. See PR #66 description for details.
           go test -tags mssql ./internal/cli -run '^TestSQLMatrix_ExploratoryCriticalCommands$' -v
 
   db-matrix-live-oracle:
@@ -207,7 +221,11 @@ jobs:
         env:
           NUCLEUS_SQL_EXPLORATORY_URL: 'oracle://system:oracle@127.0.0.1:1521/FREEPDB1'
         run: |
-          go test -tags oracle ./pkg/db -run '^TestSQLMatrix_ExploratoryLiveConnectAndPing$' -v
+          go test -tags oracle ./pkg/db -run '^TestSQLMatrix_ExploratoryLiveConnectAndPing$|^TestSQLMatrix_SchemaDrift_Exploratory$' -v
+          # NOTE: ./pkg/app TestSQLMatrix_AutoMigrate_Exploratory is
+          # intentionally NOT wired here — see the MSSQL lane above
+          # for the explanation. Same admin-bootstrap DDL bug; same
+          # follow-up.
           go test -tags oracle ./internal/cli -run '^TestSQLMatrix_ExploratoryCriticalCommands$' -v
 
   compatibility-harness:
