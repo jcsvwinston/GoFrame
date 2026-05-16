@@ -82,14 +82,16 @@ make build
 #    127.0.0.1.
 ./bin/admin-server
 
-# 4. In another terminal, run an example app pointed at the local
-#    admin server.
-go run ./examples/admin-quickstart/cmd/sample-app
+# 4. In another terminal, run any Nucleus application pointed at the
+#    local admin server (set NUCLEUS_ADMIN_ENDPOINT in its config).
+#    A runnable quickstart sample app returns with v0.9.X — the
+#    previous `examples/admin-quickstart/` was removed in the
+#    ADR-010 Phase 1 iteration on 2026-05-16.
 
 # 5. Open http://localhost:8080 in a browser.
 ```
 
-For a production-like multi-node setup, see `examples/admin-quickstart/`.
+A production-like multi-node lab returns with the v0.9.X reference applications (ADR-010 Phase 4). The previous `examples/admin-quickstart/` tree (Docker Compose, K8s manifests, systemd units, oauth2-proxy config) was removed in the ADR-010 Phase 1 iteration on 2026-05-16.
 
 ## Configuration
 
@@ -135,8 +137,8 @@ for the full surface or `admin/server/cmd/admin-server/main.go`.
 
 The admin server NEVER joins the application's public load balancer.
 It listens on a private interface; the only operator path to it is
-through the auth-aware reverse proxy described in
-`examples/admin-quickstart/`.
+through an auth-aware reverse proxy (oauth2-proxy or similar). A
+runnable lab configuration returns with v0.9.X (ADR-010 Phase 4).
 
 ## Hardening checklist before production
 
@@ -146,8 +148,8 @@ through the auth-aware reverse proxy described in
       system.
 - [ ] Front the UI listener with oauth2-proxy or equivalent.
 - [ ] Restrict `ui_trusted_proxy_cidrs` to the proxy's source range.
-- [ ] Apply the K8s NetworkPolicy from `examples/admin-quickstart/k8s`
-      so only agents and operators can reach the listeners.
+- [ ] Apply a K8s NetworkPolicy so only agents and operators can
+      reach the listeners. (A reference manifest returns with v0.9.X.)
 - [ ] Decide on `require_connection`. Default fail-open is right for
       most deployments; flip to `true` only if your compliance posture
       requires it.

@@ -57,7 +57,7 @@ Automatic rewrite candidates:
 
 Manual steps:
 
-- Install the plugin binary on `PATH`. A reference implementation skeleton lives at `examples/plugins/mail/` — clone it, replace the request shape with SendGrid's `/v3/mail/send`, build the binary `nucleus-plugin-sendgrid`, place it on `PATH`.
+- Install the plugin binary on `PATH`. Implement the `mail.send` capability contract described in [`docs/reference/PLUGIN_SDK.md`](../reference/PLUGIN_SDK.md) — the binary speaks request-response JSON over a process boundary against SendGrid's `/v3/mail/send`. Build it as `nucleus-plugin-sendgrid` and place it on `PATH`. (A runnable reference skeleton previously lived at `examples/plugins/mail/`; it was removed in the ADR-010 Phase 1 iteration on 2026-05-16 and will be re-authored in v0.9.X.)
 - Move the API key out of tracked YAML into the env-var path the plugin reads (typical: `SENDGRID_API_KEY`).
 - If you maintained a fork of the in-tree `pkg/mail/sendgrid.go`, port its behaviour into the plugin executable.
 

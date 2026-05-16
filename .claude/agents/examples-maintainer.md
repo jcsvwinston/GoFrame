@@ -9,7 +9,22 @@ You are the **Examples Maintainer** for Nucleus / GoFrame. The examples
 are first-class consumers of the framework — if they break or drift, our
 tutorials lie.
 
-## Examples in scope
+## Current state (2026-05-16 → v0.9.X window)
+
+Per the ADR-010 Phase 1 iteration the entire `examples/*` tree was
+removed. **For this window your scope is inverted**: do NOT propose
+rewrites of nonexistent example trees; verify only that the directory
+is absent, that no shipped file outside `docs/iterations/`,
+`docs/reports/`, `docs/audits/`, this file, and intentional
+historical-pointer phrasing references the literal path `examples/*`,
+and that the compatibility-harness `core-build` placeholder profile
+still produces a valid report. The full example-maintainer scope
+described below resumes when the new reference applications land in
+v0.9.X as part of ADR-010 Phase 4 / docs-sync.
+
+## Examples in scope (resumes in v0.9.X — historical baseline)
+
+The previous reference applications, removed on 2026-05-16, were:
 
 - `examples/mvc_api/` — minimal MVC + REST API.
 - `examples/fleetmanager/` — full app with frontend.
@@ -17,6 +32,9 @@ tutorials lie.
 - `examples/showcase_demo/` — feature showcase.
 - `examples/plugins/mail` and `examples/plugins/queue` — plugin SDK
   examples.
+
+When the v0.9.X reference applications ship under a freshly-scoped
+`examples/` tree, update this list to match.
 
 Each example has a `README.md` and is exercised by the compatibility
 harness — never let it rot.

@@ -1,7 +1,8 @@
 # ADR-010: Fluent API v2 for `pkg/nucleus` over `pkg/app`
 
-**Status:** Proposed
+**Status:** Accepted (Phase 1 landed 2026-05-16)
 **Date:** 2026-05-15
+**Accepted:** 2026-05-16
 **Supersedes:** No
 
 ## Context
@@ -14,7 +15,9 @@ This ADR redesigns `pkg/nucleus` as a deliberate fluent **façade** over `pkg/ap
 
 This ADR also commits to the documentation-synchronisation discipline required to prevent the website from drifting silently again after the redesign lands.
 
-**Pre-`v1.0` framing.** Nucleus has not been publicly released. `pkg/nucleus` has zero entries in `contracts/baseline/api_exported_symbols.txt` today (false-green in the freeze scanner). The only consumers are two example files (`examples/ecommerce_dashboard/backend/{main.go,handlers/handlers.go}`). Per `docs/governance/COMPATIBILITY_SLO.md` and the precedent established by ADR-006 and ADR-008, this iteration is a clean rewrite of an internal-only package — no deprecation cycle, no DEP/MA artefacts, no WARN-wrapped legacy methods. The CHANGELOG records the rewrite under `### Changed` with an inline `BREAKING (...)` label following the ADR-006/ADR-008 form.
+**Pre-`v1.0` framing.** Nucleus has not been publicly released. `pkg/nucleus` had zero entries in `contracts/baseline/api_exported_symbols.txt` at the time this ADR was proposed (false-green in the freeze scanner). The only consumers were two example files (`examples/ecommerce_dashboard/backend/{main.go,handlers/handlers.go}`). Per `docs/governance/COMPATIBILITY_SLO.md` and the precedent established by ADR-006 and ADR-008, this iteration is a clean rewrite of an internal-only package — no deprecation cycle, no DEP/MA artefacts, no WARN-wrapped legacy methods. The CHANGELOG records the rewrite under `### Changed` with an inline `BREAKING (...)` label following the ADR-006/ADR-008 form.
+
+**Owner decision overriding the original consumer-rewrite plan (2026-05-16).** The original Negative-consequences and Implementation phases sections stipulated rewriting the two `examples/ecommerce_dashboard/backend/*` consumers in the same Phase 1 PR. The owner replaced that path with **wholesale deletion of every `examples/*` tree** in the same Phase 1 PR. The previous reference applications were obsolete relative to the framework's current shape; rebuilding them mid-rewrite would have added noise without validating the new surface. New, post-Phase 1 reference applications are authored as part of ADR-010 Phase 4 / docs-sync (target: v0.9.X). The text below — Negative §[examples consumer rewrite], Compliance #1, §9 #4 (Documentation-synchronisation) — reflects this revised plan.
 
 ## Decision
 
@@ -194,7 +197,7 @@ Moving a module's package to another application brings its configuration shape,
 
 ### 7. Router with three coexisting styles
 
-`nucleus.Router` is an interface defined in `pkg/nucleus` (not an alias for `*router.Router`) so that modules do not take a hard import on `pkg/router`. The interface exposes `Get`, `Post`, `Put`, `Delete`, `Group`, and `Resource` with consistent signatures.
+`nucleus.Router` is an interface defined in `pkg/nucleus` (not an alias for `*router.Router`) so that modules do not take a hard import on `pkg/router`. The interface exposes `Get`, `Post`, `Put`, `Patch`, `Delete`, `Group`, and `Resource` with consistent signatures. `Patch` is included as a flat-declarative verb (mirrors `pkg/router.Mux.Patch`) so a controller that exposes a partial-update endpoint via the flat style does not have to fall through to `Resource(...)` just to obtain a `PATCH` route; `pkg/router` already plumbs `PATCH` in its default middleware stack and ServeMux registration, so the addition is a one-line surface change with no underlying-runtime cost.
 
 Within a module, the developer chooses **per section**, not per module:
 
@@ -241,7 +244,7 @@ Because this redesign will produce immediate drift between `pkg/nucleus` and the
 - **Manifest of coverage** in the frontmatter of each `website/docs/*.md(x)` page, declaring which symbols and config keys the page documents (`covers:` and `config_keys:` arrays). Enables cheap reverse lookup from changed symbols to affected pages.
 - **`scripts/website/check-coverage.sh`** (introduced in a follow-up iteration) detects undocumented public symbols and dangling references.
 - **`doc-updater` subagent extended** to read under `website/docs/`, propose edits to pages whose `covers:` list affected symbols. (Landed in the preceding iteration — PR #67, commit `af549bf`, 2026-05-15. The capability is real and available; this ADR commits to its use.)
-- **Code blocks in website docs are imported from `examples/*`** via Docusaurus include syntax, so they cannot drift from real, compilable Go.
+- **Code blocks in website docs are imported from `examples/*`** via Docusaurus include syntax, so they cannot drift from real, compilable Go. *(Deferred to Phase 4 / v0.9.X: the original `examples/*` tree was removed on 2026-05-16 per the owner decision; new reference applications shipping in Phase 4 reintroduce the include-from-source pattern.)*
 - **CI gate**: `.github/workflows/website-check.yml` (follow-up iteration) builds the website, runs `check-coverage.sh`, and verifies imported example files still build.
 - **`contract-guardian` enforcement**: blocks iteration closure if `pkg/*` stable surface changed and the corresponding website page was not updated.
 
@@ -260,8 +263,8 @@ The mechanism's implementation (script, workflow, manifest backfill across exist
 
 ### Negative
 
-- **Rewrite of `pkg/nucleus`.** The current `nucleus.New().Port().SQLite().Model().AutoMigrate().Run()` chain disappears. Pre-`v1.0`, with only two internal example consumers (`examples/ecommerce_dashboard/backend/{main.go,handlers/handlers.go}`), the rewrite is a clean break — those two files are rewritten in the same PR per CLAUDE.md §3. No DEP or MA artefacts are produced; the precedent from ADR-006 / ADR-008 governs.
-- The website needs a substantial rewrite of `quickstart.md` and `project-structure.md`, plus introduction of the manifest pattern across pages. This is its own iteration, scheduled immediately after the fluent v2 implementation iteration.
+- **Rewrite of `pkg/nucleus`.** The current `nucleus.New().Port().SQLite().Model().AutoMigrate().Run()` chain disappears. Pre-`v1.0`, with only two internal example consumers (`examples/ecommerce_dashboard/backend/{main.go,handlers/handlers.go}`), the rewrite is a clean break. **Per the 2026-05-16 owner decision, those two files were not rewritten in the Phase 1 PR; the full `examples/*` tree was removed instead** and new reference applications are authored in v0.9.X as part of Phase 4 / docs-sync. No DEP or MA artefacts are produced; the precedent from ADR-006 / ADR-008 governs.
+- The website needs a substantial rewrite of `quickstart.md` and `project-structure.md`, plus introduction of the manifest pattern across pages. This is its own iteration, scheduled as Phase 4 (docs-sync) and **now bundled with the authoring of new reference applications under a freshly-scoped `examples/`** per the 2026-05-16 owner decision. Target: v0.9.X.
 - The new validator and merge engine add code to `pkg/nucleus`. Mitigated by the fact that they replace ad-hoc validation scattered through the old `Load` + builder flow and provide a single, testable surface.
 
 ### Neutral
@@ -272,7 +275,7 @@ The mechanism's implementation (script, workflow, manifest backfill across exist
 
 After this ADR is Accepted (in the Phase 1 implementation PR — see §Implementation phases below):
 
-1. `pkg/nucleus/nucleus.go` is rewritten to expose the `AppBuilder` chain with the new methods (`FromConfigFile`, `Use`, `Mount`, `WithoutDefaults`, `WithExtensions`, `Build`, `Start`/`Serve`). The legacy single-purpose methods are removed entirely; `examples/ecommerce_dashboard/backend/main.go` and `examples/ecommerce_dashboard/backend/handlers/handlers.go` are updated in the same PR to demonstrate the fluent surface.
+1. `pkg/nucleus/nucleus.go` is rewritten to expose the `AppBuilder` chain with the new methods (`FromConfigFile`, `Use`, `Mount`, `WithoutDefaults`, `WithExtensions`, `Build`, `Start`/`Serve`). The legacy single-purpose methods are removed entirely. **Per the 2026-05-16 owner decision the previous `examples/ecommerce_dashboard/backend/*` consumers are not rewritten in this PR; the full `examples/*` tree is removed instead, and new reference applications demonstrating the fluent surface land in Phase 4 / v0.9.X.**
 2. `pkg/nucleus/router.go` (new) defines the `Router` **interface** and implements the three-style registration (flat, `Resource` with explicit `Methods(...)`, `Group`).
 3. `pkg/nucleus/module.go` (new) defines `ModuleSpec` (type-erased) and `Module[C any]` (generic typed constructor).
 4. `pkg/nucleus/config.go` (new) implements the five-layer validator and the merge engine with `_append`/`_remove` suffix operators.
@@ -294,10 +297,10 @@ After this ADR is Accepted (in the Phase 1 implementation PR — see §Implement
 
 The compliance items above are landed across four iterations, each its own PR:
 
-- **Phase 1 — Foundation.** Compliance items #1, #2, #3, #5, #11. Pins the new package shape: canonical `App{}` struct, `Module[C any]` + `ModuleSpec`, `Router` interface, three-surface equivalence test, freeze-scanner seed. Updates the two `examples/ecommerce_dashboard` consumers in the same PR. ADR `Status` flips from `Proposed` to `Accepted` in this PR's `docs/adrs/ADR-010-fluent-api-v2-pkg-nucleus.md` edit, following the ADR-006 / ADR-008 acceptance pattern.
+- **Phase 1 — Foundation.** Compliance items #1, #2, #3, #5, #11. Pins the new package shape: canonical `App{}` struct, `Module[C any]` + `ModuleSpec`, `Router` interface, three-surface equivalence test, freeze-scanner seed. **Per the 2026-05-16 owner decision the entire `examples/*` tree was removed in this PR** (replacing the original "update the two `examples/ecommerce_dashboard` consumers" path); new reference applications are authored in Phase 4. ADR `Status` flipped from `Proposed` to `Accepted` in this PR's `docs/adrs/ADR-010-fluent-api-v2-pkg-nucleus.md` edit, following the ADR-006 / ADR-008 acceptance pattern.
 - **Phase 2 — Config loading + merge engine.** Compliance items #4, #7, #14, #15, #16, #17.
 - **Phase 3 — Effective-config inspection.** Compliance items #6, #12, #13.
-- **Phase 4 — Docs-sync + website.** Compliance items #8, #9, #10. (#8 already landed; #9 and #10 are the new work.)
+- **Phase 4 — Docs-sync + website + new reference applications.** Compliance items #8, #9, #10. (#8 already landed; #9 and #10 are the new work.) **Per the 2026-05-16 owner decision the new `examples/*` reference applications (replacing the tree removed in Phase 1) land in this phase**, alongside the website rewrite and the docs-sync mechanism. Target window: v0.9.X.
 
 Each phase is independently mergeable after Phase 1 establishes the public shape.
 

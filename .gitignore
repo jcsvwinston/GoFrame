@@ -27,12 +27,6 @@ clean.py
 
 coverage.out
 *.coverprofile
-examples/mvc_api/server
-examples/fleetmanager/server
-examples/fleetmanager/server.pid
-examples/ecommerce_dashboard/backend/server
-examples/ecommerce_dashboard/backend/backend
-examples/mvc_api/storage/_tmp/*
 .DS_Store
 
 # Ephemeral subagent worktrees (Claude Code)

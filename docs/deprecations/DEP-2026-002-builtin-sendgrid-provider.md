@@ -28,7 +28,7 @@ The framework's intent is to ship only protocol-universal senders in-tree. Provi
 
 ## Migration Path
 
-- Replacement: install `nucleus-plugin-sendgrid` on `PATH` and set `mail_driver: sendgrid` in `nucleus.yml`. The framework discovers the binary via the existing external-sender path (`pkg/mail/external.go`). A reference plugin implementation lives in `examples/plugins/mail/`.
+- Replacement: install `nucleus-plugin-sendgrid` on `PATH` and set `mail_driver: sendgrid` in `nucleus.yml`. The framework discovers the binary via the existing external-sender path (`pkg/mail/external.go`). The `mail.send` capability contract is documented in [`docs/reference/PLUGIN_SDK.md`](../reference/PLUGIN_SDK.md); a runnable reference plugin implementation returns with v0.9.X (ADR-010 Phase 4).
 - Behavior differences: the plugin owns the HTTP client, retry policy, and credential handling. The framework no longer reads `sendgrid_api_key` / `sendgrid_endpoint` from `nucleus.yml`; the plugin reads whatever environment variables or config files its own contract documents.
 - Required app changes: any code that constructed `mail.Config{SendGridAPIKey: …, SendGridEndpoint: …}` must drop those fields. Any `nucleus.yml` that set `sendgrid_api_key` / `sendgrid_endpoint` must remove them (the loader rejects unknown keys for unrecognised drivers via the plugin handshake — koanf itself ignores unknown keys, but the plugin's own validation will fail loud if its expected env vars are missing).
 

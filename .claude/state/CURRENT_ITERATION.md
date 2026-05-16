@@ -182,17 +182,96 @@ are produced.
 
 ## Status
 
-### Done
+### Done (2026-05-16)
 
-- (none yet — iteration registered 2026-05-16, work has not started)
+- **`pkg/nucleus` Phase 1 rewrite landed.** New canonical `App{}` struct
+  embedding `app.Config` + Go-only wiring fields (Modules, Middleware,
+  Services, Lifecycle, Options); `AppBuilder` fluent chain with `Use`,
+  `Mount`, `WithoutDefaults`, `WithExtensions`, `Build`, `Start`/`Serve`;
+  `FromConfigFile` Phase 2 stub returning `ErrConfigLoaderNotImplemented`;
+  package-level `Run(App) error` for the direct-struct surface. `Router`
+  interface (`Get`/`Post`/`Put`/`Patch`/`Delete`/`Group`/`Resource`) with
+  three coexisting registration styles; `Module[C any]` generic +
+  type-erased `ModuleSpec`; `Methods(...)` constructor with REST
+  sub-interfaces (`Indexer`/`Shower`/`Creator`/`Updater`/`Patcher`/`Destroyer`).
+  Resource panics at startup if a requested verb is missing on the
+  controller (loud failure per ADR-010 §202). Service goroutine errors
+  log via `core.Logger` filtered against `context.Canceled`.
+  Legacy `routes.go`/`nucleus_test.go`/`routes_test.go` deleted;
+  `context.go`/`context_test.go` kept.
+- **Three-surface equivalence test landed.** `pkg/nucleus/equivalence_test.go`
+  verifies fluent / direct-struct / bootstrap surfaces produce equal
+  `App{}` values under the ADR-010 §79-§85 normalisation rules, including
+  Routes function-reference identity via type-assertion to
+  `moduleSpec[struct{}]`.
+- **Wholesale `examples/*` removal.** All seven trees deleted; runnable
+  lab scripts (`scripts/cluster-{start,stop}.sh`, `scripts/dev/run_admin_cluster_lab.{sh,ps1}`)
+  deleted; example-dependent docs (`docs/ADMIN_CLUSTER_LAB.md`,
+  `docs/reference/PLUGIN_EXAMPLES.md`) deleted. References scrubbed
+  across `.github/workflows/{ci,release}.yml`, `scripts/{ci,release,dev}/*`,
+  `README.md`, `Dockerfile` (now builds `./cmd/nucleus`),
+  `pkg/mail/mail.go` godoc, `admin/README.md`, `docs/guides/MAIL_GUIDE.md`,
+  `docs/governance/ENTERPRISE_LONG_TERM_ROADMAP.md`,
+  `docs/adrs/ADR-004-casbin-default-deny-mount.md`,
+  `docs/migration_assistants/MA-2026-002-sendgrid-builtin-to-plugin.md`,
+  `docs/deprecations/DEP-2026-002-builtin-sendgrid-provider.md`,
+  `docs/reference/{DEVELOPER_MANUAL,PLUGIN_SDK}.md`,
+  `website/docs/features/storage-and-tasks.md`, `.gitignore`.
+- **Compatibility harness `core-build` placeholder profile.** Three
+  fixture profiles (`minimal-api`, `admin-heavy`, `plugin-heavy`) removed
+  from `scripts/ci/run_compatibility_harness.sh`; replaced with a
+  `core-build` placeholder that runs `go build ./pkg/... ./cmd/nucleus
+  ./internal/cli/...`. Harness passes with `Decision: READY` (1/1, 100%).
+- **ADR-010 Status flipped Proposed → Accepted (2026-05-16).**
+  §Pre-`v1.0` framing, §Negative ("consumer rewrite"), §9 #4, Compliance
+  #1, and Phase 1 / Phase 4 entries under §Implementation phases revised
+  to reflect the deletion-not-rewrite decision. §7 also gained a sentence
+  documenting the `Patch` flat-declarative method on `Router`.
+- **Freeze-scanner baseline reseeded.** `pkg/nucleus` added to
+  `contracts/freeze_test.go::stableAPISymbolBaselineLines` (between
+  `pkg/model` and `pkg/observe`). 101 new `pkg/nucleus` entries seeded
+  into `contracts/baseline/api_exported_symbols.txt`. Freeze test green
+  in enforcement mode; the previous false-green is closed.
+- **CHANGELOG `Unreleased` updated.** Two `BREAKING (...)` entries under
+  `### Changed`: `pkg/nucleus rewrite — ADR-010 Phase 1 Foundation`,
+  `examples/* removed`. Semver bump hint: minor (`v0.8.0`) per the
+  ADR-006 / ADR-008 pre-`v1.0` precedent.
+- **Docs updated.** `docs/QUICKSTART.md:83` non-compiling `app.New(cfg).AutoMigrate(...)`
+  chain rewritten to correct method signature; `website/docs/getting-started/quickstart.md`
+  legacy chain code block replaced with admonition pointing at `pkg/nucleus`
+  godoc and ADR-010; `docs/governance/RELEASE_CHECKLIST.md` fixture
+  profile bullets refreshed to mention the `core-build` placeholder and
+  the v0.9.X restoration.
+- **Iteration loop subagents all returned green-or-WARN; no BLOCKER.**
+  architect-reviewer (1 WARN: ADR-010 §7 missing Patch — addressed),
+  code-reviewer (NITS: Resource silent-skip → panic, sortedSpecs reused,
+  gofmt clean, sort.Strings, Err godoc — all addressed),
+  security-auditor (1 MAJOR: service errors silent — addressed via
+  `core.Logger.Error`), contract-guardian (PASS), test-runner (PASS —
+  race lane, contract freeze, compatibility harness, vet, gofmt all green),
+  examples-maintainer (NO_CHANGE_NEEDED — verification clean),
+  doc-updater (UPDATED — 1 BLOCKER + 1 MAJOR + 2 MINORs resolved inline),
+  changelog-writer (LGTM as-is), governance-checker (1 MINOR:
+  RELEASE_CHECKLIST.md stale bullets — addressed).
 
 ### In progress
 
-- (none yet)
+- (none)
 
 ### Blocked
 
 - (none)
+
+### Carried forward to subsequent iterations
+
+- ADR-010 Phase 2 (config loader, merge engine, `WithUnknownFields`,
+  non-nullable security keys, file-size cap, migration namespacing) —
+  next ADR-010 phase.
+- Service-shutdown deadline + `Lifecycle.OnShutdown` deadline (flagged
+  by code-reviewer R2 and security-auditor #9/#10 as Phase 2 follow-ups).
+- `joinPath` double-slash collapse (flagged by code-reviewer N4 as a
+  Phase 2 follow-up when real-world module prefixes combine with nested
+  `Group` calls).
 
 ## Subagent guidance for this iteration
 

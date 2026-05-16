@@ -48,8 +48,8 @@ type ProviderFactory func(cfg Config) (Sender, error)
 // Only protocol-universal providers (SMTP) ship in-tree; provider-
 // specific senders (SendGrid, Mailgun, AWS SES, Postmark, …) are
 // installed as `nucleus-plugin-<provider>` binaries on PATH and
-// discovered via the external sender — see `examples/plugins/mail`
-// for a reference implementation.
+// discovered via the external sender. The `mail.send` capability
+// contract is documented in `docs/reference/PLUGIN_SDK.md`.
 type Config struct {
 	Driver  string
 	Timeout time.Duration

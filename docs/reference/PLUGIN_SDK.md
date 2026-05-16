@@ -224,16 +224,9 @@ Exit code contract:
 - `nucleus plugin doctor` (runtime/config validation)
 - `nucleus plugin test --provider <p> --capability <c>` (contract smoke)
 
-## Official Example Plugins (Current Baseline)
+## Official Example Plugins
 
-Repository-shipped examples:
-
-- `examples/plugins/mail`: `nucleus-plugin-examplemail` (`mail.send`)
-- `examples/plugins/queue`: `nucleus-plugin-examplequeue` (`queue.publish`)
-
-Reference guide:
-
-- `docs/PLUGIN_EXAMPLES.md`
+A runnable reference plugin pair (`mail.send` and `queue.publish`) previously shipped under `examples/plugins/`. It was removed in the ADR-010 Phase 1 iteration (2026-05-16) so it would not constrain the `pkg/nucleus` Fluent API v2 rewrite, and will be re-authored in v0.9.X as part of the ADR-010 Phase 4 / docs-sync iteration. The capability contracts themselves (`mail.send`, `queue.publish`) are stable and documented in this file — external plugin implementations against those contracts continue to work unchanged.
 
 ## Compatibility Commitments (pre-v1)
 

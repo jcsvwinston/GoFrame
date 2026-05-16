@@ -39,62 +39,48 @@ database with environment variables or by editing `nucleus.yml`.
 
 ## 3 — A minimal API in code
 
-If you prefer a single-file app to a scaffolded project, use the fluent
-entry point:
+:::note Phase 1 API — full example coming in v0.9.X
 
-```go
-package main
+The `pkg/nucleus` entry point was rewritten in ADR-010 Phase 1 (landed
+2026-05-16). The legacy fluent chain (`Port`, `SQLite`, `AutoMigrate`,
+`Get`, `Run`, …) is removed. The new Phase 1 surface uses
+`nucleus.New().Use(...).Mount(...).Start()` with `Module`-based
+registration.
 
-import (
-    "github.com/jcsvwinston/nucleus/pkg/nucleus"
-)
+The canonical API is documented in the
+[`pkg/nucleus` godoc](https://github.com/jcsvwinston/nucleus/blob/main/pkg/nucleus/nucleus.go)
+and in [ADR-010](https://github.com/jcsvwinston/nucleus/blob/main/docs/adrs/ADR-010-fluent-api-v2-pkg-nucleus.md). A
+worked single-file example will land in Phase 4 / v0.9.X.
 
-type Article struct {
-    ID    int64  `json:"id"    db:"id,primary"`
-    Title string `json:"title" db:"title" validate:"required"`
-}
+For a self-contained runnable app today, use the scaffolded project from
+steps 1–2 above or the `pkg/app`-based pattern in
+[Concepts → Application](../concepts/application.md).
 
-func main() {
-    nucleus.New().
-        Port(8080).
-        SQLite("app.db").
-        Model(&Article{}).
-        AutoMigrate().
-        Get("/api/articles", func(c *nucleus.Context) error {
-            return c.JSON(200, []Article{{ID: 1, Title: "Hello"}})
-        }).
-        Run()
-}
-```
+:::
 
-`nucleus.New()` returns a builder. The terminal call (`Run`) constructs
-the application container, opens the database, applies the migration plan
-and starts the HTTP server. Every step is explicit; nothing happens at
-import time.
+:::info AutoMigrate (dev-mode only)
 
-:::warning AutoMigrate is dev-mode only
-
-`.AutoMigrate()` derives idempotent `CREATE TABLE` statements from
-struct tags and runs them against the configured database. Five
-dialects are supported: **SQLite, PostgreSQL, MySQL, MSSQL, and
-Oracle** — each via its own deterministic scaffold builder in
+`(*app.App).AutoMigrate(models ...any)` derives idempotent
+`CREATE TABLE` statements from struct tags and runs them against the
+configured database. Five dialects are supported: **SQLite, PostgreSQL,
+MySQL, MSSQL, and Oracle** — each via its own deterministic scaffold
+builder in
 [`pkg/model`](https://github.com/jcsvwinston/nucleus/blob/main/pkg/model).
 On SQLite/Postgres/MySQL the generated SQL uses `CREATE TABLE IF NOT
 EXISTS`; on MSSQL it wraps the CREATE in `IF OBJECT_ID(..., 'U') IS
-NULL`; on Oracle it wraps it in a PL/SQL block that swallows
-`ORA-00955` ("name is already used by an existing object"). Either way
-the operation is safe to re-run.
+NULL`; on Oracle it wraps it in a PL/SQL block that swallows `ORA-00955`
+("name is already used by an existing object"). Either way the operation
+is safe to re-run.
 
-`AutoMigrate` returns `db.ErrAutoMigrate` only for unknown drivers —
-anything outside the five supported dialects above.
+`AutoMigrate` returns `db.ErrAutoMigrate` only for unknown drivers.
 
-Even on supported dialects, `AutoMigrate` does **not** alter existing
-tables — it is `CREATE IF NOT EXISTS` only. For production schema
-evolution, prefer explicit SQL migration files (`migrations/*.up.sql`
-plus `nucleus migrate`): they are reversible, reviewable in PR diffs,
-and the only path the framework offers compatibility guarantees on.
-`nucleus migrate drift` will surface any applied migration that has
-since lost its `.up.sql` file on disk.
+`AutoMigrate` does **not** alter existing tables — it is
+`CREATE IF NOT EXISTS` only. For production schema evolution, prefer
+explicit SQL migration files (`migrations/*.up.sql` plus
+`nucleus migrate`): they are reversible, reviewable in PR diffs, and the
+only path the framework offers compatibility guarantees on.
+`nucleus migrate drift` will surface any applied migration that has since
+lost its `.up.sql` file on disk.
 
 :::
 
@@ -123,7 +109,7 @@ panel at `/admin`.
 
 - **[Project structure](./project-structure.md)** — how a scaffolded
   project is laid out.
-- **[Concepts → Application](../concepts/application.md)** — what
-  `pkg/nucleus.New()` actually wires up.
+- **[Concepts → Application](../concepts/application.md)** — how the
+  application container is wired up (`pkg/app` and `pkg/nucleus`).
 - **[Concepts → Configuration](../concepts/configuration.md)** — the
   `nucleus.yml` schema.

@@ -27,31 +27,28 @@ else
   GORELEASER_CMD=(env GONOSUMDB=github.com/goreleaser/goreleaser/v2 go run github.com/goreleaser/goreleaser/v2@v2.14.1)
 fi
 
-echo "[1/7] Running Go tests"
+echo "[1/6] Running Go tests"
 go test ./...
 
-echo "[2/7] Running MVC/API/Admin smoke test"
-go test ./examples/mvc_api -run TestExampleMVCAPIAdmin_Smoke -v
-
-echo "[3/7] Checking Admin UI JavaScript syntax"
+echo "[2/6] Checking Admin UI JavaScript syntax"
 node --check pkg/admin/ui/components.js
 node --check pkg/admin/ui/app.js
 
-echo "[4/7] Validating GoReleaser configuration"
+echo "[3/6] Validating GoReleaser configuration"
 "${GORELEASER_CMD[@]}" check
 
-echo "[5/7] Building snapshot artifacts (no publish)"
+echo "[4/6] Building snapshot artifacts (no publish)"
 "${GORELEASER_CMD[@]}" release --snapshot --clean --skip=publish --skip=announce
 
 REPORT_DIR="dist/reports"
 mkdir -p "$REPORT_DIR"
 
-echo "[6/7] Generating compatibility report artifact"
+echo "[5/6] Generating compatibility report artifact"
 bash scripts/release/generate_compatibility_report.sh \
   --output "$REPORT_DIR/compatibility_report.md" \
   --enforce-threshold
 
-echo "[7/7] Generating dependency impact report artifact"
+echo "[6/6] Generating dependency impact report artifact"
 bash scripts/release/generate_dependency_impact_report.sh \
   --output "$REPORT_DIR/dependency_impact_report.md"
 
