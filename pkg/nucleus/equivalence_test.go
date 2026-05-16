@@ -211,19 +211,25 @@ func sameFunc(a, b any) bool {
 	return false
 }
 
-// TestFromConfigFile_Phase1Stub verifies that calling FromConfigFile
-// in the Phase 1 build records a deferred ErrConfigLoaderNotImplemented
-// that surfaces on Build / Start. The full multi-layer loader lands in
-// Phase 2.
-func TestFromConfigFile_Phase1Stub(t *testing.T) {
+// TestFromConfigFile_NoPaths verifies the empty-paths guard surfaces a
+// clean error rather than a panic or a silent no-op.
+func TestFromConfigFile_NoPaths(t *testing.T) {
 	t.Parallel()
 
-	b := New().FromConfigFile("nucleus.yaml")
+	b := New().FromConfigFile()
 	if b.Err() == nil {
-		t.Fatal("expected FromConfigFile to record a deferred error in Phase 1")
+		t.Fatal("expected FromConfigFile() with no paths to record an error")
 	}
-	if _, err := b.Build(); err != ErrConfigLoaderNotImplemented {
-		t.Errorf("Build error: got %v, want ErrConfigLoaderNotImplemented", err)
+}
+
+// TestFromConfigFile_MultiPathIsPhase2b verifies that passing multiple
+// paths today fails loud, deferring to Phase 2b for the merge engine.
+func TestFromConfigFile_MultiPathIsPhase2b(t *testing.T) {
+	t.Parallel()
+
+	b := New().FromConfigFile("a.yaml", "b.yaml")
+	if b.Err() == nil {
+		t.Fatal("expected multi-path FromConfigFile to fail in Phase 2a")
 	}
 }
 

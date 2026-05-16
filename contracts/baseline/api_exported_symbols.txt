@@ -642,6 +642,7 @@ github.com/jcsvwinston/nucleus/pkg/model type:QueryOpts
 github.com/jcsvwinston/nucleus/pkg/model type:Registry
 github.com/jcsvwinston/nucleus/pkg/model type:SQLQueryEvent
 github.com/jcsvwinston/nucleus/pkg/model type:SQLQueryObserver
+github.com/jcsvwinston/nucleus/pkg/nucleus const:MaxConfigFileBytes
 github.com/jcsvwinston/nucleus/pkg/nucleus field:App.Lifecycle
 github.com/jcsvwinston/nucleus/pkg/nucleus field:App.Middleware
 github.com/jcsvwinston/nucleus/pkg/nucleus field:App.Modules
@@ -742,7 +743,9 @@ github.com/jcsvwinston/nucleus/pkg/nucleus type:ServiceRegistration
 github.com/jcsvwinston/nucleus/pkg/nucleus type:Shower
 github.com/jcsvwinston/nucleus/pkg/nucleus type:Updater
 github.com/jcsvwinston/nucleus/pkg/nucleus type:WebhookRegistry
-github.com/jcsvwinston/nucleus/pkg/nucleus var:ErrConfigLoaderNotImplemented
+github.com/jcsvwinston/nucleus/pkg/nucleus var:ErrConfigFileTooLarge
+github.com/jcsvwinston/nucleus/pkg/nucleus var:ErrUnknownConfigKeys
+github.com/jcsvwinston/nucleus/pkg/nucleus var:ErrUnsupportedConfigFormat
 github.com/jcsvwinston/nucleus/pkg/observe const:RedactionPlaceholder
 github.com/jcsvwinston/nucleus/pkg/observe field:RedactionConfig.Disabled
 github.com/jcsvwinston/nucleus/pkg/observe field:RedactionConfig.ExtraKeys

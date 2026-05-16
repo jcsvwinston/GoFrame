@@ -34,11 +34,15 @@
 // pkg/nucleus): it pins the canonical struct shape, the `Module[C any]`
 // generic constructor, the `Router` interface with three coexisting
 // registration styles, and the three-surface equivalence guarantee.
-// Configuration loading (`FromConfigFile`) lands shape-only in this
-// phase — the five-layer validator and the suffix-operator merge
-// engine arrive in Phase 2; until then, calling `FromConfigFile`
-// surfaces `ErrConfigLoaderNotImplemented` when the builder is
-// realised via `Build`, `Start`, or `Serve`.
+// Configuration loading lands progressively: Phase 2a (this state)
+// ships `FromConfigFile` against a single YAML file with the 1 MiB
+// size cap (MaxConfigFileBytes), strict-unknown-fields schema
+// validation, and did-you-mean hints for likely typos. Multi-file
+// merge with the `_append` / `_remove` suffix operators is the
+// Phase 2b deliverable — passing more than one path today returns a
+// targeted error referencing that phase. TOML / JSON parsers and
+// the deeper semantic / referential / module-specific validator
+// layers follow in subsequent Phase 2 sub-iterations.
 package nucleus
 
 import (
@@ -78,17 +82,6 @@ func WithExtensions(exts ...Extension) Option { return app.WithExtensions(exts..
 // `app.WithOpenAuthz`. The framework logs a `WARN` at startup when this
 // option is active so the choice is visible in operational telemetry.
 func WithOpenAuthz() Option { return app.WithOpenAuthz() }
-
-// ErrConfigLoaderNotImplemented is returned by `AppBuilder.Build`,
-// `AppBuilder.Start`, and `AppBuilder.Serve` when the application was
-// constructed via `FromConfigFile` and the Phase 1 build of
-// `pkg/nucleus` is in use. The full multi-layer config loader and
-// merge engine lands in ADR-010 Phase 2; until then, callers should
-// either drop the `FromConfigFile(...)` call (configure
-// programmatically) or pass a pre-loaded configuration via the
-// direct-struct surface — the package-level `Run(App)` never goes
-// through the loader and therefore never surfaces this sentinel.
-var ErrConfigLoaderNotImplemented = errors.New("nucleus: FromConfigFile is not implemented in Phase 1 (see ADR-010 §Implementation phases)")
 
 // LifecycleHooks holds app-level callbacks that fire before the
 // HTTP listener starts and after the listener returns. Module-level
@@ -161,14 +154,31 @@ func New() *AppBuilder {
 	}
 }
 
-// FromConfigFile records the intent to load configuration from one or
-// more files. The full implementation — five-layer validator,
-// suffix-operator merge engine, mixed-format support — lands in
-// ADR-010 Phase 2. In Phase 1 the call sets a deferred error on the
-// builder; `Build` / `Start` / `Serve` surface
-// `ErrConfigLoaderNotImplemented`. Including the method on the
-// builder today keeps the public shape stable across phases so module
-// authors can integrate against the canonical signature now.
+// FromConfigFile loads configuration from one or more files. The
+// first path is read via the Phase 2a single-file loader
+// (`loadFromFile` in config.go) which enforces:
+//
+//   - 1 MiB per-file size cap (see MaxConfigFileBytes) — eliminates
+//     parser-DoS classes against the underlying YAML parser.
+//   - YAML format only (extension `.yaml` or `.yml`). TOML and JSON
+//     parsers ship in Phase 2b.
+//   - Strict-unknown-fields schema validation against
+//     `app.ContractConfigKeyPatterns()`. Unknown keys surface as
+//     `ErrUnknownConfigKeys` with did-you-mean hints for likely
+//     typos.
+//
+// Multi-file merge (with the `_append` / `_remove` suffix operators
+// and `null`-resets-to-default semantics) is the Phase 2b deliverable;
+// passing more than one path today surfaces a Phase-2b sentinel error
+// when the builder is realised. The signature accepts variadic paths
+// now so that module authors can write the canonical call site
+// (`FromConfigFile("base.yaml", "override.yaml")`) before the merge
+// engine lands.
+//
+// Errors accumulate on the builder and surface at `Build` / `Start` /
+// `Serve` — the bufio.Scanner pattern. `Err()` exposes the
+// accumulator for callers that want to inspect chain status before
+// realising.
 func (b *AppBuilder) FromConfigFile(paths ...string) *AppBuilder {
 	if b.err != nil {
 		return b
@@ -177,7 +187,23 @@ func (b *AppBuilder) FromConfigFile(paths ...string) *AppBuilder {
 		b.err = errors.New("nucleus: FromConfigFile requires at least one path")
 		return b
 	}
-	b.err = ErrConfigLoaderNotImplemented
+	if len(paths) > 1 {
+		// Phase 2b sentinel — the merge engine isn't ready yet, so
+		// failing loud is safer than silently using only the first
+		// path. The error references the ADR phase so the call-site
+		// hint is actionable.
+		b.err = fmt.Errorf("nucleus: multi-file FromConfigFile is a Phase 2b deliverable (received %d paths)", len(paths))
+		return b
+	}
+	cfg, err := loadFromFile(paths[0])
+	if err != nil {
+		b.err = err
+		return b
+	}
+	// Preserve fluent-chain Modules/Middleware/Services/etc. that the
+	// caller registered before FromConfigFile — only the embedded
+	// app.Config slot is replaced.
+	b.a.Config = *cfg
 	return b
 }
 
