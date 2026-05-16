@@ -56,7 +56,7 @@ authz: WithOpenAuthz() in effect — no authorization checks will run. This is u
 ### Negative
 
 - **Breaking change for any app upgrading.** Existing applications that called `app.New(cfg)` without `admin_rbac_policy_file` set will return 403 on every business endpoint after the upgrade. The escape hatches are `WithOpenAuthz()` (explicit opt-out, traced in logs) or loading a policy file with the desired allow rules.
-- Examples under `examples/*` that currently do not ship policy files need a policy file (or `WithOpenAuthz`) for their MVC routes to keep responding. Acceptable cost — the example apps already declare admin auth, JWT, etc., so adding RBAC is consistent. We update each example as part of the integration sprint that lands this ADR.
+- Reference applications consuming `app.New` need a policy file (or `WithOpenAuthz`) for their MVC routes to keep responding. Acceptable cost — reference apps already declare admin auth, JWT, etc., so adding RBAC is consistent. *(Historical: the original `examples/*` tree was updated at the time this ADR was accepted; the tree was subsequently removed in the ADR-010 Phase 1 iteration on 2026-05-16 and the new reference applications shipping in v0.9.X will satisfy this compliance commitment.)*
 - Some test harnesses construct `app.New` inline and expect 200s on arbitrary routes. Those tests need to either load policies or use `WithOpenAuthz`. The change surfaces in CI on the first integration-sprint PR and is part of its acceptance criteria.
 
 ### Neutral
@@ -70,7 +70,7 @@ After this ADR is accepted:
 1. `pkg/app/app.go` mounts `*authz.Enforcer.Middleware` on the router as part of `New`, after the request-scope middleware and before user-mounted routes.
 2. The bootstrap allow-list is seeded into the enforcer programmatically before the middleware mounts. The list lives in `pkg/authz/policies.go` as `bootstrapAllowList()` or similar — it is not a config-file artefact and cannot be overridden by `admin_rbac_policy_file`.
 3. `app.WithOpenAuthz()` is the only escape hatch; it skips mounting and logs a `WARN`. There is no `Config.OpenAuthz: true` config key — opt-out requires code.
-4. Examples under `examples/*` ship a minimal `policy.csv` or use `WithOpenAuthz` with a justifying comment.
+4. Reference applications ship a minimal `policy.csv` or use `WithOpenAuthz` with a justifying comment. *(Historical: applies to the original `examples/*` tree, removed 2026-05-16; the new reference applications shipping in v0.9.X will carry this compliance commitment forward.)*
 5. The CHANGELOG entry for the integration-sprint PR flips [#41](https://github.com/jcsvwinston/nucleus/pull/41) from "primitive added" to "primitive added + wired by default" and calls out the breaking-change path under `### Changed`.
 6. `docs/guides/AUTH_GUIDE.md` is updated to document the bootstrap allow-list, the WARN log on empty user policy, and the `WithOpenAuthz` escape hatch.
 

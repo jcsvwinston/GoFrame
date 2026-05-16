@@ -1,6 +1,6 @@
 # Quickstart
 
-Reference date: 2026-04-23.
+Reference date: 2026-05-16.
 Status: Current.
 
 This guide gets you from zero to a running Nucleus app quickly.
@@ -80,7 +80,7 @@ SQLite, PostgreSQL, and MySQL are included by default.
 
 ## 7. AutoMigrate — dev mode only
 
-`app.New(cfg).AutoMigrate(&Article{})` derives idempotent `CREATE TABLE` statements from struct tags and runs them against the configured database. **Supported dialects: SQLite, PostgreSQL, MySQL, MSSQL, and Oracle** — each via its own dialect-aware scaffold builder. SQLite/Postgres/MySQL use `CREATE TABLE IF NOT EXISTS`; MSSQL wraps the CREATE in `IF OBJECT_ID(..., 'U') IS NULL`; Oracle uses a PL/SQL block that swallows ORA-00955. The result is safe to re-run on every dialect.
+`(*app.App).AutoMigrate(models ...any)` derives idempotent `CREATE TABLE` statements from struct tags and runs them against the configured database. `app.New(cfg)` returns `(*App, error)` — check the error before calling `AutoMigrate`. **Supported dialects: SQLite, PostgreSQL, MySQL, MSSQL, and Oracle** — each via its own dialect-aware scaffold builder. SQLite/Postgres/MySQL use `CREATE TABLE IF NOT EXISTS`; MSSQL wraps the CREATE in `IF OBJECT_ID(..., 'U') IS NULL`; Oracle uses a PL/SQL block that swallows ORA-00955. The result is safe to re-run on every dialect.
 
 `AutoMigrate` never alters existing tables: it only creates them when absent. For production schema evolution use explicit migration files (`migrations/*.up.sql`) — they are reversible, reviewable in PR diffs, and the only path the framework offers compatibility guarantees on.
 

@@ -100,7 +100,7 @@ run_check() {
 run_check "stable-api-app-core" "go test ./pkg/app -run '^Test(AppNew_|AppRegisterModel|AppShutdown_|AppMethods_)' -count=1"
 run_check "stable-api-http-data" "go test ./pkg/router ./pkg/model ./pkg/db -count=1"
 run_check "stable-cli" "go test ./internal/cli -count=1"
-run_check "stable-plugin-sdk" "go test ./pkg/plugins ./examples/plugins/... -count=1"
+run_check "stable-plugin-sdk" "go test ./pkg/plugins -count=1"
 run_check "stable-config" "go test ./pkg/app -run '^TestLoadConfig_|^TestConfig_' -count=1"
 run_check "stable-contract-freeze" "bash scripts/ci/check_contract_freeze.sh"
 run_check "firewall-type-leaks" "go test ./contracts -run '^TestFirewall_' -count=1"

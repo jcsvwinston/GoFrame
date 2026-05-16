@@ -50,10 +50,7 @@ jobs:
         run: go build ./...
 
       - name: Run Core Race Tests
-        run: go test -race ./pkg/... ./internal/cli ./cmd/nucleus ./examples/mvc_api/... ./examples/plugins/...
-
-      - name: Run Example Smoke
-        run: go test ./examples/mvc_api/cmd/server -run '^TestExampleMVCAPIAdmin_Smoke$' -count=1 -v
+        run: go test -race ./pkg/... ./internal/cli ./cmd/nucleus
 
       - name: Build Admin UI
         working-directory: pkg/admin/ui

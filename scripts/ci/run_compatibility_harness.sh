@@ -91,9 +91,18 @@ run_profile() {
   profile_commands+=("$command")
 }
 
-run_profile "minimal-api" "go test ./examples/mvc_api/cmd/server -run '^TestExampleMVCAPI_Minimal_Smoke$' -count=1 -v"
-run_profile "admin-heavy" "go test ./examples/mvc_api/cmd/server -run '^TestExampleMVCAPIAdmin_Smoke$' -count=1 -v"
-run_profile "plugin-heavy" "go test ./examples/plugins/... -count=1 -v"
+# NOTE: the historical fixture profiles (minimal-api, admin-heavy,
+# plugin-heavy) were backed by examples/mvc_api and examples/plugins.
+# Per ADR-010 Phase 1 + the 2026-05-16 examples purge, all examples
+# were removed; new reference applications will be authored in v0.9.X
+# (ADR-010 Phase 4 / docs-sync iteration). The three fixture profiles
+# are restored together with those new examples.
+#
+# In the interim, the harness verifies that the framework's public
+# packages and binaries still build cleanly — distinct from the main
+# CI job's `go test ./...` lane (this is a build-only check on the
+# stable surface).
+run_profile "core-build" "go build ./pkg/... ./cmd/nucleus ./internal/cli/..."
 
 pass_rate=$((profiles_passed * 100 / profiles_total))
 decision="READY"

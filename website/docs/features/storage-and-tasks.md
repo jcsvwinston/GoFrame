@@ -123,8 +123,10 @@ Two drivers ship out of the box:
 Vendor-specific HTTP providers (SendGrid, Mailgun, AWS SES, Postmark,
 Resend, …) install as `nucleus-plugin-<provider>` binaries on `PATH`
 and are discovered via the capability-style external bridge
-(`pkg/plugins`). A reference skeleton lives at
-[`examples/plugins/mail/`](https://github.com/jcsvwinston/nucleus/tree/main/examples/plugins/mail).
+(`pkg/plugins`). The `mail.send` capability contract is documented
+in the [Plugin SDK reference](https://github.com/jcsvwinston/nucleus/blob/main/docs/reference/PLUGIN_SDK.md);
+a runnable reference skeleton returns with the v0.9.X reference
+applications.
 
 ### Circuit breaker (mail)
 

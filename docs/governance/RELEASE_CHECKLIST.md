@@ -18,10 +18,8 @@ This checklist defines the required validation steps for Nucleus release candida
 ### 2. Compatibility Harness
 
 - [ ] Run compatibility harness: `bash scripts/ci/run_compatibility_harness.sh --min-pass-rate 100 --enforce-threshold`
-  - Tests minimal API fixture application
-  - Tests admin-heavy fixture application
-  - Tests plugin-heavy fixture application
-  - Validates cross-version compile/run behavior
+  - Tests the `core-build` profile (`go build ./pkg/... ./cmd/nucleus ./internal/cli/...`)
+  - Note: the previous fixture profiles (`minimal-api`, `admin-heavy`, `plugin-heavy`) were removed in the ADR-010 Phase 1 iteration on 2026-05-16; they return in v0.9.X with the new reference applications (ADR-010 Phase 4). Until then, this lane covers stable-surface compilation only.
 
 ### 3. Dependency Impact Report
 
