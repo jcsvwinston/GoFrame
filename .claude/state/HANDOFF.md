@@ -3,27 +3,27 @@
 > Owned by `session-curator`. Overwritten at the end of every session
 > by `/handoff`. Read first by `/resume` at the start of the next one.
 
-ITERATION:    2026-05-15 MSSQL/Oracle SchemaDrift introspection — COMPLETE, merged, archived. The pkg/app+pkg/nucleus inventory pass also landed the same day (PR #65). No active iteration.
-BRANCH:       origin/main @ 6a9aa00 (PR #66 squash-merged). Two follow-up chore PRs in flight as of session end: #67 (meta refinements to .claude/agents and .claude/commands) and the state-close PR you are reading right now.
-LAST COMMIT:  6a9aa00 feat(db): MSSQL/Oracle SchemaDrift introspection + live-DB CI lanes (#66)
-STATUS:       done — `Migrator.SchemaDrift` now supports all five engines (SQLite, PG, MySQL, MSSQL, Oracle). `ErrSchemaDriftUnsupported` narrowed to the genuinely-unknown-engine case. Live-DB CI lanes exercise the four matrix engines on every run. Required-lane AutoMigrate live test also retroactively wired into CI (had been compiling but never executing — silent gap closed). 9/9 checks green on the final PR #66 run, including the first live execution of `TestSQLMatrix_SchemaDrift{,_Exploratory}` against real PG/MySQL/MSSQL/Oracle containers.
-NEXT STEP:    Owner picks the next iteration from CURRENT_ITERATION.md §Candidate next steps. Top-ranked: `pkg/admin` bootstrap users-table DDL fix for MSSQL/Oracle (discovered as a side-effect during PR #66 CI; documented as candidate #1). Second: Cloud Secrets Provider plugin extraction starting with AWS (3-iteration project per the SendGrid precedent).
+ITERATION:    ADR-010 Phase 1 (Fluent API v2 Foundation) + wholesale removal of `examples/*`. REGISTERED, not yet started. See `.claude/state/CURRENT_ITERATION.md` for the full scope, acceptance criteria, and per-subagent guidance.
+BRANCH:       claude/thirsty-matsumoto-8c6d9a (worktree). `main` is at c59d775 (PR #69 — ADR-010 Phase 0 revised draft, merged 2026-05-16).
+LAST COMMIT:  c59d775 docs(adr): ADR-010 Phase 0 — revised draft after subagent review (#69)
+STATUS:       Iteration registered today. Two state files written in this worktree (CURRENT_ITERATION.md, HANDOFF.md); no code or docs touched yet.
+NEXT STEP:    Run `/iterate` to begin Phase 1. The iteration loop owns its work; the per-subagent scope guidance in `CURRENT_ITERATION.md` §"Subagent guidance for this iteration" pre-resolves the two scope inversions (`examples-maintainer` verifies deletion, `migration-assistant` is not invoked) so the loop does not have to rediscover them.
 BLOCKERS:     none.
 FILES OF INTEREST:
-  - docs/iterations/2026-05-15-mssql-oracle-schemadrift.md — archived SchemaDrift iteration with the full follow-up list.
-  - docs/iterations/2026-05-15-pkg-app-nucleus-inventory.md — archived inventory pass; input for the Fluent API v2 ADR.
-  - docs/adrs/ADR-009-schema-drift-detection.md — SchemaDrift design + 2026-05-15 addendum.
-  - docs/adrs/ADR-010-fluent-api-v2-pkg-nucleus.md (UNTRACKED in primary working tree) — owner's draft of the Fluent API v2 ADR; preserved intentionally, owner decides when to commit it.
-  - pkg/admin/ — target for the top-ranked next iteration (admin bootstrap DDL fix).
-  - pkg/auth/secrets/ — target for the Cloud Secrets Provider plugin extraction (next-next iteration).
+  - .claude/state/CURRENT_ITERATION.md — the authoritative scope and acceptance criteria for this iteration.
+  - docs/adrs/ADR-010-fluent-api-v2-pkg-nucleus.md — Status currently Proposed; flips to Accepted in this PR. §263, §244 (Compliance §9 #4), §297, Compliance #1 receive textual revisions to reflect the deletion-not-rewrite decision.
+  - docs/iterations/2026-05-15-pkg-app-nucleus-inventory.md — input inventory.
+  - pkg/nucleus/nucleus.go — target of the rewrite.
+  - contracts/baseline/api_exported_symbols.txt — baseline reseeded at end of Phase 1.
+  - examples/ — entire tree deleted; references scrubbed across .github/workflows, scripts/, docs/ (excluding historical archives under docs/iterations, docs/reports, docs/audits), README.md.
 
 NOTES:
-  - Discovery during PR #66 CI: `pkg/admin`'s bootstrap users-table DDL is not dialect-aware. MSSQL fails with `Incorrect syntax near 'nucleus_admin_users'`; Oracle fails with `ORA-03076: unexpected item DEFAULT`. Even with `app.New(cfg, WithoutDefaults())` the admin bootstrap runs (gated by `AdminBootstrapEmail`, not by `WithoutDefaults`). The CI workflow carries NOTE comments at the exploratory lanes pointing at this; the next iteration owner picks it up and re-wires `TestSQLMatrix_AutoMigrate_Exploratory` back in once the DDL is fixed.
-  - Decision logged in CURRENT_ITERATION.md: the original "Phase 4 AWS SDK opt-in via build tag" candidate is dropped in favour of plugin extraction. Build tags would leave AWS deps in go.mod and only save link size; the plugin path removes them from the supply chain entirely. Skip the stopgap, go direct.
-  - Decision logged: the audit §7 task 2 `pkg/storage` baseline candidate was already closed during PR #63's coordinated rebaseline. Verified: `pkg/storage` listed in `contracts/freeze_test.go:161` with 134 entries in the baseline.
+  - **Owner decision (2026-05-16):** every `examples/*` tree is deleted in this PR rather than rewriting the two `examples/ecommerce_dashboard/backend/*` consumers ADR-010 §263 originally specified. Existing examples are obsolete; new reference applications will be authored in v0.9.X (Phase 4 / docs-sync iteration). Consistent with pre-`v1.0`, single-maintainer, no-external-users posture and the ADR-006 / ADR-008 clean-break precedent.
+  - Side-effect: `scripts/ci/run_compatibility_harness.sh` loses its `minimal-api`, `admin-heavy`, `plugin-heavy` profiles for this window. They get restored together with the new examples in v0.9.X.
+  - The state-file write happened in worktree `claude/thirsty-matsumoto-8c6d9a`; commit + PR + merge of these two files to `main` is the first concrete action of the iteration (they need to land before `/iterate` will read them on a fresh clone).
 
 OPEN HOUSEKEEPING (none blocking, carried from prior sessions):
-  - `go mod tidy` cannot run cleanly (pre-existing admin/proto replace-directive issue) — AWS SDK modules show as `// indirect`. Will become moot once candidate #2 (plugin extraction) lands.
+  - `go mod tidy` cannot run cleanly (pre-existing admin/proto replace-directive issue) — AWS SDK modules show as `// indirect`. Will become moot once the Cloud Secrets plugin extraction lands.
   - `panic(` count in non-test code reportedly 4→0 since b1e497e — still unconfirmed; worth a quick verification pass in a quiet session.
 
-Updated: 2026-05-15
+Updated: 2026-05-16
