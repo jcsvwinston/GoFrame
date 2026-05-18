@@ -135,10 +135,11 @@ type App struct {
 // config file, …) are surfaced when the builder is realised via
 // `Build`, `Start`, or `Serve`.
 type AppBuilder struct {
-	a                App
-	err              error
-	configStrict     bool // ADR-010 §3 — reject mixed-format file lists in FromConfigFile.
-	configFileLoaded bool // set after FromConfigFile succeeds; gates misordered WithConfigStrict.
+	a                   App
+	err                 error
+	configStrict        bool   // ADR-010 §3 — reject mixed-format file lists in FromConfigFile.
+	configUnknownFields string // ADR-010 §15 — "strict" (default) or "warn".
+	configFileLoaded    bool   // set after FromConfigFile succeeds; gates misordered WithConfigStrict / WithUnknownFields.
 }
 
 // New returns an `AppBuilder` seeded with the framework's
@@ -200,7 +201,10 @@ func (b *AppBuilder) FromConfigFile(paths ...string) *AppBuilder {
 		b.err = errors.New("nucleus: FromConfigFile requires at least one path")
 		return b
 	}
-	cfg, err := loadFromFiles(paths, configLoadOptions{strict: b.configStrict})
+	cfg, err := loadFromFiles(paths, configLoadOptions{
+		strict:        b.configStrict,
+		unknownFields: b.configUnknownFields,
+	})
 	if err != nil {
 		b.err = err
 		return b
@@ -238,6 +242,48 @@ func (b *AppBuilder) WithConfigStrict(strict bool) *AppBuilder {
 	}
 	b.configStrict = strict
 	return b
+}
+
+// WithUnknownFields configures how `FromConfigFile` reacts to keys
+// present in a file but absent from `app.Config`'s schema. Two
+// modes are accepted (see `UnknownFieldsStrict` / `UnknownFieldsWarn`
+// constants):
+//
+//   - `"strict"` (default): unknown keys reject the load with
+//     `ErrUnknownConfigKeys` and a did-you-mean hint.
+//   - `"warn"`: unknown keys emit a `WARN`-level slog event listing
+//     the offending keys; the load proceeds with the unknowns
+//     stripped so they do not leak into the merged config.
+//
+// ADR-010 §15: when `WithUnknownFields("warn")` is active outside
+// production, the loader additionally emits a "do not deploy to
+// production" WARN at load time. The `NUCLEUS_ENV=production`
+// environment variable is the operator escape hatch: when set, the
+// loader forces the mode back to strict regardless of code-level
+// configuration, and emits a WARN recording the override. A future
+// build leaving `WithUnknownFields("warn")` in production code is
+// therefore not silently exposed to typo'd config values.
+//
+// Any value other than the two accepted modes records
+// `ErrInvalidUnknownFieldsMode` as a deferred builder error. Like
+// `WithConfigStrict`, the call must happen BEFORE `FromConfigFile`;
+// calling it after records the misorder error.
+func (b *AppBuilder) WithUnknownFields(mode string) *AppBuilder {
+	if b.err != nil {
+		return b
+	}
+	if b.configFileLoaded {
+		b.err = errors.New("nucleus: WithUnknownFields must be called before FromConfigFile (re-order the builder chain so the mode is set first)")
+		return b
+	}
+	switch mode {
+	case UnknownFieldsStrict, UnknownFieldsWarn:
+		b.configUnknownFields = mode
+		return b
+	default:
+		b.err = fmt.Errorf("%w: got %q", ErrInvalidUnknownFieldsMode, mode)
+		return b
+	}
 }
 
 // Use appends global middleware to be applied to the underlying

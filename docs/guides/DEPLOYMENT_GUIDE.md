@@ -742,7 +742,7 @@ otlp_endpoint: http://otel-collector:4318
 
 ### Security
 
-- [ ] `NUCLEUS_ENV=production` set
+- [ ] `NUCLEUS_ENV=production` set (also forces `UnknownFieldsStrict` — any typo'd config key that slipped through development with `WithUnknownFields("warn")` will now abort startup)
 - [ ] Strong `jwt_secret` (64-byte random hex) — or use the rotation API (`auth.NewJWTManagerFromKeys` + RS256 keypair) and publish `/.well-known/jwks.json`
 - [ ] JWT rotation plan documented (RotateKey → grace window → RemoveKey)
 - [ ] `session_cookie_secure: true` (HTTPS only)

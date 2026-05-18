@@ -643,7 +643,10 @@ github.com/jcsvwinston/nucleus/pkg/model type:QueryOpts
 github.com/jcsvwinston/nucleus/pkg/model type:Registry
 github.com/jcsvwinston/nucleus/pkg/model type:SQLQueryEvent
 github.com/jcsvwinston/nucleus/pkg/model type:SQLQueryObserver
+github.com/jcsvwinston/nucleus/pkg/nucleus const:EnvProduction
 github.com/jcsvwinston/nucleus/pkg/nucleus const:MaxConfigFileBytes
+github.com/jcsvwinston/nucleus/pkg/nucleus const:UnknownFieldsStrict
+github.com/jcsvwinston/nucleus/pkg/nucleus const:UnknownFieldsWarn
 github.com/jcsvwinston/nucleus/pkg/nucleus field:App.Lifecycle
 github.com/jcsvwinston/nucleus/pkg/nucleus field:App.Middleware
 github.com/jcsvwinston/nucleus/pkg/nucleus field:App.Modules
@@ -703,6 +706,7 @@ github.com/jcsvwinston/nucleus/pkg/nucleus method:AppBuilder.Start
 github.com/jcsvwinston/nucleus/pkg/nucleus method:AppBuilder.Use
 github.com/jcsvwinston/nucleus/pkg/nucleus method:AppBuilder.WithConfigStrict
 github.com/jcsvwinston/nucleus/pkg/nucleus method:AppBuilder.WithExtensions
+github.com/jcsvwinston/nucleus/pkg/nucleus method:AppBuilder.WithUnknownFields
 github.com/jcsvwinston/nucleus/pkg/nucleus method:AppBuilder.WithoutDefaults
 github.com/jcsvwinston/nucleus/pkg/nucleus method:Context.BindForm
 github.com/jcsvwinston/nucleus/pkg/nucleus method:Context.BindJSON
@@ -746,6 +750,7 @@ github.com/jcsvwinston/nucleus/pkg/nucleus type:Shower
 github.com/jcsvwinston/nucleus/pkg/nucleus type:Updater
 github.com/jcsvwinston/nucleus/pkg/nucleus type:WebhookRegistry
 github.com/jcsvwinston/nucleus/pkg/nucleus var:ErrConfigFileTooLarge
+github.com/jcsvwinston/nucleus/pkg/nucleus var:ErrInvalidUnknownFieldsMode
 github.com/jcsvwinston/nucleus/pkg/nucleus var:ErrMixedConfigFormats
 github.com/jcsvwinston/nucleus/pkg/nucleus var:ErrSecurityKeyNotNullable
 github.com/jcsvwinston/nucleus/pkg/nucleus var:ErrUnknownConfigKeys
