@@ -78,8 +78,13 @@ strings (`15s`, `2m`).
 ## Config keys are part of the contract
 
 Every registered config key is part of the stable surface. `internal/cli`
-and `pkg/app/config.go` validate the schema at load time; unknown keys
-are rejected to keep typos from silently doing nothing.
+and `pkg/app/config.go` validate the schema at load time. By default
+(`UnknownFieldsStrict`) unknown keys reject the load with a did-you-mean
+hint, keeping typos from silently doing nothing. The `pkg/nucleus` builder
+exposes `AppBuilder.WithUnknownFields(nucleus.UnknownFieldsWarn)` to
+downgrade unknown-key failures to `WARN`-level slog events during
+development; `NUCLEUS_ENV=production` forces strict mode regardless of
+the code-level setting.
 
 The freeze tests under `contracts/` ensure that:
 

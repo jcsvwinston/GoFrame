@@ -2,7 +2,7 @@
 // surfaced by `AppBuilder.FromConfigFile`. ADR-010 §2 names this as
 // Phase 2 work. Phase 2a (PR #73) shipped the single-file YAML loader
 // with the 1 MiB size cap, schema strict-unknown-fields validation,
-// and did-you-mean hints. Phase 2b (this file) layers on top:
+// and did-you-mean hints. Phase 2b (#74) layered on top:
 //
 //   - TOML and JSON parsers (extension-based dispatch).
 //   - Multi-file merge with last-file-wins semantics, deep-merge for
@@ -17,15 +17,30 @@
 //     emit a startup warning by default and are rejected outright when
 //     `AppBuilder.WithConfigStrict(true)` is in force.
 //
+// Phase 2c (this commit) layers the ADR-010 §15 strict-mode startup
+// guard:
+//
+//   - `AppBuilder.WithUnknownFields(UnknownFieldsStrict | UnknownFieldsWarn)`
+//     toggles strict schema validation per builder. Warn mode emits a
+//     `WARN`-level slog event listing the offending keys and proceeds
+//     with the load; strict mode (the default) keeps the Phase 2a
+//     reject-with-`ErrUnknownConfigKeys` behaviour.
+//   - `NUCLEUS_ENV=production` (case-insensitive, whitespace-trimmed;
+//     constant `EnvProduction`) is the operator escape hatch: when set,
+//     the loader forces the mode back to strict regardless of code-level
+//     configuration and emits a `WARN` recording the override.
+//   - Two startup `WARN`s for visibility: one when warn mode is active
+//     outside production ("do not deploy to production"), one when the
+//     production override fires.
+//
 // The package-level `Run(App)` and the direct-struct surface never
 // traverse this loader — only the builder-chain `FromConfigFile` does.
 //
 // What's still deferred:
 //
-//   - Phase 2c — `WithUnknownFields("warn")` opt-out from strict
-//     schema validation and the `NUCLEUS_ENV=production` strict
-//     override.
 //   - Phase 2d — module migration namespacing in `pkg/db/migrate.go`.
+//   - Layer 3 range/enum semantic validation (out of the 4-phase
+//     slicing; tracked as a follow-up).
 //   - Phase 3 — `/_/config` endpoint and `nucleus config print
 //     --effective` (which require per-key source tracking the loader
 //     does not yet capture).
@@ -94,6 +109,54 @@ var ErrSecurityKeyNotNullable = errors.New("nucleus: security key may not be nul
 // strict mode off (the default), a mixed-format file list emits a
 // `WARN`-level slog event but proceeds with the merge.
 var ErrMixedConfigFormats = errors.New("nucleus: configuration files mix incompatible formats")
+
+// ErrInvalidUnknownFieldsMode is returned by
+// `AppBuilder.WithUnknownFields` when the supplied mode is neither
+// `UnknownFieldsStrict` nor `UnknownFieldsWarn`. The error is
+// deferred onto the builder so the misuse surfaces at `Build` /
+// `Start` / `Serve` time alongside any other deferred chain error.
+var ErrInvalidUnknownFieldsMode = errors.New("nucleus: WithUnknownFields requires mode \"strict\" or \"warn\"")
+
+// UnknownFieldsStrict and UnknownFieldsWarn are the two values
+// accepted by `AppBuilder.WithUnknownFields`. ADR-010 §15 specifies
+// the strings; the framework exports them as constants so callers
+// can avoid string-literal typos at the call site (`nucleus.UnknownFieldsWarn`
+// reads better than `"warn"` in IDEs and survives refactors). New
+// modes are not anticipated — if one ever lands it joins the union
+// here and the validation in `WithUnknownFields` is extended.
+const (
+	UnknownFieldsStrict = "strict"
+	UnknownFieldsWarn   = "warn"
+)
+
+// EnvProduction is the value of the `NUCLEUS_ENV` environment
+// variable that the framework treats as "production-strict":
+// regardless of `WithUnknownFields("warn")`, the loader rejects
+// unknown configuration keys when `NUCLEUS_ENV=production` is set.
+// ADR-010 §15 specifies this as the operator escape hatch against a
+// developer who accidentally left warn mode in a production build.
+const EnvProduction = "production"
+
+// nucleusEnv is the indirection the loader uses to read
+// `NUCLEUS_ENV`. Tests reach this hook via `t.Setenv("NUCLEUS_ENV",
+// ...)` against the underlying process environment — the hook itself
+// is not reassigned. Centralising the read keeps a single audit
+// surface for any future override (build tag, secret manager) that
+// needs to feed the loader's production-strict decision.
+var nucleusEnv = func() string { return os.Getenv("NUCLEUS_ENV") }
+
+// isProductionEnv reports whether the calling process is running
+// under `NUCLEUS_ENV=production`. `strings.TrimSpace` strips all
+// leading and trailing Unicode whitespace (spaces, tabs, newlines)
+// so a stray newline at the end of an env-var assignment cannot
+// silently downgrade the strict override; the equality compare is
+// case-insensitive so `Production` / `PRODUCTION` qualify alongside
+// `production`. Any value other than the trimmed-and-case-folded
+// `production` (constant `EnvProduction`) — including `prod`,
+// `prd`, `live`, `staging` — does not trigger the override.
+func isProductionEnv() bool {
+	return strings.EqualFold(strings.TrimSpace(nucleusEnv()), EnvProduction)
+}
 
 // configFormat identifies the parser dispatched for a given file
 // extension. The set is intentionally finite — extending it requires
@@ -206,11 +269,13 @@ func loadFromFile(path string) (*app.Config, error) {
 }
 
 // configLoadOptions carries the toggles the AppBuilder threads into
-// the loader. Currently a single flag — `WithConfigStrict(true)` —
-// but the struct gives Phase 2c room to grow without churning the
-// loadFromFiles signature.
+// the loader. The struct lets Phase 2c grow new fields without
+// churning the `loadFromFiles` signature: today it carries the
+// mixed-format strict flag (`WithConfigStrict(true)`) and the
+// unknown-fields mode (`WithUnknownFields("strict"|"warn")`).
 type configLoadOptions struct {
-	strict bool
+	strict        bool
+	unknownFields string // "strict" (default) or "warn"
 }
 
 // loadFromFiles is the Phase 2b multi-file loader. The precedence
@@ -254,6 +319,33 @@ func loadFromFiles(paths []string, opts configLoadOptions) (*app.Config, error) 
 	}
 	if err := checkMixedFormats(paths, formats, opts.strict); err != nil {
 		return nil, err
+	}
+
+	// Resolve the effective unknown-fields mode for this load.
+	// ADR-010 §15: NUCLEUS_ENV=production overrides any code-level
+	// WithUnknownFields("warn") back to strict, and emits a WARN
+	// slog event recording the override. WithUnknownFields("warn")
+	// active outside production emits a different WARN that names
+	// the operator footgun ("do not deploy to production").
+	effectiveUnknownFields := opts.unknownFields
+	if effectiveUnknownFields == "" {
+		effectiveUnknownFields = UnknownFieldsStrict
+	}
+	prodEnv := isProductionEnv()
+	if effectiveUnknownFields == UnknownFieldsWarn && prodEnv {
+		slog.Default().Warn("nucleus: production environment overrides WithUnknownFields to STRICT",
+			"env_var", "NUCLEUS_ENV",
+			"env_value", EnvProduction,
+			"requested_mode", UnknownFieldsWarn,
+			"effective_mode", UnknownFieldsStrict,
+		)
+		effectiveUnknownFields = UnknownFieldsStrict
+	} else if effectiveUnknownFields == UnknownFieldsWarn {
+		slog.Default().Warn("nucleus: unknown-fields mode is WARN, not STRICT — do not deploy to production",
+			"mode", UnknownFieldsWarn,
+			"override_env_var", "NUCLEUS_ENV",
+			"override_env_value", EnvProduction,
+		)
 	}
 
 	// Initialise the running koanf with struct defaults. Every file's
@@ -300,11 +392,28 @@ func loadFromFiles(paths []string, opts configLoadOptions) (*app.Config, error) 
 			return nil, err
 		}
 
-		// Layer 2 strict schema, same as Phase 2a — after operators
-		// have been stripped so a key like `cors_origins_append` does
-		// not trip the unknown-keys check.
+		// Layer 2 schema, same as Phase 2a — after operators have
+		// been stripped so a key like `cors_origins_append` does not
+		// trip the unknown-keys check. ADR-010 §15: in `warn` mode
+		// the loader emits a per-file `WARN` listing the offending
+		// keys but proceeds with the merge; in `strict` mode (the
+		// default, also forced by NUCLEUS_ENV=production) the load
+		// rejects with `ErrUnknownConfigKeys`.
 		if unknown := unknownKeys(fileK.All(), schemaKeys); len(unknown) > 0 {
-			return nil, formatUnknownKeys(unknown, schemaKeys, path)
+			if effectiveUnknownFields == UnknownFieldsWarn {
+				slog.Default().Warn("nucleus: unknown configuration key(s) ignored under WithUnknownFields(\"warn\"); strict mode would reject",
+					"path", path,
+					"keys", unknown,
+				)
+				// Strip the unknown keys from fileK so the
+				// subsequent Merge does not splash unrecognised
+				// values into the running config.
+				for _, k := range unknown {
+					fileK.Delete(k)
+				}
+			} else {
+				return nil, formatUnknownKeys(unknown, schemaKeys, path)
+			}
 		}
 
 		// Deep-merge the file's cleaned content into the running

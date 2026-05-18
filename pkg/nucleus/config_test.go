@@ -668,3 +668,106 @@ func equalStringSlice(a, b []string) bool {
 	}
 	return true
 }
+
+// --- Phase 2c: WithUnknownFields + NUCLEUS_ENV override ---
+
+func TestLoadFromFiles_UnknownFieldsWarnAllowsLoad(t *testing.T) {
+	// Cannot run in parallel: mutates t.Setenv (NUCLEUS_ENV must
+	// not be `production` for this test path to exercise warn).
+	t.Setenv("NUCLEUS_ENV", "")
+
+	path := writeTempConfig(t, ".yaml", "port: 9090\nbogus_field: ignore_me\n")
+	cfg, err := loadFromFiles([]string{path}, configLoadOptions{
+		unknownFields: UnknownFieldsWarn,
+	})
+	if err != nil {
+		t.Fatalf("warn-mode load should not return an error for unknown keys, got %v", err)
+	}
+	if cfg.Port != 9090 {
+		t.Errorf("Port: got %d want 9090 (known keys should still apply)", cfg.Port)
+	}
+}
+
+func TestLoadFromFiles_UnknownFieldsStrictRejectsAsBefore(t *testing.T) {
+	t.Parallel()
+
+	path := writeTempConfig(t, ".yaml", "port: 9090\nbogus_field: nope\n")
+	_, err := loadFromFiles([]string{path}, configLoadOptions{
+		unknownFields: UnknownFieldsStrict,
+	})
+	if !errors.Is(err, ErrUnknownConfigKeys) {
+		t.Fatalf("strict-mode load should reject unknown keys, got %v", err)
+	}
+}
+
+func TestLoadFromFiles_ProductionEnvOverridesWarnToStrict(t *testing.T) {
+	// Cannot run in parallel: mutates NUCLEUS_ENV.
+	t.Setenv("NUCLEUS_ENV", "production")
+
+	path := writeTempConfig(t, ".yaml", "port: 9090\nbogus_field: trap\n")
+	_, err := loadFromFiles([]string{path}, configLoadOptions{
+		unknownFields: UnknownFieldsWarn,
+	})
+	if !errors.Is(err, ErrUnknownConfigKeys) {
+		t.Fatalf("NUCLEUS_ENV=production should force strict even with warn requested; got %v", err)
+	}
+}
+
+func TestLoadFromFiles_ProductionEnvCaseInsensitive(t *testing.T) {
+	// Cannot run in parallel.
+	t.Setenv("NUCLEUS_ENV", " Production\n")
+
+	path := writeTempConfig(t, ".yaml", "port: 9090\nbogus: trap\n")
+	_, err := loadFromFiles([]string{path}, configLoadOptions{
+		unknownFields: UnknownFieldsWarn,
+	})
+	if !errors.Is(err, ErrUnknownConfigKeys) {
+		t.Fatalf("case-insensitive / whitespace-trimmed NUCLEUS_ENV match should still force strict; got %v", err)
+	}
+}
+
+func TestAppBuilder_WithUnknownFields_PlumbsToLoader(t *testing.T) {
+	// Cannot run in parallel.
+	t.Setenv("NUCLEUS_ENV", "")
+
+	path := writeTempConfig(t, ".yaml", "port: 9090\nbogus_field: ignore_me\n")
+	a, err := New().WithUnknownFields(UnknownFieldsWarn).FromConfigFile(path).Build()
+	if err != nil {
+		t.Fatalf("builder warn-mode: %v", err)
+	}
+	if a.Port != 9090 {
+		t.Errorf("Port: got %d want 9090", a.Port)
+	}
+}
+
+func TestAppBuilder_WithUnknownFields_DefaultIsStrict(t *testing.T) {
+	t.Parallel()
+
+	path := writeTempConfig(t, ".yaml", "port: 9090\nbogus_field: nope\n")
+	b := New().FromConfigFile(path)
+	if !errors.Is(b.Err(), ErrUnknownConfigKeys) {
+		t.Fatalf("default mode should be strict; got %v", b.Err())
+	}
+}
+
+func TestAppBuilder_WithUnknownFields_InvalidMode(t *testing.T) {
+	t.Parallel()
+
+	b := New().WithUnknownFields("loose")
+	if !errors.Is(b.Err(), ErrInvalidUnknownFieldsMode) {
+		t.Errorf("invalid mode should record ErrInvalidUnknownFieldsMode; got %v", b.Err())
+	}
+}
+
+func TestAppBuilder_WithUnknownFields_MisorderGuard(t *testing.T) {
+	t.Parallel()
+
+	path := writeTempConfig(t, ".yaml", "port: 9090\n")
+	b := New().FromConfigFile(path).WithUnknownFields(UnknownFieldsWarn)
+	if b.Err() == nil {
+		t.Fatal("WithUnknownFields after FromConfigFile should record a deferred error")
+	}
+	if !strings.Contains(b.Err().Error(), "before FromConfigFile") {
+		t.Errorf("misorder error should hint at the correct ordering, got %q", b.Err().Error())
+	}
+}
