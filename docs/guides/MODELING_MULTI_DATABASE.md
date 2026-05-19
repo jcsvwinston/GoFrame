@@ -1,6 +1,6 @@
 # Multi-Database Modeling Guide
 
-Reference date: 2026-04-07.
+Reference date: 2026-05-19.
 Status: Current.
 
 This guide explains how to add models to Nucleus with a long-term, backward-compatible strategy across multiple database engines.
@@ -157,6 +157,58 @@ Behavior:
 - deterministic FK constraint naming: `fk_<table>_<column>__<ref_table>_<ref_column>`
 - deterministic index naming when explicit names are provided in metadata
 - generated `down` migrations drop indexes before dropping the table
+
+## 2.6 Module-Scoped Migrations (`NewModuleMigrator`)
+
+When multiple framework modules share a single database alias it is possible for
+two modules to ship a migration file with the same filename — for example both
+`articles` and `comments` may have `001_init.up.sql`. The bare `NewMigrator`
+constructor stores applied-migration rows under the raw file-derived ID, so a
+second module whose `001_init.up.sql` is applied would collide on the primary
+key insert in `nucleus_schema_migrations`.
+
+`NewModuleMigrator` solves this by namespacing every storage ID under
+`<moduleName>/`:
+
+```go
+import "github.com/jcsvwinston/nucleus/pkg/db"
+
+migrator := db.NewModuleMigrator(database, "modules/articles/migrations", "articles", logger)
+if err := migrator.Up(); err != nil {
+    return err
+}
+```
+
+The rows written to `nucleus_schema_migrations` and
+`nucleus_schema_migration_checksums` will be keyed `articles/001_init`,
+`articles/002_add_index`, and so on. A second module:
+
+```go
+migrator := db.NewModuleMigrator(database, "modules/comments/migrations", "comments", logger)
+```
+
+writes `comments/001_init`, `comments/002_add_index` — no collision.
+
+**Drift is ownership-aware.** `Migrator.Drift` only reports rows that belong to
+the current Migrator. A module-scoped Migrator skips rows whose storage IDs
+carry a different module prefix (or no prefix at all); the bare unscoped
+Migrator skips all namespaced rows.
+
+**`moduleName` constraints.** The name must be non-empty and must not contain
+`/` (the namespace separator). Violations are caught at construction time and
+reported as a `panic` because they represent a programming error that cannot be
+recovered from at runtime.
+
+**On-disk filenames stay clean.** Migration files are still named
+`001_init.up.sql` — not `articles_001_init.up.sql`. The namespace is a storage
+concern only; it does not bleed into the file layout. This is consistent with
+module-author expectations when the module lives in its own directory tree.
+
+**Backward compatibility.** `NewMigrator` (unscoped) is unchanged. Any
+application that already has a migration history under bare IDs does not need to
+rename rows or re-apply migrations. Use `NewMigrator` for the host application's
+own migration path; use `NewModuleMigrator` for every packaged module that may
+share a database alias with another.
 
 ## 3. Multi-Database Configuration
 

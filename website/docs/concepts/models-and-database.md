@@ -1,6 +1,20 @@
 ---
 sidebar_position: 4
 title: Models & database
+covers:
+  - pkg/db.NewMigrator
+  - pkg/db.NewModuleMigrator
+  - pkg/db.Migrator.Up
+  - pkg/db.Migrator.Down
+  - pkg/db.Migrator.Steps
+  - pkg/db.Migrator.Status
+  - pkg/db.Migrator.Drift
+  - pkg/db.Migrator.Create
+  - pkg/db.MigrationStatus
+  - pkg/db.DriftEntry
+config_keys:
+  - databases.default
+  - database_default
 ---
 
 # Models & database
@@ -74,6 +88,25 @@ nucleus migrate down --steps 1
 generate migration --from-model Article` produces a `CREATE TABLE`
 based on the registered model metadata — useful as a starting point,
 not as the final word.
+
+### Module-scoped migrations
+
+When two modules share a database alias they may each ship a file named
+`001_init.up.sql`. `db.NewMigrator` stores rows under the bare file ID, so
+two such files would collide on insert. Use `db.NewModuleMigrator` instead:
+
+```go
+import "github.com/jcsvwinston/nucleus/pkg/db"
+
+// Each module gets its own namespace in nucleus_schema_migrations.
+articlesMigrator := db.NewModuleMigrator(database, "modules/articles/migrations", "articles", logger)
+commentsMigrator := db.NewModuleMigrator(database, "modules/comments/migrations", "comments", logger)
+```
+
+Rows are stored as `articles/001_init`, `comments/001_init`, etc. — no
+collision. `Migrator.Drift` is ownership-aware: it only reports rows that
+belong to the Migrator that calls it. On-disk filenames are unchanged;
+the namespace is a storage concern only.
 
 ## Querying
 

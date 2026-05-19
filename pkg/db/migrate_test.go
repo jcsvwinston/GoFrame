@@ -228,3 +228,276 @@ func tableExists(t *testing.T, d *DB, table string) bool {
 	}
 	return cnt > 0
 }
+
+// --- Phase 2d: module migration namespacing ---
+
+// queryString runs a single-row, single-column scan against the test
+// DB. Used to peek at the framework's bookkeeping tables and assert
+// the namespaced storage IDs are present.
+func queryString(t *testing.T, d *DB, q string, args ...any) string {
+	t.Helper()
+	sqlDB, err := d.SqlDB()
+	if err != nil {
+		t.Fatalf("SqlDB: %v", err)
+	}
+	var v string
+	row := sqlDB.QueryRow(q, args...)
+	if err := row.Scan(&v); err != nil {
+		t.Fatalf("scan: %v (query=%s)", err, q)
+	}
+	return v
+}
+
+// queryInt mirrors queryString for integer columns.
+func queryInt(t *testing.T, d *DB, q string, args ...any) int {
+	t.Helper()
+	sqlDB, err := d.SqlDB()
+	if err != nil {
+		t.Fatalf("SqlDB: %v", err)
+	}
+	var v int
+	row := sqlDB.QueryRow(q, args...)
+	if err := row.Scan(&v); err != nil {
+		t.Fatalf("scan: %v (query=%s)", err, q)
+	}
+	return v
+}
+
+func TestModuleMigrator_PrefixesStorageID(t *testing.T) {
+	d := newTestDB(t)
+	dir := t.TempDir()
+	writeMigrationPair(t, dir, "000001_init",
+		"CREATE TABLE articles_items (id INTEGER PRIMARY KEY, title TEXT);",
+		"DROP TABLE IF EXISTS articles_items;",
+	)
+
+	m := NewModuleMigrator(d, dir, "articles", observe.NewLogger("error", "text"))
+	if err := m.Up(); err != nil {
+		t.Fatalf("Up: %v", err)
+	}
+
+	// Bookkeeping rows must carry the `articles/` prefix in both tables.
+	gotApplied := queryString(t, d, "SELECT id FROM nucleus_schema_migrations WHERE id = ?", "articles/000001_init")
+	if gotApplied != "articles/000001_init" {
+		t.Errorf("applied table: got %q want articles/000001_init", gotApplied)
+	}
+	gotChecksum := queryString(t, d, "SELECT id FROM nucleus_schema_migration_checksums WHERE id = ?", "articles/000001_init")
+	if gotChecksum != "articles/000001_init" {
+		t.Errorf("checksum table: got %q want articles/000001_init", gotChecksum)
+	}
+
+	// The bare (unprefixed) ID must NOT exist anywhere in either table.
+	count := queryInt(t, d, "SELECT COUNT(*) FROM nucleus_schema_migrations WHERE id = ?", "000001_init")
+	if count != 0 {
+		t.Errorf("unprefixed legacy ID present in applied table: %d row(s)", count)
+	}
+	count = queryInt(t, d, "SELECT COUNT(*) FROM nucleus_schema_migration_checksums WHERE id = ?", "000001_init")
+	if count != 0 {
+		t.Errorf("unprefixed legacy ID present in checksum table: %d row(s)", count)
+	}
+
+	// Status() reports the human-readable file ID (no namespace prefix).
+	st, err := m.Status()
+	if err != nil {
+		t.Fatalf("Status: %v", err)
+	}
+	if len(st) != 1 || st[0].ID != "000001_init" {
+		t.Fatalf("Status: got %#v want one entry with file-ID 000001_init", st)
+	}
+	if !st[0].Applied {
+		t.Fatal("Status: migration should be marked applied")
+	}
+}
+
+func TestModuleMigrator_TwoModulesNoCollision(t *testing.T) {
+	// Two modules ship the same migration filename (`000001_init`) and
+	// share a database alias. The old shared-keyspace behaviour would
+	// fail the second Up() with a PRIMARY KEY collision. With Phase
+	// 2d namespacing, both Migrators write distinct storage IDs and
+	// both Up() calls succeed.
+	d := newTestDB(t)
+
+	articlesDir := t.TempDir()
+	usersDir := t.TempDir()
+	writeMigrationPair(t, articlesDir, "000001_init",
+		"CREATE TABLE articles_items (id INTEGER PRIMARY KEY);",
+		"DROP TABLE IF EXISTS articles_items;",
+	)
+	writeMigrationPair(t, usersDir, "000001_init",
+		"CREATE TABLE users_items (id INTEGER PRIMARY KEY);",
+		"DROP TABLE IF EXISTS users_items;",
+	)
+
+	articles := NewModuleMigrator(d, articlesDir, "articles", observe.NewLogger("error", "text"))
+	users := NewModuleMigrator(d, usersDir, "users", observe.NewLogger("error", "text"))
+
+	if err := articles.Up(); err != nil {
+		t.Fatalf("articles.Up: %v", err)
+	}
+	if err := users.Up(); err != nil {
+		t.Fatalf("users.Up (expected to coexist with articles): %v", err)
+	}
+
+	// Both tables must have been created.
+	if !tableExists(t, d, "articles_items") {
+		t.Error("articles_items should exist after articles.Up")
+	}
+	if !tableExists(t, d, "users_items") {
+		t.Error("users_items should exist after users.Up")
+	}
+
+	// Both rows must be present in the bookkeeping tables.
+	applied := queryInt(t, d, "SELECT COUNT(*) FROM nucleus_schema_migrations WHERE id IN (?, ?)", "articles/000001_init", "users/000001_init")
+	if applied != 2 {
+		t.Errorf("expected 2 namespaced rows in applied table; got %d", applied)
+	}
+}
+
+func TestUnscopedMigrator_BackwardCompatible(t *testing.T) {
+	// The legacy `NewMigrator` constructor produces an unscoped
+	// Migrator that stores raw file IDs (no `/` prefix) — preserves
+	// the pre-Phase-2d on-disk schema and history for host
+	// applications that have not adopted the module pattern.
+	d := newTestDB(t)
+	dir := t.TempDir()
+	writeMigrationPair(t, dir, "000001_legacy",
+		"CREATE TABLE legacy_items (id INTEGER PRIMARY KEY);",
+		"DROP TABLE IF EXISTS legacy_items;",
+	)
+	m := NewMigrator(d, dir, observe.NewLogger("error", "text"))
+	if err := m.Up(); err != nil {
+		t.Fatalf("Up: %v", err)
+	}
+
+	// The applied row should be stored as the bare file ID — no
+	// `<module>/` prefix.
+	got := queryString(t, d, "SELECT id FROM nucleus_schema_migrations WHERE id = ?", "000001_legacy")
+	if got != "000001_legacy" {
+		t.Errorf("unscoped Migrator should store raw file ID; got %q", got)
+	}
+}
+
+func TestUnscopedMigrator_IgnoresModuleRowsInDrift(t *testing.T) {
+	// Drift() should only report the migrations the current Migrator
+	// owns. An unscoped Migrator running against a DB that ALSO has
+	// namespaced rows from a module-scoped Migrator must not flag the
+	// foreign rows as missing-up-file drift.
+	d := newTestDB(t)
+
+	// Module-scoped Migrator applies an articles migration.
+	articlesDir := t.TempDir()
+	writeMigrationPair(t, articlesDir, "000001_init",
+		"CREATE TABLE articles_items (id INTEGER PRIMARY KEY);",
+		"DROP TABLE IF EXISTS articles_items;",
+	)
+	articles := NewModuleMigrator(d, articlesDir, "articles", observe.NewLogger("error", "text"))
+	if err := articles.Up(); err != nil {
+		t.Fatalf("articles.Up: %v", err)
+	}
+
+	// Unscoped Migrator with NO files of its own — Drift should be empty.
+	bareDir := t.TempDir()
+	bare := NewMigrator(d, bareDir, observe.NewLogger("error", "text"))
+	drift, err := bare.Drift()
+	if err != nil {
+		t.Fatalf("bare.Drift: %v", err)
+	}
+	if len(drift) != 0 {
+		t.Errorf("unscoped Migrator should ignore foreign-module rows; got drift: %#v", drift)
+	}
+}
+
+func TestModuleMigrator_DriftReportsFileIDNotStorageID(t *testing.T) {
+	// When Drift fires (e.g. file deleted after apply), the reported
+	// ID should be the human-readable file ID, not the namespaced
+	// storage ID — operators look at filenames, not storage keys.
+	d := newTestDB(t)
+	dir := t.TempDir()
+	writeMigrationPair(t, dir, "000001_init",
+		"CREATE TABLE articles_items (id INTEGER PRIMARY KEY);",
+		"DROP TABLE IF EXISTS articles_items;",
+	)
+	m := NewModuleMigrator(d, dir, "articles", observe.NewLogger("error", "text"))
+	if err := m.Up(); err != nil {
+		t.Fatalf("Up: %v", err)
+	}
+
+	// Delete the migration files; the row in the bookkeeping table
+	// becomes "missing up file" drift.
+	if err := os.RemoveAll(dir); err != nil {
+		t.Fatalf("rm migrations dir: %v", err)
+	}
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+
+	drift, err := m.Drift()
+	if err != nil {
+		t.Fatalf("Drift: %v", err)
+	}
+	if len(drift) != 1 {
+		t.Fatalf("expected 1 drift entry; got %d (%#v)", len(drift), drift)
+	}
+	if drift[0].ID != "000001_init" {
+		t.Errorf("Drift should report the file ID (not the storage ID with namespace prefix); got %q", drift[0].ID)
+	}
+	if drift[0].Kind != DriftKindMissingUpFile {
+		t.Errorf("Drift kind: got %q want %q", drift[0].Kind, DriftKindMissingUpFile)
+	}
+}
+
+func TestModuleMigrator_DownRemovesNamespacedRow(t *testing.T) {
+	// Phase 2d guard: `rollbackMigration` must delete the namespaced
+	// storage IDs from both bookkeeping tables, not the raw file ID.
+	// Without this test a future refactor that drops `namespacedID`
+	// from the DELETE statements would leave orphan rows in the DB
+	// (and the test for `Up` would still pass since the rows ARE
+	// written under the namespaced key).
+	d := newTestDB(t)
+	dir := t.TempDir()
+	writeMigrationPair(t, dir, "000001_init",
+		"CREATE TABLE articles_items (id INTEGER PRIMARY KEY);",
+		"DROP TABLE IF EXISTS articles_items;",
+	)
+	m := NewModuleMigrator(d, dir, "articles", observe.NewLogger("error", "text"))
+	if err := m.Up(); err != nil {
+		t.Fatalf("Up: %v", err)
+	}
+	// Confirm the namespaced row is present before Down.
+	cnt := queryInt(t, d, "SELECT COUNT(*) FROM nucleus_schema_migrations WHERE id = ?", "articles/000001_init")
+	if cnt != 1 {
+		t.Fatalf("pre-Down: expected 1 namespaced row, got %d", cnt)
+	}
+
+	if err := m.Down(); err != nil {
+		t.Fatalf("Down: %v", err)
+	}
+	// Both tracking tables must no longer carry the row under the
+	// namespaced key.
+	cnt = queryInt(t, d, "SELECT COUNT(*) FROM nucleus_schema_migrations WHERE id = ?", "articles/000001_init")
+	if cnt != 0 {
+		t.Errorf("post-Down: namespaced applied row should be gone; got %d row(s)", cnt)
+	}
+	cnt = queryInt(t, d, "SELECT COUNT(*) FROM nucleus_schema_migration_checksums WHERE id = ?", "articles/000001_init")
+	if cnt != 0 {
+		t.Errorf("post-Down: namespaced checksum row should be gone; got %d row(s)", cnt)
+	}
+}
+
+func TestNewModuleMigrator_RejectsEmptyName(t *testing.T) {
+	defer func() {
+		if r := recover(); r == nil {
+			t.Error("expected panic on empty module name")
+		}
+	}()
+	NewModuleMigrator(newTestDB(t), t.TempDir(), "", observe.NewLogger("error", "text"))
+}
+
+func TestNewModuleMigrator_RejectsSlashInName(t *testing.T) {
+	defer func() {
+		if r := recover(); r == nil {
+			t.Error("expected panic on module name containing '/'")
+		}
+	}()
+	NewModuleMigrator(newTestDB(t), t.TempDir(), "a/b", observe.NewLogger("error", "text"))
+}
