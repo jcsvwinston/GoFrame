@@ -1,6 +1,6 @@
 # ADR-010: Fluent API v2 for `pkg/nucleus` over `pkg/app`
 
-**Status:** Accepted (Phase 1 landed 2026-05-16; Phase 2a landed 2026-05-16; Phase 2b landed 2026-05-17; Phase 2c landed 2026-05-17)
+**Status:** Accepted (Phase 1 landed 2026-05-16; Phase 2a landed 2026-05-16; Phase 2b landed 2026-05-17; Phase 2c landed 2026-05-17; Phase 2d landed 2026-05-17)
 **Date:** 2026-05-15
 **Accepted:** 2026-05-16
 **Reference date:** 2026-05-17
@@ -194,7 +194,7 @@ Moving a module's package to another application brings its configuration shape,
 
 `Requires` declares logical database aliases. If `app.Config.Databases` lacks a required entry, the framework fails at boot with `module "<name>" requires database "<alias>" which is not configured` — never a `nil pointer dereference` at runtime.
 
-**Migration namespacing.** Module migration file checksums (per `pkg/db/migrate.go`'s `migrationsChecksumsTable`) are keyed as `<module_name>/<filename>` rather than just `<filename>`, preventing cross-module filename collisions when multiple modules share a database alias.
+**Migration namespacing.** Module migration file checksums (per `pkg/db/migrate.go`'s `migrationsChecksumsTable`) are keyed as `<module_name>/<filename>` rather than just `<filename>`, preventing cross-module filename collisions when multiple modules share a database alias. The same namespacing applies to the applied-migrations tracking table (`migrationsTable`) — a half-namespaced design would still fail on the primary-key insert into `nucleus_schema_migrations` when two modules ship the same filename. Phase 2d implements the namespacing on both tracking tables.
 
 ### 7. Router with three coexisting styles
 
@@ -303,6 +303,7 @@ The compliance items above are landed across four iterations, each its own PR:
   - **Phase 2a (landed 2026-05-16):** Single-file YAML/TOML/JSON loader; 1 MiB size cap (#17); wildcard-matcher `keyMatchesAny` with `<alias>`/`<site>`/`<tenant>` placeholder support.
   - **Phase 2b (landed 2026-05-17):** Multi-file merge engine with `_append`/`_remove` suffix operators; null-revert semantics with non-nullable security keys (`ErrSecurityKeyNotNullable`, #14); mixed-format `WARN`/hard-reject via `WithConfigStrict` (`ErrMixedConfigFormats`, #7 partial); `pkg/app.NormalizeRuntimeConfig` public wrapper. Five-layer validator: layers 1 (syntactic) and 2 (schema) fully landed; layer 3 range/enum validation deferred (out of the four-phase slicing — follow-up). Items #15 (strict-mode startup guard) and #16 (migration namespacing) remain for Phase 2c/2d.
   - **Phase 2c (landed 2026-05-17):** Strict-mode startup guard (#15). `AppBuilder.WithUnknownFields("strict"|"warn")` toggles strict schema validation per builder; warn mode emits a `WARN`-level slog event listing the offending keys and proceeds with the load (the unknowns are stripped). `NUCLEUS_ENV=production` (case-insensitive, whitespace-trimmed; constant `EnvProduction`) forces the mode back to strict regardless of code-level configuration and emits a `WARN` recording the override. Misuse paths covered: invalid mode value records `ErrInvalidUnknownFieldsMode`; calling after `FromConfigFile` records a misorder deferred error analogous to `WithConfigStrict`. Compliance item #16 (migration namespacing) remains for Phase 2d.
+  - **Phase 2d (landed 2026-05-17):** Module migration namespacing (#16). `pkg/db.NewModuleMigrator(db, path, moduleName, logger)` creates a `*Migrator` whose applied-migration and checksum rows are stored under `<moduleName>/<file-id>` storage keys, preventing cross-module filename collisions when several modules share a database alias. The legacy `NewMigrator` constructor is unchanged. `Migrator.Drift` is ownership-aware: an unscoped Migrator ignores foreign-module rows, a module-scoped Migrator only reports drift for its own rows. `Status` / `Drift` continue to return raw file IDs (operators see filenames, not storage keys). The four-phase slicing of ADR-010 §2 is now complete; layer 3 range/enum semantic validation remains a follow-up iteration.
 - **Phase 3 — Effective-config inspection.** Compliance items #6, #12, #13.
 - **Phase 4 — Docs-sync + website + new reference applications.** Compliance items #8, #9, #10. (#8 already landed; #9 and #10 are the new work.) **Per the 2026-05-16 owner decision the new `examples/*` reference applications (replacing the tree removed in Phase 1) land in this phase**, alongside the website rewrite and the docs-sync mechanism. Target window: v0.9.X.
 

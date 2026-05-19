@@ -39,19 +39,116 @@ func (d *DB) AutoMigrate(models ...interface{}) error {
 // Migrator manages SQL-based database migrations using timestamped .up.sql
 // and .down.sql files. For production use where schema changes must be explicit
 // and reversible.
+//
+// Module-scoped Migrators (constructed via `NewModuleMigrator`) namespace
+// their applied-migrations and checksum rows under a `<moduleName>/`
+// prefix in the framework's tracking tables. This prevents two modules
+// that ship `001_init.up.sql` from colliding on a primary-key insert
+// when they share a database alias. ADR-010 §16 / Phase 2d. The bare
+// constructor `NewMigrator` keeps the legacy unscoped behaviour so
+// host applications that pre-date the module pattern continue to work
+// without re-applying their migration history.
 type Migrator struct {
 	db             *DB
 	migrationsPath string
+	moduleName     string // optional namespace for storage IDs; empty = unscoped (legacy)
 	logger         *slog.Logger
 }
 
-// NewMigrator creates a Migrator that reads migration files from the given directory.
+// NewMigrator creates an unscoped Migrator that reads migration files
+// from the given directory. Applied migrations and checksums are
+// stored under the migration file's bare ID — the legacy behaviour
+// preserved for host applications that pre-date the module pattern.
 func NewMigrator(db *DB, migrationsPath string, logger *slog.Logger) *Migrator {
 	return &Migrator{
 		db:             db,
 		migrationsPath: migrationsPath,
 		logger:         logger,
 	}
+}
+
+// NewModuleMigrator creates a Migrator scoped to a named module. The
+// migration files are still read from `migrationsPath`, but the IDs
+// recorded in the framework's tracking tables (`nucleus_schema_migrations`
+// and `nucleus_schema_migration_checksums`) are prefixed
+// `<moduleName>/`. ADR-010 §16: this prevents cross-module filename
+// collisions when multiple modules share a database alias, while
+// keeping the on-disk migration filenames module-author-friendly
+// (`001_init.up.sql` rather than `articles_001_init.up.sql`).
+//
+// `moduleName` must be non-empty and must not contain `/` (the
+// namespace separator). The function reports an empty-name input as
+// a `panic` because constructor-time misuse is a programming error
+// the framework cannot recover from; non-`/` validation is enforced
+// at storage time.
+func NewModuleMigrator(db *DB, migrationsPath, moduleName string, logger *slog.Logger) *Migrator {
+	if moduleName == "" {
+		panic("db.NewModuleMigrator: moduleName must be non-empty (use NewMigrator for the unscoped case)")
+	}
+	// Reject characters that would break the storage-ID round-trip:
+	// '/' is the namespace separator; '\x00' is the universal C-string
+	// terminator that confuses scanning tools downstream even though
+	// it would not escape `quoteSQLString`. Both are programming
+	// errors at construction time, not user-input vectors.
+	if strings.ContainsAny(moduleName, "/\x00") {
+		panic(fmt.Sprintf("db.NewModuleMigrator: moduleName %q must not contain '/' or NUL", moduleName))
+	}
+	return &Migrator{
+		db:             db,
+		migrationsPath: migrationsPath,
+		moduleName:     moduleName,
+		logger:         logger,
+	}
+}
+
+// namespacedID returns the storage key for a migration ID. When the
+// Migrator is module-scoped (constructed via `NewModuleMigrator`), the
+// storage key is `<moduleName>/<id>`; for the bare unscoped Migrator
+// it is the migration's raw file-derived ID — the legacy backward-
+// compatible form.
+func (m *Migrator) namespacedID(id string) string {
+	if m.moduleName == "" {
+		return id
+	}
+	return m.moduleName + "/" + id
+}
+
+// ownsStorageID reports whether the given storage-table ID belongs
+// to this Migrator. Module-scoped migrators own IDs prefixed
+// `<moduleName>/`; the bare unscoped Migrator owns IDs without any
+// `/` separator (legacy form). The distinction matters in `Drift`:
+// when several modules share a database alias, each Migrator should
+// only report drift for migrations it actually owns — IDs from
+// foreign modules are not drift, they are someone else's
+// responsibility.
+//
+// Nested storage keys (`<module>/<sub>/<id>`) are intentionally NOT
+// claimed by a `<module>`-scoped Migrator: sub-module hierarchies
+// are not part of the ADR-010 §16 design today and supporting them
+// would require a separate ADR (sub-module discovery, naming
+// conflicts, and Drift attribution all need decisions).
+func (m *Migrator) ownsStorageID(storageID string) bool {
+	if m.moduleName == "" {
+		return !strings.Contains(storageID, "/")
+	}
+	prefix := m.moduleName + "/"
+	if !strings.HasPrefix(storageID, prefix) {
+		return false
+	}
+	// The slice is safe because HasPrefix above guarantees
+	// len(storageID) >= len(prefix).
+	return !strings.Contains(storageID[len(prefix):], "/")
+}
+
+// fileIDFromStorageID strips the namespace prefix from a storage ID
+// so it can be compared against the on-disk migration file ID set.
+// The caller is expected to have established ownership via
+// `ownsStorageID` before calling.
+func (m *Migrator) fileIDFromStorageID(storageID string) string {
+	if m.moduleName == "" {
+		return storageID
+	}
+	return strings.TrimPrefix(storageID, m.moduleName+"/")
 }
 
 // Up applies all pending migrations.
@@ -92,15 +189,19 @@ func (m *Migrator) Steps(n int) error {
 	if n > 0 {
 		appliedCount := 0
 		for _, mig := range migs {
-			if _, ok := applied[mig.ID]; ok {
+			if _, ok := applied[m.namespacedID(mig.ID)]; ok {
 				continue
 			}
-			if err := applyMigration(sqlDB, mig); err != nil {
+			if err := m.applyMigration(sqlDB, mig); err != nil {
 				return err
 			}
 			appliedCount++
 			if m.logger != nil {
-				m.logger.Info("migration applied", "id", mig.ID)
+				attrs := []any{"id", mig.ID}
+				if m.moduleName != "" {
+					attrs = append(attrs, "module", m.moduleName)
+				}
+				m.logger.Info("migration applied", attrs...)
 			}
 			if appliedCount >= n {
 				break
@@ -113,19 +214,23 @@ func (m *Migrator) Steps(n int) error {
 	toRollback := -n
 	appliedMigs := make([]migrationFile, 0, len(migs))
 	for _, mig := range migs {
-		if _, ok := applied[mig.ID]; ok {
+		if _, ok := applied[m.namespacedID(mig.ID)]; ok {
 			appliedMigs = append(appliedMigs, mig)
 		}
 	}
 	rolledBack := 0
 	for i := len(appliedMigs) - 1; i >= 0; i-- {
 		mig := appliedMigs[i]
-		if err := rollbackMigration(sqlDB, mig); err != nil {
+		if err := m.rollbackMigration(sqlDB, mig); err != nil {
 			return err
 		}
 		rolledBack++
 		if m.logger != nil {
-			m.logger.Info("migration rolled back", "id", mig.ID)
+			attrs := []any{"id", mig.ID}
+			if m.moduleName != "" {
+				attrs = append(attrs, "module", m.moduleName)
+			}
+			m.logger.Info("migration rolled back", attrs...)
 		}
 		if rolledBack >= toRollback {
 			break
@@ -162,7 +267,7 @@ func (m *Migrator) Status() ([]MigrationStatus, error) {
 			HasUp:   mig.UpPath != "",
 			HasDown: mig.DownPath != "",
 		}
-		if at, ok := applied[mig.ID]; ok {
+		if at, ok := applied[m.namespacedID(mig.ID)]; ok {
 			st.Applied = true
 			ts := at
 			st.AppliedAt = &ts
@@ -255,17 +360,25 @@ func (m *Migrator) Drift() ([]DriftEntry, error) {
 	}
 
 	drift := make([]DriftEntry, 0)
-	for id, at := range applied {
-		mig, ok := onDisk[id]
+	for storageID, at := range applied {
+		// Only report drift for migrations this Migrator owns; rows
+		// belonging to another module's Migrator (or, conversely,
+		// module-namespaced rows when this Migrator is unscoped) are
+		// out of scope here.
+		if !m.ownsStorageID(storageID) {
+			continue
+		}
+		fileID := m.fileIDFromStorageID(storageID)
+		mig, ok := onDisk[fileID]
 		if !ok || mig.UpPath == "" {
 			drift = append(drift, DriftEntry{
-				ID:        id,
+				ID:        fileID,
 				Kind:      DriftKindMissingUpFile,
 				AppliedAt: at,
 			})
 			continue
 		}
-		expected, hasChecksum := checksums[id]
+		expected, hasChecksum := checksums[storageID]
 		if !hasChecksum {
 			// Pre-checksum-tracking migration; nothing to compare. Not
 			// reported as drift — the absence is informational only.
@@ -273,11 +386,11 @@ func (m *Migrator) Drift() ([]DriftEntry, error) {
 		}
 		actual, err := fileSHA256(mig.UpPath)
 		if err != nil {
-			return nil, fmt.Errorf("db.Migrator.Drift checksum %s: %w", id, err)
+			return nil, fmt.Errorf("db.Migrator.Drift checksum %s: %w", fileID, err)
 		}
 		if actual != expected {
 			drift = append(drift, DriftEntry{
-				ID:               id,
+				ID:               fileID,
 				Kind:             DriftKindChecksumMismatch,
 				AppliedAt:        at,
 				ExpectedChecksum: expected,
@@ -397,7 +510,10 @@ func (m *Migrator) loadMigrations() ([]migrationFile, error) {
 		}
 		name := entry.Name()
 		id, kind, ok := migrationNameParts(name)
-		if !ok {
+		if !ok || id == "" {
+			// Reject files whose entire name is the .up.sql / .down.sql
+			// suffix (id == ""). A storage row keyed `<module>/`
+			// would be ambiguous and corrupt Drift attribution.
 			continue
 		}
 		mig := byID[id]
@@ -464,13 +580,19 @@ func loadApplied(db *sql.DB) (map[string]time.Time, error) {
 	return applied, nil
 }
 
-func applyMigration(db *sql.DB, mig migrationFile) error {
+// applyMigration is a method on *Migrator so it can resolve the
+// storage ID for both the applied-migrations row and the checksum
+// row through `namespacedID`. Module-scoped Migrators write rows
+// keyed `<moduleName>/<mig.ID>`; the unscoped Migrator writes the
+// raw `mig.ID` (legacy form).
+func (m *Migrator) applyMigration(db *sql.DB, mig migrationFile) error {
 	script, err := os.ReadFile(mig.UpPath)
 	if err != nil {
 		return fmt.Errorf("db.Migrator read up migration %s: %w", mig.ID, err)
 	}
 	sum := sha256.Sum256(script)
 	checksum := hex.EncodeToString(sum[:])
+	storageID := m.namespacedID(mig.ID)
 
 	tx, err := db.Begin()
 	if err != nil {
@@ -486,7 +608,7 @@ func applyMigration(db *sql.DB, mig migrationFile) error {
 	insert := fmt.Sprintf(
 		"INSERT INTO %s (id, applied_at) VALUES (%s, %s)",
 		migrationsTable,
-		quoteSQLString(mig.ID),
+		quoteSQLString(storageID),
 		quoteSQLString(now),
 	)
 	if _, err := tx.Exec(insert); err != nil {
@@ -496,7 +618,7 @@ func applyMigration(db *sql.DB, mig migrationFile) error {
 	insertChecksum := fmt.Sprintf(
 		"INSERT INTO %s (id, checksum) VALUES (%s, %s)",
 		migrationsChecksumsTable,
-		quoteSQLString(mig.ID),
+		quoteSQLString(storageID),
 		quoteSQLString(checksum),
 	)
 	if _, err := tx.Exec(insertChecksum); err != nil {
@@ -509,7 +631,10 @@ func applyMigration(db *sql.DB, mig migrationFile) error {
 	return nil
 }
 
-func rollbackMigration(db *sql.DB, mig migrationFile) error {
+// rollbackMigration mirrors `applyMigration` — rolls back the file
+// and deletes the applied-migration + checksum rows under the
+// `namespacedID(mig.ID)` storage key.
+func (m *Migrator) rollbackMigration(db *sql.DB, mig migrationFile) error {
 	if mig.DownPath == "" {
 		return fmt.Errorf("db.Migrator rollback %s: missing .down.sql file", mig.ID)
 	}
@@ -518,6 +643,7 @@ func rollbackMigration(db *sql.DB, mig migrationFile) error {
 	if err != nil {
 		return fmt.Errorf("db.Migrator read down migration %s: %w", mig.ID, err)
 	}
+	storageID := m.namespacedID(mig.ID)
 
 	tx, err := db.Begin()
 	if err != nil {
@@ -529,12 +655,12 @@ func rollbackMigration(db *sql.DB, mig migrationFile) error {
 		return fmt.Errorf("db.Migrator rollback %s: %w", mig.ID, err)
 	}
 
-	del := fmt.Sprintf("DELETE FROM %s WHERE id = %s", migrationsTable, quoteSQLString(mig.ID))
+	del := fmt.Sprintf("DELETE FROM %s WHERE id = %s", migrationsTable, quoteSQLString(storageID))
 	if _, err := tx.Exec(del); err != nil {
 		return fmt.Errorf("db.Migrator unmark applied %s: %w", mig.ID, err)
 	}
 
-	delChecksum := fmt.Sprintf("DELETE FROM %s WHERE id = %s", migrationsChecksumsTable, quoteSQLString(mig.ID))
+	delChecksum := fmt.Sprintf("DELETE FROM %s WHERE id = %s", migrationsChecksumsTable, quoteSQLString(storageID))
 	if _, err := tx.Exec(delChecksum); err != nil {
 		return fmt.Errorf("db.Migrator drop checksum %s: %w", mig.ID, err)
 	}
