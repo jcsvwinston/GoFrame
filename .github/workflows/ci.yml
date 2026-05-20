@@ -166,15 +166,7 @@ jobs:
           NUCLEUS_SQL_EXPLORATORY_URL: 'sqlserver://sa:StrongPassw0rd!@127.0.0.1:1433/master'
         run: |
           go test -tags mssql ./pkg/db -run '^TestSQLMatrix_ExploratoryLiveConnectAndPing$|^TestSQLMatrix_SchemaDrift_Exploratory$' -v
-          # NOTE: ./pkg/app TestSQLMatrix_AutoMigrate_Exploratory is
-          # intentionally NOT wired here. PR #66 verified the test
-          # exists and compiles, but exercising it surfaces a
-          # pre-existing dialect bug in pkg/admin's bootstrap users
-          # table DDL (`Incorrect syntax near 'nucleus_admin_users'`
-          # on MSSQL; `ORA-03076 unexpected item DEFAULT` on Oracle).
-          # That bug is out of scope for the SchemaDrift iteration —
-          # tracked as a follow-up to land before this line is added
-          # back. See PR #66 description for details.
+          go test -tags mssql ./pkg/app -run '^TestSQLMatrix_AutoMigrate_Exploratory$' -v
           go test -tags mssql ./internal/cli -run '^TestSQLMatrix_ExploratoryCriticalCommands$' -v
 
   db-matrix-live-oracle:
@@ -219,10 +211,22 @@ jobs:
           NUCLEUS_SQL_EXPLORATORY_URL: 'oracle://system:oracle@127.0.0.1:1521/FREEPDB1'
         run: |
           go test -tags oracle ./pkg/db -run '^TestSQLMatrix_ExploratoryLiveConnectAndPing$|^TestSQLMatrix_SchemaDrift_Exploratory$' -v
-          # NOTE: ./pkg/app TestSQLMatrix_AutoMigrate_Exploratory is
-          # intentionally NOT wired here — see the MSSQL lane above
-          # for the explanation. Same admin-bootstrap DDL bug; same
-          # follow-up.
+          # NOTE: ./pkg/app TestSQLMatrix_AutoMigrate_Exploratory is wired
+          # into the MSSQL lane (above) but NOT here. The admin-bootstrap
+          # DDL fix + the Oracle scaffold `/`-terminator fix let it reach
+          # and execute AutoMigrate on Oracle, but it then surfaces a
+          # THIRD, deeper bug: pkg/model.BuildOracleMigrationScaffold
+          # QUOTES identifiers (`CREATE TABLE "ci_automig_live_users"`),
+          # creating a case-sensitive lowercase table — while the rest of
+          # the framework's Oracle path (pkg/db migrations, admin
+          # bootstrap) uses UNQUOTED identifiers that Oracle folds to
+          # UPPERCASE, which is what USER_TAB_COLUMNS introspection
+          # expects. The table is created but `WHERE TABLE_NAME =
+          # UPPER('ci_automig_live_users')` finds nothing. Deciding the
+          # framework's Oracle identifier strategy (quoted-lowercase vs.
+          # unquoted-uppercase, including reserved-word and query-layer
+          # implications) is its own iteration — tracked in
+          # CURRENT_ITERATION.md. Re-add this line once that lands.
           go test -tags oracle ./internal/cli -run '^TestSQLMatrix_ExploratoryCriticalCommands$' -v
 
   compatibility-harness:
