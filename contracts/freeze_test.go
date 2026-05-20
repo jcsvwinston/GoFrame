@@ -143,6 +143,14 @@ func stableAPISymbolBaselineLines(t *testing.T) []string {
 	t.Helper()
 	repoRoot := filepath.Dir(baselinePath(t))
 
+	// Any pkg/* directory NOT listed here is intentionally excluded
+	// from the API freeze baseline — the omission is meant to be
+	// visible in code review rather than discovered later by diff.
+	// As of 2026-05-20 the scanner does not cover pkg/admin,
+	// pkg/circuit, pkg/health, pkg/observability, pkg/openapi, or
+	// pkg/outbox; adding any of them requires confirming its lifecycle
+	// posture first (e.g. pkg/outbox.NewKafkaBridge is deliberately
+	// unfinished and should not be frozen until Kafka delivery lands).
 	packages := []struct {
 		importPath string
 		relative   string
@@ -234,6 +242,21 @@ func exportedSymbolsForPackage(t *testing.T, dir string) []string {
 		}
 		symbols = append(symbols, "type:"+typ.Name)
 		symbols = append(symbols, exportedMembersFromTypeDecl(typ.Decl, typ.Name)...)
+		// Constructor functions (those whose result is the type, e.g.
+		// `NewMigrator() *Migrator`) are filed by go/doc under the
+		// type's Funcs, not under the package-level docPkg.Funcs —
+		// which holds ONLY functions go/doc could not associate with
+		// any type. They are exported package symbols and part of the
+		// stable contract, so emit them as `func:Name` (the same shape
+		// the top-level loop above uses). Without this loop every
+		// `NewXxx` constructor across pkg/* was invisible to the
+		// freeze baseline — this was the source of the constructor-gap
+		// bug closed on 2026-05-20.
+		for _, fn := range typ.Funcs {
+			if ast.IsExported(fn.Name) {
+				symbols = append(symbols, "func:"+fn.Name)
+			}
+		}
 		for _, method := range typ.Methods {
 			if ast.IsExported(method.Name) {
 				symbols = append(symbols, "method:"+typ.Name+"."+method.Name)
